@@ -1,17 +1,32 @@
-const express = require("express");
-const { connection } = require("./config/database");
-require("dotenv").config();
+// server/index.js
+const express = require('express');
+const cors = require('cors');
+require('dotenv').config();
+
+const sequelize = require('./config/db');
+const authRoutes = require('./routes/authRoutes');
+const User = require('./models/User'); 
 
 const app = express();
+
+app.use(cors());
 app.use(express.json());
 
-connection();
+app.use('/api/auth', authRoutes);
 
-app.get("/", (req, res) => {
-  res.send("Renthive backend is running!");
-});
+app.get('/', (req, res) => res.send('RentHive API'));
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+(async () => {
+  try {
+    await sequelize.authenticate();
+    console.log('DB connected');
+    await sequelize.sync({ alter: true }); 
+    console.log('DB synced');
+
+    const port = process.env.PORT || 5000;
+    app.listen(port, () => console.log(`Server running on port ${port}`));
+  } catch (err) {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  }
+})();

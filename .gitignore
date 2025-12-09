@@ -1,0 +1,21 @@
+# 1. DEPENDENCIES AND BUILD ARTIFACTS
+# Ignore node_modules in the root 
+/node_modules/
+# Ignore node_modules in the client directory
+client/node_modules/
+# Ignore node_modules in the server directory
+server/node_modules/
+
+# 2. SENSITIVE DATA
+# Ignore .env file in all relevant locations
+.env
+client/.env
+server/.env
+
+# 3. BUILD OUTPUTS 
+client/build/
+client/dist/
+
+# 4. OS and Editor Files
+.DS_Store
+npm-debug.log*

@@ -1,0 +1,159 @@
+
+.main-footer {
+    background-color: #d8d8d8; 
+    color: #444; 
+    padding-top: 60px;
+    font-family: Arial, sans-serif;
+    position: relative;
+}
+
+.footer-content-wrapper {
+    display: flex;
+    justify-content: space-around; 
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 50px 40px;
+}
+
+
+.footer-column {
+    flex: 1; 
+    padding: 0 15px;
+    min-width: 180px;
+    text-align: left; 
+}
+
+
+.brand-column {
+    flex: 2; 
+    max-width: 350px;
+    position: relative;
+    text-align: left; 
+}
+
+.brand-column::before {
+    content: '';
+    position: absolute;
+    top: -20px; 
+    left: 0;
+    width: 50px;
+    height: 4px;
+    background-color: black;
+    border-radius: 2px;
+}
+
+.footer-logo {
+    font-size: 1.8em;
+    font-weight: bold;
+    color: black;
+    margin-bottom: 15px;
+    text-align: left;
+}
+
+.brand-description {
+    font-size: 0.9em;
+    line-height: 1.6;
+    margin-bottom: 25px;
+}
+
+
+.social-links {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+.social-icon {
+    width: 40px; 
+    height: 40px;
+    background-color: black;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-decoration: none;
+    transition: background-color 0.2s;
+    font-size: 0; 
+}
+
+.social-logo {
+    width: 50%;
+    height: 50%; 
+    object-fit: contain;
+     
+}
+
+
+.column-title {
+    font-size: 1.1em;
+    font-weight: bold;
+    color: black;
+    margin-bottom: 20px;
+    text-align: left;
+}
+
+.footer-links {
+    list-style: none;
+    padding: 0; 
+    text-align: left;
+}
+
+.footer-links li {
+    margin-bottom: 10px;
+}
+
+.footer-links a, .contact-info p {
+    color: #444;
+    text-decoration: none;
+    font-size: 0.95em;
+    transition: color 0.2s;
+}
+
+
+
+.contact-item::before {
+    margin-right: 8px;
+}
+.location::before { content: '📍'; } 
+.phone::before { content: '📞'; }
+
+
+.newsletter-title {
+    margin-top: 30px;
+    text-align: left;
+}
+
+.newsletter-form {
+    display: flex;
+    width: 100%;
+}
+
+.newsletter-input {
+    flex-grow: 1;
+    padding: 10px 15px;
+    border: 1px solid #ccc;
+    border-radius: 4px 0 0 4px;
+    font-size: 0.95em;
+    outline: none;
+}
+
+.newsletter-button {
+    background-color: black;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    border-radius: 0 4px 4px 0;
+    transition: background-color 0.2s;
+}
+
+
+.footer-copyright {
+    text-align: center;
+    padding: 20px 0;
+    border-top: 1px solid #c0c0c0; 
+    font-size: 0.85em;
+    margin-top: 40px;
+    color: #666;
+}

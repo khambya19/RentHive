@@ -6,6 +6,7 @@ import logoImage from '../assets/rentHivelogo.png';
 const handleNavClick = (sectionName) => {
   console.log(`Navigating to: ${sectionName}`);
   
+
 };
 
 const NavBar = () => {
@@ -42,7 +43,6 @@ const NavBar = () => {
 <nav className="nav-links">
   
 </nav>
-
 
 
         

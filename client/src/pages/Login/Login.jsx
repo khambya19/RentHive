@@ -1,12 +1,10 @@
-// RENTHIVE/client/src/pages/Login/Login.jsx
-
 import React, { useState } from 'react';
 import axios from 'axios';
 import './Login.css';
 import { useNavigate } from 'react-router-dom'; 
 
 import RenthiveLogo from '../../assets/Logo.png'; 
-import LoginIllustration from '../../assets/Login_page.png'; // Assuming this is the house image
+import LoginIllustration from '../../assets/Login_page.png'; 
 
 const API_BASE_URL = 'http://localhost:5000/api/auth';
 
@@ -28,7 +26,7 @@ const Login = () => {
     try {
         const response = await axios.post(`${API_BASE_URL}/login`, { email, password });
         localStorage.setItem('token', response.data.token);
-        // navigate('/dashboard'); 
+        
     } catch (err) {
         setError(err.response?.data?.msg || 'Login failed. Please check your credentials.');
     }
@@ -41,13 +39,13 @@ const Login = () => {
 
 
   return (
-    // Keep the container for centering on the page
+    
     <div className="login-container">
       
-      {/* CHANGE: This is now the main, wide card containing BOTH the form and the image */}
+      
       <div className="main-login-card"> 
         
-        {/* Left Side: Login Form */}
+        
         <div className="login-form-content">
             <img src={RenthiveLogo} alt="RentHive Logo" className="logo" />
             <h1 className="title">Login</h1>
@@ -110,7 +108,7 @@ const Login = () => {
             </p>
         </div>
         
-        {/* RIGHT SIDE: Illustration, NOW INSIDE THE BORDERED CARD */}
+        
         <div className="login-illustration-side">
             <img src={LoginIllustration} alt="House and Keys" />
         </div>

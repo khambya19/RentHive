@@ -1,30 +1,33 @@
 import React from 'react';
+import { Link } from 'react-router-dom'; 
 import './NavBar.css'; 
 import logoImage from '../assets/rentHivelogo.png'; 
 
 
 const handleNavClick = (sectionName) => {
   console.log(`Navigating to: ${sectionName}`);
-  
-
 };
 
 const NavBar = () => {
   return (
     <div className="navbar-container">
       
-      <div className="navbar-logo" onClick={() => handleNavClick('Home')}>
+      
+      <Link to="/" className="navbar-logo">
         
         <img src={logoImage} alt="RentHive Logo" className="logo-icon" /> 
         <span className="logo-text">RentHive</span>
-      </div>
+      </Link>
 
       
       <nav className="navbar-links">
         
-        <button className="nav-button" onClick={() => handleNavClick('Home')}>
+        
+        <Link to="/" className="nav-button">
           Home
-        </button>
+        </Link>
+
+        
         <button className="nav-button" onClick={() => handleNavClick('Filter')}>
           Filter
         </button>
@@ -40,11 +43,6 @@ const NavBar = () => {
       </nav>
       
 
-<nav className="nav-links">
-  
-</nav>
-
-
         
         <div className="auth-section"> 
             
@@ -54,9 +52,10 @@ const NavBar = () => {
             </a>
 
             
-            <button className="auth-button log-in-btn" onClick={() => handleClick('Login')}>
+      
+            <Link to="/login" className="auth-button log-in-btn">
                 Login
-            </button>
+            </Link>
         </div>
       </div>
     );

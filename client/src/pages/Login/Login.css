@@ -1,7 +1,3 @@
-/* RENTHIVE/client/src/pages/Login/Login.css */
-
-/* ------------------ Layout and Containers ------------------ */
-
 .login-container {
     display: flex;
     justify-content: center; 
@@ -12,23 +8,23 @@
     font-family: Arial, sans-serif;
 }
 
-/* NEW CONTAINER: This holds both the form and the image and has the border */
+
 .main-login-card {
-    display: flex; /* Use Flexbox to put children side-by-side */
+    display: flex; 
     background: white;
-    /* Increased width to fit both the form and the image */
+   
     width: 800px; 
-    /* Apply border and shadow to this parent div */
+    
     border: 1px solid #e0e0e0; 
     border-radius: 8px;
-    overflow: hidden; /* Ensures image doesn't leak out */
+    overflow: hidden; 
 }
 
-/* Left side content (the form fields) */
+
 .login-form-content {
-    /* Use padding to create space around the form elements */
+    
     padding: 40px; 
-    width: 50%; /* Allocate half the space for the form */
+    width: 50%; 
     box-sizing: border-box;
 }
 
@@ -49,7 +45,7 @@
     font-size: 14px;
 }
 
-/* ------------------ Form Elements ------------------ */
+
 
 .login-form label {
     display: block;
@@ -135,15 +131,15 @@
     font-weight: bold;
 }
 
-/* ------------------ Illustration Side (Inside the Card) ------------------ */
+
 
 .login-illustration-side {
-    /* Allocate the remaining half for the image */
+    
     width: 50%; 
     display: flex;
     justify-content: center;
     align-items: center;
-    /* Optional: give the image side a slightly different background */
+    
     background-color: #f7f7f7; 
     padding: 20px;
 }
@@ -154,7 +150,7 @@
     display: block;
 }
 
-/* ------------------ Media Query for responsiveness ------------------ */
+
 @media (max-width: 900px) {
     .main-login-card {
         flex-direction: column;
@@ -167,7 +163,7 @@
         padding: 30px;
     }
     .login-illustration-side {
-        /* Hide image on small screens to save space */
+        
         display: none; 
     }
 }

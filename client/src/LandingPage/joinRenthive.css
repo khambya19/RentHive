@@ -1,0 +1,136 @@
+
+.registration-cta-section {
+    padding: 80px 50px;
+    text-align: center;
+    background-color: white; 
+}
+
+.cta-headline {
+    font-size: 2.5em;
+    font-weight: 700;
+    margin-bottom: 10px;
+    color: #2c3e50;
+}
+
+.cta-subtitle {
+    font-size: 1.1em;
+    color: #7f8c8d;
+    margin-bottom: 40px;
+}
+
+
+.card-container {
+    display: flex;
+    justify-content: center;
+    gap: 50px; 
+}
+
+.reg-card {
+    width: 380px;
+    padding: 40px 30px;
+    border-radius: 12px;
+    background-color: #ffffff;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+
+.tenant-card {
+    border: 1px solid rgba(0, 150, 136, 0.2); 
+}
+
+.vendor-card {
+    border: 1px solid rgba(255, 160, 0, 0.4); 
+    background: #fff8f0; 
+}
+
+
+
+.icon-box {
+    width: 80px;
+    height: 80px;
+    border-radius: 18px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 25px;
+    font-size: 2.5em; 
+}
+
+
+.tenant-icon-box {
+    background-color: #e0f2f1; 
+}
+
+
+.vendor-icon-box {
+    background-color: #fff3e0; 
+    color: #ff9800; 
+}
+
+.card-title-lg {
+    font-size: 1.4em;
+    font-weight: 600;
+    margin-bottom: 15px;
+}
+
+.card-description {
+    color: #555;
+    margin-bottom: 30px;
+}
+
+
+
+.feature-list {
+    list-style: none;
+    padding: 0;
+    text-align: left;
+    margin-bottom: 40px;
+    width: 100%; 
+}
+
+.feature-list li {
+    padding: 5px 0;
+    font-size: 0.95em;
+    list-style-type: none;
+}
+
+
+.tenant-features li {
+    color: #009688; 
+}
+
+
+.vendor-features li {
+    color: #ff9800; 
+}
+
+
+
+.reg-button {
+    width: 100%;
+    padding: 15px 0;
+    border: none;
+    border-radius: 8px;
+    font-size: 1.1em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.reg-button:hover {
+    opacity: 0.9;
+}
+
+.tenant-button {
+    background-color: #009688; 
+    color: white;
+}
+
+.vendor-button {
+    background-color: #ff9800; 
+    color: white;
+}

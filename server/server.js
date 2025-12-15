@@ -40,11 +40,13 @@ app.get('/api/test', async (req, res) => {
 });
 
 // Import routes
+const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/userRoutes');
 // const propertyRoutes = require('./routes/propertyRoutes');
 // const bookingRoutes = require('./routes/bookingRoutes');
 
 // Use routes
+app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 // app.use('/api/properties', propertyRoutes);
 // app.use('/api/bookings', bookingRoutes);

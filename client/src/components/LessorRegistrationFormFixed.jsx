@@ -1,6 +1,9 @@
+
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const LessorRegistrationFormFixed = () => {
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     fullName: '',
     lastName: '',
@@ -37,32 +40,27 @@ const LessorRegistrationFormFixed = () => {
     }
 
     try {
-      // Create FormData object for file upload
-      const formData = new FormData();
-      formData.append('fullName', form.fullName);
-      formData.append('lastName', form.lastName);
-      formData.append('email', form.email);
-      formData.append('phone', form.phone);
-      formData.append('password', form.password);
-      formData.append('address', form.address);
-      formData.append('citizenshipNumber', form.citizenshipNumber);
-      formData.append('role', 'lessor');
-      
-      // Append profile photo if selected
-      if (form.profilePhoto) {
-        formData.append('profilePhoto', form.profilePhoto);
-      }
-
-      const response = await fetch('http://localhost:5000/api/users/register', {
+      const response = await fetch('http://localhost:5000/api/auth/register', {
         method: 'POST',
-        body: formData, // Send FormData instead of JSON
-        // Don't set Content-Type header - browser will set it with boundary
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fullName: form.fullName,
+          lastName: form.lastName,
+          email: form.email,
+          phone: form.phone,
+          password: form.password,
+          address: form.address,
+          citizenshipNumber: form.citizenshipNumber,
+        }),
       });
 
       const data = await response.json();
 
-      if (data.success) {
-        setSuccess('Registration successful! You can now login.');
+      if (response.ok && data.token) {
+        setSuccess('Registration successful! Redirecting to login...');
+        localStorage.setItem('token', data.token);
         // Reset form
         setForm({
           fullName: '',
@@ -75,8 +73,12 @@ const LessorRegistrationFormFixed = () => {
           citizenshipNumber: '',
           profilePhoto: null,
         });
+        // Redirect to login after 2 seconds
+        setTimeout(() => {
+          navigate('/login');
+        }, 2000);
       } else {
-        setError(data.message || 'Registration failed');
+        setError(data.msg || 'Registration failed');
       }
     } catch (error) {
       setError('Unable to connect to server. Please try again.');
@@ -102,7 +104,7 @@ const LessorRegistrationFormFixed = () => {
 
           {/* Right Panel */}
           <div style={{ flex: '1 1 62%', padding: '36px' }}>
-            <h2 style={{ fontSize: 28, textAlign: 'center', margin: 0, marginBottom: 24 }}>Sign up as Renter</h2>
+            <h2 style={{ fontSize: 28, textAlign: 'center', margin: 0, marginBottom: 24 }}>Sign up as Lessor</h2>
 
             {error && <div style={{ color: '#d32f2f', marginBottom: 15, padding: '12px 15px', background: '#ffebee', borderLeft: '4px solid #d32f2f', borderRadius: 6 }}>{error}</div>}
             {success && <div style={{ color: '#2e7d32', marginBottom: 15, padding: '12px 15px', background: '#e8f5e9', borderLeft: '4px solid #2e7d32', borderRadius: 6 }}>{success}</div>}
@@ -161,7 +163,7 @@ const LessorRegistrationFormFixed = () => {
               <button type="submit" style={{ width: '100%', padding: '12px 16px', background: '#5963d6', color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>Create account</button>
 
               <div style={{ textAlign: 'center', fontSize: 13, color: '#666', marginTop: 12 }}>
-                Already have an account? <a href="/login" style={{ color: '#d9534f', textDecoration: 'none', fontWeight: 600 }}>Login</a>
+                Already have an account? <a href="#" onClick={(e) => { e.preventDefault(); navigate('/login'); }} style={{ color: '#d9534f', textDecoration: 'none', fontWeight: 600 }}>Login</a>
               </div>
             </form>
           </div>

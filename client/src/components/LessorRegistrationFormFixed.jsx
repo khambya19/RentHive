@@ -26,15 +26,62 @@ const LessorRegistrationFormFixed = () => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+    
     if (form.password !== form.confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-    setSuccess('Registration successful! (API not connected)');
+
+    try {
+      // Create FormData object for file upload
+      const formData = new FormData();
+      formData.append('fullName', form.fullName);
+      formData.append('lastName', form.lastName);
+      formData.append('email', form.email);
+      formData.append('phone', form.phone);
+      formData.append('password', form.password);
+      formData.append('address', form.address);
+      formData.append('citizenshipNumber', form.citizenshipNumber);
+      formData.append('role', 'lessor');
+      
+      // Append profile photo if selected
+      if (form.profilePhoto) {
+        formData.append('profilePhoto', form.profilePhoto);
+      }
+
+      const response = await fetch('http://localhost:5000/api/users/register', {
+        method: 'POST',
+        body: formData, // Send FormData instead of JSON
+        // Don't set Content-Type header - browser will set it with boundary
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess('Registration successful! You can now login.');
+        // Reset form
+        setForm({
+          fullName: '',
+          lastName: '',
+          email: '',
+          phone: '',
+          password: '',
+          confirmPassword: '',
+          address: '',
+          citizenshipNumber: '',
+          profilePhoto: null,
+        });
+      } else {
+        setError(data.message || 'Registration failed');
+      }
+    } catch (error) {
+      setError('Unable to connect to server. Please try again.');
+      console.error('Registration error:', error);
+    }
   };
 
   return (

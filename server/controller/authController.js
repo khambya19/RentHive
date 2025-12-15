@@ -75,11 +75,48 @@ const forgotPassword = async (req, res) => {
     }
 };
 
-// 3. USER REGISTRATION (Next planned feature)
+// 3. USER REGISTRATION
 const registerUser = async (req, res) => {
-    // This is the implementation placeholder for the User registration feature.
-    // It will handle hashing the password and saving the new user to the database.
-    res.status(501).json({ msg: 'Registration feature not yet implemented.' });
+    const { email, password, fullName, lastName, phone, address, citizenshipNumber } = req.body;
+
+    try {
+        // Check if user already exists
+        let user = await User.findOne({ where: { email } });
+        if (user) {
+            return res.status(400).json({ msg: 'User already exists' });
+        }
+
+        // Hash password
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        // Create new user
+        user = await User.create({
+            email,
+            password: hashedPassword,
+            fullName,
+            lastName,
+            phone,
+            address,
+            citizenshipNumber
+        });
+
+        // Generate JWT
+        const payload = { user: { id: user.id } };
+
+        jwt.sign(
+            payload,
+            process.env.JWT_SECRET,
+            { expiresIn: '1h' },
+            (err, token) => {
+                if (err) throw err;
+                res.json({ token, msg: 'Registration successful' });
+            }
+        );
+    } catch (err) {
+        console.error('Registration Error:', err.message);
+        res.status(500).send('Server Error during registration');
+    }
 };
 
 

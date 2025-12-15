@@ -1,26 +1,26 @@
-// RENTHIVE/server/models/User.js
+// User model using pg pool
+const pool = require('../config/database');
 
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const User = {
+  async findOne(options) {
+    const { where } = options;
+    if (where.email) {
+      const result = await pool.query('SELECT * FROM users WHERE email = $1', [where.email]);
+      return result.rows[0] || null;
+    }
+    return null;
+  },
 
-const User = sequelize.define('User', {
-  id: {
-    type: DataTypes.INTEGER,
-    autoIncrement: true,
-    primaryKey: true,
-  },
-  email: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    unique: true,
-  },
-  password: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  // Add other fields needed for registration (name, phone, etc.)
-}, {
-  tableName: 'users', // Define the table name
-});
+  async create(userData) {
+    const { email, password, fullName, lastName, phone, address, citizenshipNumber } = userData;
+    const result = await pool.query(
+      `INSERT INTO users (email, password, full_name, last_name, phone, address, citizenship_number, created_at, updated_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW()) 
+       RETURNING *`,
+      [email, password, fullName, lastName, phone, address, citizenshipNumber]
+    );
+    return result.rows[0];
+  }
+};
 
 module.exports = User;

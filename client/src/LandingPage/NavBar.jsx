@@ -47,9 +47,9 @@ const NavBar = () => {
         <div className="auth-section"> 
             
             
-            <a href="#signup-section" className="auth-button sign-in-link">
+            <Link to="/signup" className="auth-button sign-in-link">
                 Sign Up 
-            </a>
+            </Link>
 
             
       

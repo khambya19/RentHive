@@ -1,0 +1,10 @@
+- [x] Merge server/ into backend/
+- [x] Update backend/package.json with server dependencies
+- [x] Update backend/index.js to include auth routes and Sequelize sync
+- [x] Move server files to backend
+- [ ] Remove server/ directory (user denied)
+- [ ] Remove frontend/ directory (user denied)
+- [x] Update .gitignore to ignore node_modules in backend/ and frontend/
+- [x] Remove redundant dependencies from root package.json
+- [ ] Update client if needed
+- [x] Test the consolidated setup

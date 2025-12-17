@@ -26,6 +26,7 @@ const Login = () => {
     try {
         const response = await axios.post(`${API_BASE_URL}/login`, { email, password });
         localStorage.setItem('token', response.data.token);
+        
         // Redirect to home page after successful login
         navigate('/');
     } catch (err) {

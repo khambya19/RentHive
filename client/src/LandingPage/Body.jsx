@@ -4,14 +4,14 @@ import JoinRenthive from '../LandingPage/joinRenthive';
 import RR from '../LandingPage/RR';
 
 
-import heroBackground from "../assets/building.jpg"; 
-import room1 from "../assets/room1.jpg"; 
-import flat2 from "../assets/flat2.jpg"; 
-import bike3 from "../assets/bike3.jpg"; 
+import heroBackground from "/src/assets/building.jpg"; 
+import room1 from "/src/assets/room1.jpg"; 
+import flat2 from "/src/assets/flat2.jpg"; 
+import bike3 from "/src/assets/bike3.jpg"; 
 
-import choiceImage1 from "../assets/choice_apartment.jpg";
-import choiceImage2 from "../assets/choice_house.jpg";
-import choiceImage3 from "../assets/choice_motorcyce.jpg";
+import choiceImage1 from "/src/assets/choice_apartment.jpg";
+import choiceImage2 from "/src/assets/choice_house.jpg";
+import choiceImage3 from "/src/assets/choice_motorcyce.jpg";
 
 
 const PropertyCard = ({ image, title, location, price, rating }) => (

@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import RenthiveLogo from '../../assets/Logo.png'; 
 import LoginIllustration from '../../assets/Login_page.png'; 
 
-const API_BASE_URL = 'http://localhost:5000/api/auth';
+const API_BASE_URL = 'http://localhost:3000/api/auth';
 
 const Login = () => {
   const navigate = useNavigate(); 
@@ -30,7 +30,7 @@ const Login = () => {
         // Redirect to home page after successful login
         navigate('/');
     } catch (err) {
-        setError(err.response?.data?.msg || 'Login failed. Please check your credentials.');
+        setError(err.response?.data?.error || 'Login failed. Please check your credentials.');
     }
   };
   

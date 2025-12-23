@@ -1,26 +1,49 @@
-// Vendor model using pg pool
-const pool = require('../config/database');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const Vendor = {
-  async findOne(options) {
-    const { where } = options;
-    if (where.email) {
-      const result = await pool.query('SELECT * FROM vendors WHERE email = $1', [where.email]);
-      return result.rows[0] || null;
-    }
-    return null;
+const Vendor = sequelize.define('Vendor', {
+  id: {
+    type: DataTypes.INTEGER,
+    autoIncrement: true,
+    primaryKey: true,
   },
-
-  async create(vendorData) {
-    const { fullName, email, phoneNumber, password, address, businessName, ownershipType, photo } = vendorData;
-    const result = await pool.query(
-      `INSERT INTO vendors (full_name, email, phone_number, password_hash, address, business_name, ownership_type, photo_url, created_at, updated_at) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()) 
-       RETURNING *`,
-      [fullName, email, phoneNumber, password, address, businessName, ownershipType, photo]
-    );
-    return result.rows[0];
-  }
-};
+  full_name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  email: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+  },
+  phone_number: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  password_hash: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  address: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+  },
+  business_name: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  ownership_type: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'Individual',
+  },
+  photo_url: {
+    type: DataTypes.STRING, 
+    allowNull: true,
+  },
+}, {
+  tableName: 'vendors',
+  timestamps: false,
+});
 
 module.exports = Vendor;

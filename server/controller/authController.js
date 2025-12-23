@@ -1,129 +1,213 @@
-// RENTHIVE/server/controller/authController.js
-
-const User = require('../models/User'); 
-const bcrypt = require('bcryptjs');
+const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-// Uncomment if using Nodemailer for email sending
-// const nodemailer = require('nodemailer'); 
-// const crypto = require('crypto'); 
+const User = require('../models/User');
+const sendEmail = require('../utils/mailer');
+const { generateOTP, getOtpExpiry } = require('../utils/otp');
+require('dotenv').config();
 
-// 1. USER LOGIN
-const loginUser = async (req, res) => {
-    const { email, password } = req.body; 
+const SALT_ROUNDS = 10;
 
-    try {
-        const user = await User.findOne({ where: { email } });
-        
-        if (!user) {
-            return res.status(401).json({ msg: 'Invalid Credentials' });
-        }
+function validateRegisterBody(body) {
+  const { type, fullName, email, password, confirmPassword } = body;
+  if (!type || !['lessor', 'owner', 'vendor', 'renter'].includes(type)) return 'Invalid type';
+  if (!fullName) return 'fullName required';
+  if (!email) return 'email required';
+  if (!password) return 'password required';
+  if (password !== confirmPassword) return 'password and confirmPassword must match';
+  return null;
+}
 
-        // Compare the provided password with the stored hashed password
-        const isMatch = await bcrypt.compare(password, user.password);
+exports.register = async (req, res) => {
+  try {
+    const errMsg = validateRegisterBody(req.body);
+    if (errMsg) return res.status(400).json({ error: errMsg });
 
-        if (!isMatch) {
-            return res.status(401).json({ msg: 'Invalid Credentials' });
-        }
+    const {
+      type, fullName, email, phone, password, address,
+      idNumber, businessName, ownershipType, profileImage
+    } = req.body;
 
-        // Generate JWT
-        const payload = { user: { id: user.id } };
+    let user = await User.findOne({ where: { email } });
 
-        jwt.sign(
-            payload,
-            process.env.JWT_SECRET, // Make sure JWT_SECRET is in your .env
-            { expiresIn: '1h' }, 
-            (err, token) => {
-                if (err) throw err;
-                res.json({ token, msg: 'Login successful' });
-            }
-        );
-    } catch (err) {
-        console.error("Login Error:", err.message);
-        res.status(500).send('Server Error during login');
+    const hashed = await bcrypt.hash(password, SALT_ROUNDS);
+    const otp = generateOTP();
+    const otpExpiry = getOtpExpiry();
+
+    if (user && user.isVerified) {
+      return res.status(400).json({ error: 'Email already registered and verified' });
     }
+
+    if (user) {
+      await user.update({
+        fullName, phone, password: hashed,
+        address, idNumber, businessName, ownershipType,
+        profileImage, type,
+        otp, otpExpiry, isVerified: false
+      });
+    } else {
+      user = await User.create({
+        fullName, email, phone, password: hashed,
+        address, idNumber, businessName, ownershipType,
+        profileImage, type, otp, otpExpiry, isVerified: false
+      });
+    }
+
+    const html = `
+      <div style="font-family: sans-serif; line-height: 1.4;">
+        <h3>RentHive - Email Verification</h3>
+        <p>Hi ${user.fullName || ''},</p>
+        <p>Your verification OTP is:</p>
+        <h2 style="letter-spacing: 4px;">${otp}</h2>
+        <p>This code will expire in ${process.env.OTP_EXPIRE_MINUTES || 10} minutes.</p>
+        <p>If you did not request this, please ignore.</p>
+      </div>
+    `;
+
+    await sendEmail({ to: email, subject: 'RentHive - Verify your email', html });
+
+    return res.status(201).json({ message: 'OTP sent to email', email });
+  } catch (err) {
+    console.error('register error', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
 };
 
-// 2. FORGOT PASSWORD (OTP Request)
-const forgotPassword = async (req, res) => {
-    const { identifier } = req.body; 
+exports.resendOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email required' });
 
-    try {
-        let user;
-        // In a real application, you'd find the user by email or phone.
-        
-        // Find user by email (assuming identifier is email for simplicity here)
-        user = await User.findOne({ where: { email: identifier } }); 
+    const user = await User.findOne({ where: { email } });
+    if (!user) return res.status(400).json({ error: 'User not found' });
+    if (user.isVerified) return res.status(400).json({ error: 'User already verified' });
 
-        if (!user) {
-            // Security Best Practice: Always return a generic success message
-            return res.json({ msg: 'If the identifier is valid, a reset code has been sent.' });
-        }
+    const otp = generateOTP();
+    const otpExpiry = getOtpExpiry();
+    user.otp = otp;
+    user.otpExpiry = otpExpiry;
+    await user.save();
 
-        // --- OTP/Email Sending Logic Goes Here ---
-        // 1. Generate resetCode (OTP).
-        // 2. Save resetCode and expiry time to the user record in the database.
-        // 3. Use Nodemailer/SMS gateway to send the code to user.email or user.phone.
-        // -----------------------------------------
-        
-        console.log(`[MOCK OTP] Generated code for ${identifier}`);
+    const html = `<p>Your new RentHive OTP: <b>${otp}</b>. Expires in ${process.env.OTP_EXPIRE_MINUTES || 10} minutes.</p>`;
+    await sendEmail({ to: email, subject: 'RentHive - New OTP', html });
 
-        res.json({ msg: 'A temporary reset code has been sent to your registered email.' });
-
-    } catch (err) {
-        console.error("Forgot Password Error:", err.message);
-        res.status(500).send('Server Error during password request');
-    }
+    return res.json({ message: 'OTP resent' });
+  } catch (err) {
+    console.error('resendOtp error', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
 };
 
-// 3. USER REGISTRATION
-const registerUser = async (req, res) => {
-    const { email, password, fullName, lastName, phone, address, citizenshipNumber } = req.body;
+exports.verifyOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) return res.status(400).json({ error: 'Email and OTP required' });
 
-    try {
-        // Check if user already exists
-        let user = await User.findOne({ where: { email } });
-        if (user) {
-            return res.status(400).json({ msg: 'User already exists' });
-        }
+    const user = await User.findOne({ where: { email } });
+    if (!user) return res.status(400).json({ error: 'User not found' });
+    if (user.isVerified) return res.status(400).json({ error: 'User already verified' });
 
-        // Hash password
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
+    if (user.otp !== otp) return res.status(400).json({ error: 'Invalid OTP' });
+    if (new Date() > user.otpExpiry) return res.status(400).json({ error: 'OTP expired' });
 
-        // Create new user
-        user = await User.create({
-            email,
-            password: hashedPassword,
-            fullName,
-            lastName,
-            phone,
-            address,
-            citizenshipNumber
-        });
+    user.isVerified = true;
+    user.otp = null;
+    user.otpExpiry = null;
+    await user.save();
 
-        // Generate JWT
-        const payload = { user: { id: user.id } };
-
-        jwt.sign(
-            payload,
-            process.env.JWT_SECRET,
-            { expiresIn: '1h' },
-            (err, token) => {
-                if (err) throw err;
-                res.json({ token, msg: 'Registration successful' });
-            }
-        );
-    } catch (err) {
-        console.error('Registration Error:', err.message);
-        res.status(500).send('Server Error during registration');
-    }
+    return res.json({ message: 'Email verified successfully' });
+  } catch (err) {
+    console.error('verifyOtp error', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
 };
 
+exports.login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
-// CRITICAL FIX: EXPORT ALL DEFINED FUNCTIONS CORRECTLY
-// This ensures the router (auth.js) receives functions, resolving the TypeError.
-module.exports = { 
-    loginUser, 
-    forgotPassword,
-    registerUser
+    const user = await User.findOne({ where: { email } });
+    if (!user) return res.status(400).json({ error: 'Invalid credentials' });
+
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) return res.status(400).json({ error: 'Invalid credentials' });
+    if (!user.isVerified) return res.status(403).json({ error: 'Please verify your email first' });
+
+    const payload = { id: user.id, email: user.email, type: user.type };
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
+
+    return res.json({
+      message: 'Login successful',
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        type: user.type,
+        profileImage: user.profileImage
+      }
+    });
+  } catch (err) {
+    console.error('login error', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email required' });
+
+    const user = await User.findOne({ where: { email } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const otp = generateOTP();
+    const otpExpiry = getOtpExpiry();
+    user.otp = otp;
+    user.otpExpiry = otpExpiry;
+    await user.save();
+
+    const html = `
+      <div style="font-family: sans-serif; line-height: 1.4;">
+        <h3>RentHive - Password Reset</h3>
+        <p>Your password reset OTP is:</p>
+        <h2 style="letter-spacing: 4px;">${otp}</h2>
+        <p>This code will expire in ${process.env.OTP_EXPIRE_MINUTES || 10} minutes.</p>
+        <p>If you did not request this, please ignore.</p>
+      </div>
+    `;
+
+    await sendEmail({ to: email, subject: 'RentHive - Password Reset OTP', html });
+
+    return res.json({ message: 'OTP sent to email', email });
+  } catch (err) {
+    console.error('forgotPassword error', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+exports.resetPassword = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ error: 'Email, OTP, and new password required' });
+    }
+
+    const user = await User.findOne({ where: { email } });
+    if (!user) return res.status(400).json({ error: 'User not found' });
+
+    if (user.otp !== otp) return res.status(400).json({ error: 'Invalid OTP' });
+    if (new Date() > user.otpExpiry) return res.status(400).json({ error: 'OTP expired' });
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    user.password = hashed;
+    user.otp = null;
+    user.otpExpiry = null;
+    await user.save();
+
+    return res.json({ message: 'Password reset successfully' });
+  } catch (err) {
+    console.error('resetPassword error', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
 };

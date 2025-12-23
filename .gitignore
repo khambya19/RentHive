@@ -1,52 +1,31 @@
- 
+
 # Dependencies
 node_modules/
+*/node_modules/
 **/node_modules/
-package-lock.json
-yarn.lock
 
-# Environment Variables
+# Environment variables
 .env
 .env.local
-.env.*.local
-**/.env
+.env.development
+.env.production
+*.env
 
-# Build Output
-build/
+# Build outputs
 dist/
-**/build/
-**/dist/
+build/
 
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-logs/
-
-# OS Files
+# OS files
 .DS_Store
 Thumbs.db
-*.swp
-*.swo
 
 # IDE
 .vscode/
 .idea/
-*.sublime-*
-.vs/
 
-# Uploaded Files
-server/uploads/
-**/uploads/
+# Logs
+*.log
+npm-debug.log*
 
-# Temporary Files
-*.tmp
-.cache/
-
-# Test Coverage
-coverage/
-.nyc_output/
-
-# Empty directories
-server/-p/
+# Lock files (optional - remove if you want to track them)
+# package-lock.json

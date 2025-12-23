@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import OtpModal from '../../components/otpModal';
 
 const RegisterVendor = () => {
   const navigate = useNavigate();
@@ -18,6 +19,8 @@ const RegisterVendor = () => {
   const [success, setSuccess] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState('');
 
   const handleChange = (e) => {
     const { name, type, value, files } = e.target;
@@ -39,44 +42,32 @@ const RegisterVendor = () => {
     }
 
     try {
-      const formData = new FormData();
-      formData.append('fullName', form.fullName);
-      formData.append('email', form.email);
-      formData.append('phoneNumber', form.phoneNumber);
-      formData.append('password', form.password);
-      formData.append('confirmPassword', form.confirmPassword);
-      formData.append('address', form.address);
-      formData.append('businessName', form.businessName);
-      formData.append('ownershipType', form.ownershipType);
-      if (form.photo) {
-        formData.append('photo', form.photo);
-      }
-
-      const response = await fetch('http://localhost:5000/api/register-vendor', {
+      const response = await fetch('http://localhost:3000/api/auth/register', {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type: 'vendor',
+          fullName: form.fullName,
+          email: form.email,
+          phone: form.phoneNumber,
+          password: form.password,
+          confirmPassword: form.confirmPassword,
+          address: form.address,
+          businessName: form.businessName,
+          ownershipType: form.ownershipType,
+        }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setSuccess('Registration successful! Redirecting to login...');
-        setForm({
-          fullName: '',
-          email: '',
-          phoneNumber: '',
-          password: '',
-          confirmPassword: '',
-          address: '',
-          businessName: '',
-          ownershipType: 'Individual',
-          photo: null,
-        });
-        setTimeout(() => {
-          navigate('/login');
-        }, 2000);
+        setSuccess('Registration successful! Please verify your email.');
+        setRegisteredEmail(form.email);
+        setShowOtpModal(true);
       } else {
-        setError(data.message || 'Registration failed');
+        setError(data.error || data.message || 'Registration failed');
       }
     } catch (error) {
       setError('Unable to connect to server. Please try again.');
@@ -225,6 +216,18 @@ const RegisterVendor = () => {
           </div>
         </div>
       </div>
+
+      {showOtpModal && (
+        <OtpModal
+          email={registeredEmail}
+          onClose={() => setShowOtpModal(false)}
+          onVerify={() => {
+            setShowOtpModal(false);
+            setSuccess('Email verified successfully! Redirecting to login...');
+            setTimeout(() => navigate('/login'), 2000);
+          }}
+        />
+      )}
     </div>
   );
 };

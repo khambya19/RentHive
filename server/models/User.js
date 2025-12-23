@@ -1,26 +1,31 @@
-// User model using pg pool
-const pool = require('../config/database');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const User = {
-  async findOne(options) {
-    const { where } = options;
-    if (where.email) {
-      const result = await pool.query('SELECT * FROM users WHERE email = $1', [where.email]);
-      return result.rows[0] || null;
-    }
-    return null;
-  },
+const User = sequelize.define('User', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
 
-  async create(userData) {
-    const { email, password, fullName, lastName, phone, address, citizenshipNumber } = userData;
-    const result = await pool.query(
-      `INSERT INTO users (email, password, full_name, last_name, phone, address, citizenship_number, created_at, updated_at) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW()) 
-       RETURNING *`,
-      [email, password, fullName, lastName, phone, address, citizenshipNumber]
-    );
-    return result.rows[0];
-  }
-};
+  fullName: { type: DataTypes.STRING, allowNull: false },
+  email: { type: DataTypes.STRING, allowNull: false, unique: true, validate: { isEmail: true } },
+  phone: { type: DataTypes.STRING, allowNull: true },
+  password: { type: DataTypes.STRING, allowNull: false },
+
+  address: { type: DataTypes.TEXT, allowNull: true },
+  idNumber: { type: DataTypes.STRING, allowNull: true },
+  citizenshipNumber: { type: DataTypes.STRING, allowNull: true },
+  businessName: { type: DataTypes.STRING, allowNull: true },
+  ownershipType: { type: DataTypes.STRING, allowNull: true },
+
+  profileImage: { type: DataTypes.STRING, allowNull: true },
+
+  type: { type: DataTypes.ENUM('lessor', 'owner', 'vendor', 'renter'), allowNull: false },
+
+  otp: { type: DataTypes.STRING, allowNull: true },
+  otpExpiry: { type: DataTypes.DATE, allowNull: true },
+
+  isVerified: { type: DataTypes.BOOLEAN, defaultValue: false }
+}, {
+  tableName: 'users',
+  timestamps: true
+});
 
 module.exports = User;

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import OtpModal from '../../components/otpModal';
 
 const RegisterLessor = () => {
   const navigate = useNavigate();
@@ -17,6 +18,8 @@ const RegisterLessor = () => {
   const [success, setSuccess] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState('');
 
   const handleChange = (e) => {
     const { name, type, value, files } = e.target;
@@ -38,41 +41,31 @@ const RegisterLessor = () => {
     }
 
     try {
-      const formData = new FormData();
-      formData.append('fullName', form.fullName);
-      formData.append('email', form.email);
-      formData.append('phone', form.phone);
-      formData.append('password', form.password);
-      formData.append('address', form.address);
-      formData.append('citizenshipNumber', form.citizenshipNumber);
-      if (form.photo) {
-        formData.append('profilePhoto', form.photo);
-      }
-
-      const response = await fetch('http://localhost:5000/api/register-lessor', {
+      const response = await fetch('http://localhost:3000/api/auth/register', {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type: 'lessor',
+          fullName: form.fullName,
+          email: form.email,
+          phone: form.phone,
+          password: form.password,
+          confirmPassword: form.confirmPassword,
+          address: form.address,
+          citizenshipNumber: form.citizenshipNumber,
+        }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setSuccess('Registration successful! Redirecting to login...');
-        setForm({
-          fullName: '',
-          email: '',
-          phone: '',
-          password: '',
-          confirmPassword: '',
-          address: '',
-          citizenshipNumber: '',
-          photo: null,
-        });
-        setTimeout(() => {
-          navigate('/login');
-        }, 2000);
+        setSuccess('Registration successful! Please verify your email.');
+        setRegisteredEmail(form.email);
+        setShowOtpModal(true);
       } else {
-        setError(data.message || 'Registration failed');
+        setError(data.error || data.message || 'Registration failed');
       }
     } catch (error) {
       setError('Unable to connect to server. Please try again.');
@@ -212,6 +205,18 @@ const RegisterLessor = () => {
           </div>
         </div>
       </div>
+
+      {showOtpModal && (
+        <OtpModal
+          email={registeredEmail}
+          onClose={() => setShowOtpModal(false)}
+          onVerify={() => {
+            setShowOtpModal(false);
+            setSuccess('Email verified successfully! Redirecting to login...');
+            setTimeout(() => navigate('/login'), 2000);
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import './Login.css';
 import { useNavigate } from 'react-router-dom'; 
+import { useAuth } from '../../context/AuthContext';
 
 import RenthiveLogo from '../../assets/Logo.png'; 
 import LoginIllustration from '../../assets/Login_page.png'; 
@@ -10,6 +11,7 @@ const API_BASE_URL = 'http://localhost:3000/api/auth';
 
 const Login = () => {
   const navigate = useNavigate(); 
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -25,10 +27,17 @@ const Login = () => {
     setError(null);
     try {
         const response = await axios.post(`${API_BASE_URL}/login`, { email, password });
-        localStorage.setItem('token', response.data.token);
+        const { token, user } = response.data;
         
-        // Redirect to home page after successful login
-        navigate('/');
+        // Use AuthContext login
+        login(user, token);
+        
+        // Redirect based on user type
+        if (user.type === 'vendor' || user.type === 'owner') {
+            navigate('/vendor/dashboard');
+        } else {
+            navigate('/lessor/dashboard');
+        }
     } catch (err) {
         setError(err.response?.data?.error || 'Login failed. Please check your credentials.');
     }

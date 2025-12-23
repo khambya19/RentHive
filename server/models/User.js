@@ -1,4 +1,3 @@
-// server/models/User.js
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/db');
 
@@ -12,12 +11,13 @@ const User = sequelize.define('User', {
 
   address: { type: DataTypes.TEXT, allowNull: true },
   idNumber: { type: DataTypes.STRING, allowNull: true },
+  citizenshipNumber: { type: DataTypes.STRING, allowNull: true },
   businessName: { type: DataTypes.STRING, allowNull: true },
-  ownershipType: { type: DataTypes.STRING, allowNull: true }, 
+  ownershipType: { type: DataTypes.STRING, allowNull: true },
 
   profileImage: { type: DataTypes.STRING, allowNull: true },
 
-  type: { type: DataTypes.ENUM('lessor','owner'), allowNull: false }, 
+  type: { type: DataTypes.ENUM('lessor', 'owner', 'vendor', 'renter'), allowNull: false },
 
   otp: { type: DataTypes.STRING, allowNull: true },
   otpExpiry: { type: DataTypes.DATE, allowNull: true },

@@ -10,13 +10,10 @@ import Register from "./pages/Register/Register.jsx";
 import RegisterVendor from "./pages/RegisterVendor/RegisterVendor.jsx";
 import RegisterLessor from "./pages/RegisterLessor/RegisterLessor.jsx";
 import ForgotPassword from "./pages/ForgotPassword/ForgotPassword.jsx";
+import VendorDashboard from "./pages/VendorDashboard/VendorDashboard.jsx";
+import PropertyManagementDashboard from "./pages/VendorDashboard/PropertyManagementDashboard.jsx";
 
-// TODO: Your friend will create these dashboard components
-// import VendorDashboard from "./pages/Dashboard/VendorDashboard.jsx";
-// import LessorDashboard from "./pages/Dashboard/LessorDashboard.jsx";
-
-// Temporary placeholder components - Friend will replace with actual dashboards
-const VendorDashboard = () => <div style={{padding: '50px', textAlign: 'center'}}><h1>Vendor Dashboard</h1><p>Coming soon...</p></div>;
+// Temporary placeholder component - Will be created later
 const LessorDashboard = () => <div style={{padding: '50px', textAlign: 'center'}}><h1>Lessor Dashboard</h1><p>Coming soon...</p></div>;
 
 // Protected Route Component - Handles authentication & role-based access
@@ -70,12 +67,13 @@ function AppContent() {
                 <Route path="/register-lessor" element={<RegisterLessor />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 
-                {/* Protected Dashboard Routes - Friend will create actual dashboard components */}
+                {/* Protected Dashboard Routes */}
                 <Route path="/vendor/dashboard" element={
                     <ProtectedRoute allowedTypes={['vendor', 'owner']}>
-                        <VendorDashboard />
+                        <PropertyManagementDashboard />
                     </ProtectedRoute>
                 } />
+                <Route path="/vendors" element={<VendorDashboard />} />
                 <Route path="/lessor/dashboard" element={
                     <ProtectedRoute allowedTypes={['lessor', 'renter']}>
                         <LessorDashboard />

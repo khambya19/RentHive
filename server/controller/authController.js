@@ -29,15 +29,19 @@ exports.register = async (req, res) => {
 
     let user = await User.findOne({ where: { email } });
 
+    // Prevent duplicate registration for verified users
+    if (user && user.isVerified) {
+      return res.status(400).json({ 
+        error: 'This email is already registered. Please login instead.' 
+      });
+    }
+
     const hashed = await bcrypt.hash(password, SALT_ROUNDS);
     const otp = generateOTP();
     const otpExpiry = getOtpExpiry();
 
-    if (user && user.isVerified) {
-      return res.status(400).json({ error: 'Email already registered and verified' });
-    }
-
-    if (user) {
+    // Update existing unverified user or create new user
+    if (user && !user.isVerified) {
       await user.update({
         fullName, phone, password: hashed,
         address, idNumber, businessName, ownershipType,
@@ -63,12 +67,18 @@ exports.register = async (req, res) => {
       </div>
     `;
 
-    await sendEmail({ to: email, subject: 'RentHive - Verify your email', html });
+    try {
+      await sendEmail({ to: email, subject: 'RentHive - Verify your email', html });
+    } catch (emailErr) {
+      console.error('Email sending failed:', emailErr);
+      // Continue anyway - user created, just log the OTP for dev
+      console.log('OTP for', email, ':', otp);
+    }
 
-    return res.status(201).json({ message: 'OTP sent to email', email });
+    return res.status(201).json({ message: 'OTP sent to email', email, otp: process.env.NODE_ENV === 'development' ? otp : undefined });
   } catch (err) {
     console.error('register error', err);
-    return res.status(500).json({ error: 'Server error' });
+    return res.status(500).json({ error: 'Server error', details: err.message });
   }
 };
 
@@ -100,44 +110,81 @@ exports.resendOtp = async (req, res) => {
 exports.verifyOtp = async (req, res) => {
   try {
     const { email, otp } = req.body;
+    console.log('Verify OTP request:', { email, otp });
+    
     if (!email || !otp) return res.status(400).json({ error: 'Email and OTP required' });
 
     const user = await User.findOne({ where: { email } });
-    if (!user) return res.status(400).json({ error: 'User not found' });
-    if (user.isVerified) return res.status(400).json({ error: 'User already verified' });
+    if (!user) {
+      console.log('User not found:', email);
+      return res.status(400).json({ error: 'User not found' });
+    }
+    
+    if (user.isVerified) {
+      console.log('User already verified:', email);
+      return res.status(400).json({ error: 'User already verified' });
+    }
 
-    if (user.otp !== otp) return res.status(400).json({ error: 'Invalid OTP' });
-    if (new Date() > user.otpExpiry) return res.status(400).json({ error: 'OTP expired' });
+    console.log('Stored OTP:', user.otp, 'Provided OTP:', otp);
+    console.log('OTP Expiry:', user.otpExpiry, 'Current time:', new Date());
+    
+    if (user.otp !== otp) {
+      console.log('Invalid OTP provided');
+      return res.status(400).json({ error: 'Invalid OTP' });
+    }
+    
+    if (new Date() > user.otpExpiry) {
+      console.log('OTP expired');
+      return res.status(400).json({ error: 'OTP expired' });
+    }
 
     user.isVerified = true;
     user.otp = null;
     user.otpExpiry = null;
     await user.save();
-
-    return res.json({ message: 'Email verified successfully' });
+    
+    console.log('Email verified successfully for:', email);
+    return res.json({ message: 'Email verified successfully', success: true });
   } catch (err) {
     console.error('verifyOtp error', err);
-    return res.status(500).json({ error: 'Server error' });
+    return res.status(500).json({ error: 'Server error', details: err.message });
   }
 };
 
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
+    console.log('Login attempt for:', email);
+    
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
     const user = await User.findOne({ where: { email } });
-    if (!user) return res.status(400).json({ error: 'Invalid credentials' });
+    if (!user) {
+      console.log('User not found:', email);
+      return res.status(400).json({ error: 'Invalid credentials' });
+    }
 
+    console.log('User found, checking password...');
+    console.log('User verified status:', user.isVerified);
+    
     const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(400).json({ error: 'Invalid credentials' });
-    if (!user.isVerified) return res.status(403).json({ error: 'Please verify your email first' });
+    if (!match) {
+      console.log('Password does not match');
+      return res.status(400).json({ error: 'Invalid credentials' });
+    }
+    
+    if (!user.isVerified) {
+      console.log('User not verified:', email);
+      return res.status(403).json({ error: 'Please verify your email first' });
+    }
 
     const payload = { id: user.id, email: user.email, type: user.type };
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 
+    console.log('Login successful for:', email);
     return res.json({
       message: 'Login successful',
+      success: true,
       token,
       user: {
         id: user.id,
@@ -149,7 +196,7 @@ exports.login = async (req, res) => {
     });
   } catch (err) {
     console.error('login error', err);
-    return res.status(500).json({ error: 'Server error' });
+    return res.status(500).json({ error: 'Server error', details: err.message });
   }
 };
 

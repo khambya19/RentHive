@@ -42,7 +42,8 @@ const RegisterVendor = () => {
     }
 
     try {
-      const response = await fetch('http://localhost:3000/api/auth/register', {
+      console.log('Sending registration request...');
+      const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -61,6 +62,7 @@ const RegisterVendor = () => {
       });
 
       const data = await response.json();
+      console.log('Response:', response.status, data);
 
       if (response.ok) {
         setSuccess('Registration successful! Please verify your email.');
@@ -70,8 +72,8 @@ const RegisterVendor = () => {
         setError(data.error || data.message || 'Registration failed');
       }
     } catch (error) {
-      setError('Unable to connect to server. Please try again.');
       console.error('Registration error:', error);
+      setError(`Unable to connect to server: ${error.message}`);
     }
   };
 

@@ -7,8 +7,6 @@ import { useAuth } from '../../context/AuthContext';
 import RenthiveLogo from '../../assets/Logo.png'; 
 import LoginIllustration from '../../assets/Login_page.png'; 
 
-const API_BASE_URL = 'http://localhost:3000/api/auth';
-
 const Login = () => {
   const navigate = useNavigate(); 
   const { login } = useAuth();
@@ -26,7 +24,9 @@ const Login = () => {
     e.preventDefault();
     setError(null);
     try {
-        const response = await axios.post(`${API_BASE_URL}/login`, { email, password });
+        console.log('Attempting login with:', email);
+        const response = await axios.post('/api/auth/login', { email, password });
+        console.log('Login response:', response.data);
         const { token, user } = response.data;
         
         // Use AuthContext login
@@ -39,6 +39,7 @@ const Login = () => {
             navigate('/lessor/dashboard');
         }
     } catch (err) {
+        console.error('Login error:', err);
         setError(err.response?.data?.error || 'Login failed. Please check your credentials.');
     }
   };

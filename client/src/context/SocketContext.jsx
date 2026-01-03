@@ -21,58 +21,71 @@ export const SocketProvider = ({ children }) => {
 
   // Initialize socket connection
   useEffect(() => {
-    const socketInstance = io('http://localhost:5000', {
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 5
-    });
+    // Skip socket initialization if server doesn't support it
+    let socketInstance = null;
+    
+    try {
+      socketInstance = io('http://localhost:3001', {
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 3,
+        timeout: 5000
+      });
 
-    socketInstance.on('connect', () => {
-      console.log('✅ Socket connected:', socketInstance.id);
-      setIsConnected(true);
-      
-      // Re-register user if they were registered before
-      if (currentUserId) {
-        socketInstance.emit('register', currentUserId);
-      }
-    });
+      socketInstance.on('connect', () => {
+        console.log('✅ Socket connected:', socketInstance.id);
+        setIsConnected(true);
+        
+        // Re-register user if they were registered before
+        if (currentUserId) {
+          socketInstance.emit('register', currentUserId);
+        }
+      });
 
-    socketInstance.on('disconnect', () => {
-      console.log('❌ Socket disconnected');
+      socketInstance.on('disconnect', () => {
+        console.log('❌ Socket disconnected');
+        setIsConnected(false);
+      });
+
+      socketInstance.on('connect_error', (error) => {
+        console.warn('⚠️ Socket connection failed (this is optional):', error.message);
+        setIsConnected(false);
+        // Don't throw error, just continue without socket
+      });
+
+      // Listen for new notifications
+      socketInstance.on('new-notification', (notification) => {
+        console.log('🔔 New notification received:', notification);
+        
+        // Add notification to state
+        setNotifications((prev) => [notification, ...prev]);
+        setUnreadCount((prev) => prev + 1);
+
+        // Request browser notification permission and show notification
+        if (Notification.permission === 'granted') {
+          showBrowserNotification(notification);
+        } else if (Notification.permission !== 'denied') {
+          Notification.requestPermission().then((permission) => {
+            if (permission === 'granted') {
+              showBrowserNotification(notification);
+            }
+          });
+        }
+      });
+
+      setSocket(socketInstance);
+    } catch (error) {
+      console.warn('⚠️ Socket initialization failed (continuing without real-time features):', error);
+      setSocket(null);
       setIsConnected(false);
-    });
-
-    socketInstance.on('connect_error', (error) => {
-      console.error('❌ Socket connection error:', error);
-      setIsConnected(false);
-    });
-
-    // Listen for new notifications
-    socketInstance.on('new-notification', (notification) => {
-      console.log('🔔 New notification received:', notification);
-      
-      // Add notification to state
-      setNotifications((prev) => [notification, ...prev]);
-      setUnreadCount((prev) => prev + 1);
-
-      // Request browser notification permission and show notification
-      if (Notification.permission === 'granted') {
-        showBrowserNotification(notification);
-      } else if (Notification.permission !== 'denied') {
-        Notification.requestPermission().then((permission) => {
-          if (permission === 'granted') {
-            showBrowserNotification(notification);
-          }
-        });
-      }
-    });
-
-    setSocket(socketInstance);
+    }
 
     // Cleanup on unmount
     return () => {
-      socketInstance.disconnect();
+      if (socketInstance) {
+        socketInstance.disconnect();
+      }
     };
   }, []);
 
@@ -136,7 +149,7 @@ export const SocketProvider = ({ children }) => {
   // Fetch user notifications from API
   const fetchUserNotifications = async (userId) => {
     try {
-      const response = await axios.get(`http://localhost:5000/api/notifications/user/${userId}`);
+      const response = await axios.get(`http://localhost:3001/api/notifications/user/${userId}`);
       if (response.data.success) {
         setNotifications(response.data.data.notifications);
         setUnreadCount(response.data.data.unreadCount);
@@ -153,7 +166,7 @@ export const SocketProvider = ({ children }) => {
 
     try {
       const response = await axios.patch(
-        `http://localhost:5000/api/notifications/${notificationId}/read`,
+        `http://localhost:3001/api/notifications/${notificationId}/read`,
         { userId: currentUserId }
       );
 
@@ -178,7 +191,7 @@ export const SocketProvider = ({ children }) => {
 
     try {
       const response = await axios.patch(
-        `http://localhost:5000/api/notifications/user/${currentUserId}/read-all`
+        `http://localhost:3001/api/notifications/user/${currentUserId}/read-all`
       );
 
       if (response.data.success) {
@@ -200,7 +213,7 @@ export const SocketProvider = ({ children }) => {
 
     try {
       const response = await axios.delete(
-        `http://localhost:5000/api/notifications/${notificationId}`,
+        `http://localhost:3001/api/notifications/${notificationId}`,
         { data: { userId: currentUserId } }
       );
 

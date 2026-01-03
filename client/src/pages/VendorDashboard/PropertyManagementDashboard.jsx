@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useNotifications } from '../../hooks/useNotifications';
+import DashboardNotifications from '../../components/DashboardNotifications';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import './PropertyManagementDashboard.css';
 import L from 'leaflet';
+import bikeFallback from '../../assets/bike3.jpg';
 
 // Fix Leaflet default marker icon issue in React
 delete L.Icon.Default.prototype._getIconUrl;
@@ -35,6 +38,7 @@ const createCustomIcon = () => {
 const PropertyManagementDashboard = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { notifications, removeNotification, showSuccess, showError } = useNotifications();
   const [activeTab, setActiveTab] = useState('overview');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [properties, setProperties] = useState([]);
@@ -48,6 +52,46 @@ const PropertyManagementDashboard = () => {
     totalViews: 0,
     totalInquiries: 0,
   });
+
+  // Bike management state
+  const [bikes, setBikes] = useState([]);
+  const [bikeBookings, setBikeBookings] = useState([]);
+  const [bikeStats, setBikeStats] = useState({
+    totalBikes: 0,
+    availableBikes: 0,
+    activeRentals: 0,
+    monthlyRevenue: 0,
+    totalBookings: 0,
+    pendingBookings: 0,
+  });
+  const [showBikeModal, setShowBikeModal] = useState(false);
+  const [editingBike, setEditingBike] = useState(null);
+  const [bikeForm, setBikeForm] = useState({
+    name: '',
+    brand: '',
+    model: '',
+    type: 'Mountain',
+    year: new Date().getFullYear(),
+    engineCapacity: '',
+    fuelType: 'Petrol',
+    dailyRate: '',
+    weeklyRate: '',
+    monthlyRate: '',
+    securityDeposit: '',
+    features: [],
+    description: '',
+    location: '',
+    pickupLocation: '',
+    licenseRequired: true,
+    minimumAge: 18,
+    status: 'Available'
+  });
+
+  // Bike view state
+  const [bikeViewMode, setBikeViewMode] = useState('grid');
+  const [bikeSearch, setBikeSearch] = useState('');
+  const [bikeFilter, setBikeFilter] = useState('all');
+  const [bikeSortBy, setBikeSortBy] = useState('newest');
   
   // Properties view state
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
@@ -93,6 +137,15 @@ const PropertyManagementDashboard = () => {
     'Swimming Pool', 'Balcony', 'Air Conditioning', 'Furnished'
   ];
 
+  // Bike features list
+  const bikeFeaturesList = [
+    'GPS Tracking', 'Electric Motor', 'Basket', 'Child Seat', 'Helmet Included',
+    'Anti-theft Lock', 'LED Lights', 'Bluetooth Speaker', 'Phone Mount', 'Water Bottle Holder'
+  ];
+
+  // Bike type options
+  const bikeTypes = ['Mountain', 'Road', 'Electric', 'Hybrid', 'BMX', 'Cruiser', 'Motorcycle', 'Scooter'];
+
   useEffect(() => {
     fetchData();
     // Set profile picture if user has one
@@ -106,7 +159,7 @@ const PropertyManagementDashboard = () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
-        alert('Please login first');
+        showError('Please login first');
         navigate('/login');
         return;
       }
@@ -116,13 +169,15 @@ const PropertyManagementDashboard = () => {
       };
 
       // Fetch stats and properties
-      const [statsResponse, propertiesResponse] = await Promise.all([
-        fetch('/api/properties/stats', { headers }),
-        fetch('/api/properties', { headers }),
+      const [statsResponse, propertiesResponse, bikeStatsResponse, bikesResponse] = await Promise.all([
+        fetch('http://localhost:3001/api/properties/stats', { headers }),
+        fetch('http://localhost:3001/api/properties', { headers }),
+        fetch('http://localhost:3001/api/bikes/vendor/stats', { headers }).catch(() => ({ ok: false })),
+        fetch('http://localhost:3001/api/bikes/vendor', { headers }).catch(() => ({ ok: false })),
       ]);
 
       if (!statsResponse.ok || !propertiesResponse.ok) {
-        throw new Error('Failed to fetch data');
+        throw new Error('Failed to fetch property data');
       }
 
       const statsData = await statsResponse.json();
@@ -138,9 +193,36 @@ const PropertyManagementDashboard = () => {
       });
       setProperties(propertiesData);
       setBookings(statsData.bookings || []);
+
+      // Fetch bike data if endpoints are available
+      if (bikeStatsResponse.ok && bikesResponse.ok) {
+        const bikeStatsData = await bikeStatsResponse.json();
+        const bikesData = await bikesResponse.json();
+
+        setBikeStats(bikeStatsData.stats || {
+          totalBikes: 0,
+          availableBikes: 0,
+          activeRentals: 0,
+          monthlyRevenue: 0,
+          totalBookings: 0,
+          pendingBookings: 0,
+        });
+        setBikes(bikesData);
+
+        // Fetch bike bookings
+        try {
+          const bikeBookingsResponse = await fetch('http://localhost:3001/api/bikes/vendor/bookings', { headers });
+          if (bikeBookingsResponse.ok) {
+            const bikeBookingsData = await bikeBookingsResponse.json();
+            setBikeBookings(bikeBookingsData);
+          }
+        } catch (error) {
+          console.error('Error fetching bike bookings:', error);
+        }
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
-      alert('Failed to load dashboard data');
+      showError('Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
@@ -151,12 +233,12 @@ const PropertyManagementDashboard = () => {
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
+      showError('Please select an image file');
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      alert('Image size should be less than 5MB');
+      showError('Image size should be less than 5MB');
       return;
     }
 
@@ -166,7 +248,7 @@ const PropertyManagementDashboard = () => {
       const formData = new FormData();
       formData.append('profilePicture', file);
 
-      const response = await fetch('/api/vendors/upload-profile', {
+      const response = await fetch('http://localhost:3001/api/vendors/upload-profile', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -180,10 +262,10 @@ const PropertyManagementDashboard = () => {
 
       const data = await response.json();
       setProfilePicture(data.profilePicture);
-      alert('Profile picture updated successfully!');
+      showSuccess('Profile picture updated successfully!');
     } catch (error) {
       console.error('Error uploading profile picture:', error);
-      alert('Failed to upload profile picture');
+      showError('Failed to upload profile picture');
     } finally {
       setUploadingProfile(false);
     }
@@ -192,7 +274,7 @@ const PropertyManagementDashboard = () => {
   const handleImageSelect = (e) => {
     const files = Array.from(e.target.files);
     if (files.length + selectedImages.length > 10) {
-      alert('You can only upload up to 10 images');
+      showError('You can only upload up to 10 images');
       return;
     }
 
@@ -223,7 +305,7 @@ const PropertyManagementDashboard = () => {
 
       console.log('Uploading', selectedImages.length, 'images...');
 
-      const response = await fetch('/api/properties/upload-images', {
+      const response = await fetch('http://localhost:3001/api/properties/upload-images', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -242,7 +324,7 @@ const PropertyManagementDashboard = () => {
       return data.images || [];
     } catch (error) {
       console.error('Error uploading images:', error);
-      alert('Failed to upload images');
+      showError('Failed to upload images');
       return [];
     } finally {
       setUploadingImages(false);
@@ -266,7 +348,7 @@ const PropertyManagementDashboard = () => {
 
       console.log('Creating property with data:', propertyData);
 
-      const response = await fetch('/api/properties', {
+      const response = await fetch('http://localhost:3001/api/properties', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -349,7 +431,7 @@ const PropertyManagementDashboard = () => {
         longitude: mapCoordinates.lng
       };
 
-      const response = await fetch(`/api/properties/${editingProperty.id}`, {
+      const response = await fetch(`http://localhost:3001/api/properties/${editingProperty.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -380,7 +462,7 @@ const PropertyManagementDashboard = () => {
     if (window.confirm('Are you sure you want to delete this property?')) {
       try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`/api/properties/${id}`, {
+        const response = await fetch(`http://localhost:3001/api/properties/${id}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -404,7 +486,7 @@ const PropertyManagementDashboard = () => {
   const handleBookingAction = async (bookingId, status) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/properties/bookings/${bookingId}/status`, {
+      const response = await fetch(`http://localhost:3001/api/properties/bookings/${bookingId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -424,8 +506,6 @@ const PropertyManagementDashboard = () => {
     } catch (error) {
       console.error('Error updating booking:', error);
       alert(error.message);
-    setSelectedImages([]);
-    setImagePreview([]);
     }
   };
 
@@ -456,6 +536,207 @@ const PropertyManagementDashboard = () => {
         ? prev.amenities.filter(a => a !== amenity)
         : [...prev.amenities, amenity]
     }));
+  };
+
+  // Bike management functions
+  const handleAddBike = async (e) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('token');
+      const bikeData = {
+        ...bikeForm,
+        features: bikeForm.features,
+        year: parseInt(bikeForm.year),
+        engineCapacity: bikeForm.engineCapacity ? parseInt(bikeForm.engineCapacity) : null,
+        dailyRate: parseFloat(bikeForm.dailyRate),
+        weeklyRate: parseFloat(bikeForm.weeklyRate),
+        monthlyRate: bikeForm.monthlyRate ? parseFloat(bikeForm.monthlyRate) : null,
+        securityDeposit: parseFloat(bikeForm.securityDeposit),
+        minimumAge: parseInt(bikeForm.minimumAge)
+      };
+
+      const response = await fetch('http://localhost:3001/api/bikes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(bikeData),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to add bike');
+      }
+
+      const newBike = await response.json();
+      setBikes([...bikes, newBike]);
+      setShowBikeModal(false);
+      resetBikeForm();
+      fetchData(); // Refresh stats
+      showSuccess('Bike added successfully!');
+    } catch (error) {
+      console.error('Error adding bike:', error);
+      showError(error.message);
+    }
+  };
+
+  const handleEditBike = (bike) => {
+    setEditingBike(bike);
+    setBikeForm({
+      name: bike.name || '',
+      brand: bike.brand || '',
+      model: bike.model || '',
+      type: bike.type || 'Mountain',
+      year: bike.year || new Date().getFullYear(),
+      engineCapacity: bike.engineCapacity || '',
+      fuelType: bike.fuelType || 'Petrol',
+      dailyRate: bike.dailyRate || '',
+      weeklyRate: bike.weeklyRate || '',
+      monthlyRate: bike.monthlyRate || '',
+      securityDeposit: bike.securityDeposit || '',
+      features: bike.features || [],
+      description: bike.description || '',
+      location: bike.location || '',
+      pickupLocation: bike.pickupLocation || '',
+      licenseRequired: bike.licenseRequired !== false,
+      minimumAge: bike.minimumAge || 18,
+      status: bike.status || 'Available'
+    });
+    setShowBikeModal(true);
+  };
+
+  const handleUpdateBike = async (e) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('token');
+      const bikeData = {
+        ...bikeForm,
+        year: parseInt(bikeForm.year),
+        engineCapacity: bikeForm.engineCapacity ? parseInt(bikeForm.engineCapacity) : null,
+        dailyRate: parseFloat(bikeForm.dailyRate),
+        weeklyRate: parseFloat(bikeForm.weeklyRate),
+        monthlyRate: bikeForm.monthlyRate ? parseFloat(bikeForm.monthlyRate) : null,
+        securityDeposit: parseFloat(bikeForm.securityDeposit),
+        minimumAge: parseInt(bikeForm.minimumAge)
+      };
+
+      const response = await fetch(`http://localhost:3001/api/bikes/${editingBike.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(bikeData),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to update bike');
+      }
+
+      const updatedBike = await response.json();
+      setBikes(bikes.map(b => b.id === editingBike.id ? updatedBike : b));
+      setShowBikeModal(false);
+      setEditingBike(null);
+      resetBikeForm();
+      fetchData(); // Refresh stats
+      showSuccess('Bike updated successfully!');
+    } catch (error) {
+      console.error('Error updating bike:', error);
+      showError(error.message);
+    }
+  };
+
+  const handleDeleteBike = async (id) => {
+    if (window.confirm('Are you sure you want to delete this bike?')) {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`http://localhost:3001/api/bikes/${id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to delete bike');
+        }
+
+        setBikes(bikes.filter(b => b.id !== id));
+        showSuccess('Bike deleted successfully!');
+      } catch (error) {
+        console.error('Error deleting bike:', error);
+        showError(error.message);
+      }
+    }
+  };
+
+  const resetBikeForm = () => {
+    setBikeForm({
+      name: '',
+      brand: '',
+      model: '',
+      type: 'Mountain',
+      year: new Date().getFullYear(),
+      engineCapacity: '',
+      fuelType: 'Petrol',
+      dailyRate: '',
+      weeklyRate: '',
+      monthlyRate: '',
+      securityDeposit: '',
+      features: [],
+      description: '',
+      location: '',
+      pickupLocation: '',
+      licenseRequired: true,
+      minimumAge: 18,
+      status: 'Available'
+    });
+  };
+
+  const toggleBikeFeature = (feature) => {
+    setBikeForm(prev => ({
+      ...prev,
+      features: prev.features.includes(feature)
+        ? prev.features.filter(f => f !== feature)
+        : [...prev.features, feature]
+    }));
+  };
+
+  // Filter and sort bikes
+  const getFilteredAndSortedBikes = () => {
+    let filtered = [...bikes];
+    
+    // Apply search filter
+    if (bikeSearch) {
+      filtered = filtered.filter(b => 
+        b.brand.toLowerCase().includes(bikeSearch.toLowerCase()) ||
+        b.model.toLowerCase().includes(bikeSearch.toLowerCase()) ||
+        b.type.toLowerCase().includes(bikeSearch.toLowerCase())
+      );
+    }
+    
+    // Apply status filter
+    if (bikeFilter !== 'all') {
+      filtered = filtered.filter(b => {
+        if (bikeFilter === 'available') return b.status === 'Available';
+        if (bikeFilter === 'rented') return b.status === 'Rented';
+        if (bikeFilter === 'maintenance') return b.status === 'Maintenance';
+        return true;
+      });
+    }
+    
+    // Apply sorting
+    filtered.sort((a, b) => {
+      if (bikeSortBy === 'newest') return b.id - a.id;
+      if (bikeSortBy === 'price-high') return parseFloat(b.dailyRate) - parseFloat(a.dailyRate);
+      if (bikeSortBy === 'price-low') return parseFloat(a.dailyRate) - parseFloat(b.dailyRate);
+      return 0;
+    });
+    
+    return filtered;
   };
 
   // Reverse geocode coordinates to get address with debouncing
@@ -743,7 +1024,7 @@ const PropertyManagementDashboard = () => {
                 <div className="location-status info">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="16" x2="12" y2="12"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
                     <line x1="12" y1="8" x2="12.01" y2="8"/>
                   </svg>
                   <span>Click on map or search to select location</span>
@@ -1622,6 +1903,662 @@ const PropertyManagementDashboard = () => {
     );
   };
 
+  // Render Bikes Management Interface
+  const renderBikes = () => {
+    const filteredBikes = getFilteredAndSortedBikes();
+    
+    return (
+      <div className="bikes-container">
+        {/* Bike Stats Cards */}
+        <div className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-card-header">
+              <div className="stat-icon-wrapper primary">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M2 12h20"/>
+                </svg>
+              </div>
+            </div>
+            <div className="stat-content">
+              <h3 className="stat-number">{bikeStats.totalBikes}</h3>
+              <p className="stat-label">Total Bikes</p>
+              <p className="stat-description">{bikeStats.availableBikes} currently available</p>
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-card-header">
+              <div className="stat-icon-wrapper success">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="12" y1="1" x2="12" y2="23"/>
+                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                </svg>
+              </div>
+            </div>
+            <div className="stat-content">
+              <h3 className="stat-number">NPR {bikeStats.monthlyRevenue?.toLocaleString() || '0'}</h3>
+              <p className="stat-label">Monthly Revenue</p>
+              <p className="stat-description">From bike rentals</p>
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-card-header">
+              <div className="stat-icon-wrapper info">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 12l2 2 4-4"/>
+                  <circle cx="12" cy="12" r="10"/>
+                </svg>
+              </div>
+            </div>
+            <div className="stat-content">
+              <h3 className="stat-number">{bikeStats.activeRentals}</h3>
+              <p className="stat-label">Active Rentals</p>
+              <p className="stat-description">{bikeStats.totalBookings} total bookings</p>
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-card-header">
+              <div className="stat-icon-wrapper warning">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 6v6l4 2"/>
+                </svg>
+              </div>
+            </div>
+            <div className="stat-content">
+              <h3 className="stat-number">{bikeStats.pendingBookings}</h3>
+              <p className="stat-label">Pending Bookings</p>
+              <p className="stat-description">Require your action</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Bikes Toolbar */}
+        <div className="properties-toolbar">
+          <div className="toolbar-left">
+            <div className="search-box-properties">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="m21 21-4.35-4.35"/>
+              </svg>
+              <input
+                type="text"
+                placeholder="Search bikes by brand, model, type..."
+                value={bikeSearch}
+                onChange={(e) => setBikeSearch(e.target.value)}
+              />
+            </div>
+            
+            <div className="filter-group">
+              <select 
+                className="filter-select"
+                value={bikeFilter}
+                onChange={(e) => setBikeFilter(e.target.value)}
+              >
+                <option value="all">All Status</option>
+                <option value="available">Available</option>
+                <option value="rented">Rented</option>
+                <option value="maintenance">Maintenance</option>
+              </select>
+              
+              <select 
+                className="filter-select"
+                value={bikeSortBy}
+                onChange={(e) => setBikeSortBy(e.target.value)}
+              >
+                <option value="newest">Newest First</option>
+                <option value="price-high">Price: High to Low</option>
+                <option value="price-low">Price: Low to High</option>
+              </select>
+            </div>
+          </div>
+          
+          <div className="toolbar-right">
+            <div className="view-toggle">
+              <button 
+                className={`view-btn ${bikeViewMode === 'grid' ? 'active' : ''}`}
+                onClick={() => setBikeViewMode('grid')}
+                title="Grid View"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="7" height="7"/>
+                  <rect x="14" y="3" width="7" height="7"/>
+                  <rect x="14" y="14" width="7" height="7"/>
+                  <rect x="3" y="14" width="7" height="7"/>
+                </svg>
+              </button>
+              <button 
+                className={`view-btn ${bikeViewMode === 'list' ? 'active' : ''}`}
+                onClick={() => setBikeViewMode('list')}
+                title="List View"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="8" y1="6" x2="21" y2="6"/>
+                  <line x1="8" y1="12" x2="21" y2="12"/>
+                  <line x1="8" y1="18" x2="21" y2="18"/>
+                  <line x1="3" y1="6" x2="3.01" y2="6"/>
+                  <line x1="3" y1="12" x2="3.01" y2="12"/>
+                  <line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            
+            <button 
+              className="btn-primary" 
+              onClick={() => { 
+                setEditingBike(null); 
+                resetBikeForm(); 
+                setShowBikeModal(true); 
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Add Bike
+            </button>
+          </div>
+        </div>
+
+        {/* Bikes Stats Bar */}
+        {filteredBikes.length > 0 && (
+          <div className="properties-stats-bar">
+            <span className="stats-text">
+              Showing <strong>{filteredBikes.length}</strong> of <strong>{bikes.length}</strong> bikes
+            </span>
+            <div className="stats-chips">
+              <span className="chip chip-success">{bikes.filter(b => b.status === 'Available').length} Available</span>
+              <span className="chip chip-danger">{bikes.filter(b => b.status === 'Rented').length} Rented</span>
+              <span className="chip chip-warning">{bikes.filter(b => b.status === 'Maintenance').length} Maintenance</span>
+            </div>
+          </div>
+        )}
+
+        {/* Bikes Grid */}
+        <div className={`properties-grid ${bikeViewMode === 'list' ? 'list-view' : ''}`}>
+          {filteredBikes.length > 0 ? filteredBikes.map(bike => {
+            const bikeImageUrl = bike.images && bike.images.length > 0 
+              ? `http://localhost:3001/uploads/bikes/${bike.images[0]}` 
+              : bikeFallback;
+            
+            return (
+              <div key={bike.id} className={`property-card-modern ${bikeViewMode === 'list' ? 'list-card' : ''}`}>
+                <div className="property-image-wrapper">
+                  <img 
+                    src={bikeImageUrl}
+                    alt={`${bike.brand} ${bike.model}`}
+                    className="property-image-modern"
+                    onError={(e) => {
+                      e.currentTarget.src = bikeFallback;
+                    }}
+                  />
+                  <div className="property-overlay">
+                    <span className={`property-status-badge status-${bike.status.toLowerCase().replace(' ', '-')}`}>
+                      {bike.status}
+                    </span>
+                    {bike.images && bike.images.length > 1 && (
+                      <span className="image-count-badge">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                          <circle cx="8.5" cy="8.5" r="1.5"/>
+                          <polyline points="21 15 16 10 5 21"/>
+                        </svg>
+                        {bike.images.length}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="property-card-content">
+                  <div className="property-header">
+                    <h3 className="property-title">{bike.name || `${bike.brand} ${bike.model}`}</h3>
+                    <div className="property-type-badge">{bike.type}</div>
+                  </div>
+                  
+                  <p className="property-location">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                      <circle cx="12" cy="10" r="3"/>
+                    </svg>
+                    {bike.location}
+                  </p>
+                  
+                  <div className="property-features">
+                    <div className="feature-item">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                        <line x1="8" y1="21" x2="16" y2="21"/>
+                        <line x1="12" y1="17" x2="12" y2="21"/>
+                      </svg>
+                      {bike.year}
+                    </div>
+                    <div className="feature-item">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 6v6l4 2"/>
+                      </svg>
+                      {bike.fuelType}
+                    </div>
+                    {bike.engineCapacity && (
+                      <div className="feature-item">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                          <polyline points="14 2 14 8 20 8"/>
+                          <line x1="16" y1="13" x2="8" y2="13"/>
+                          <line x1="16" y1="17" x2="8" y2="17"/>
+                          <polyline points="10 9 9 9 8 9"/>
+                        </svg>
+                        {bike.engineCapacity}cc
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="property-price-section">
+                    <div>
+                      <span className="price-label">Daily Rate</span>
+                      <span className="price-value">NPR {parseFloat(bike.dailyRate).toLocaleString()}</span>
+                    </div>
+                    {bikeViewMode === 'list' && (
+                      <div>
+                        <span className="price-label">Weekly Rate</span>
+                        <span className="price-value-small">NPR {parseFloat(bike.weeklyRate).toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {bike.features && bike.features.length > 0 && (
+                    <div className="bike-features-preview">
+                      <span className="features-label">Features:</span>
+                      <div className="features-tags">
+                        {bike.features.slice(0, 3).map((feature, index) => (
+                          <span key={index} className="feature-tag">{feature}</span>
+                        ))}
+                        {bike.features.length > 3 && (
+                          <span className="feature-tag more">+{bike.features.length - 3} more</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="property-actions-modern">
+                    <button className="btn-action edit" onClick={() => handleEditBike(bike)}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                      Edit
+                    </button>
+                    <button className="btn-action view" onClick={() => {
+                      // Add bike details view functionality here
+                      alert(`Viewing details for ${bike.brand} ${bike.model}`);
+                    }}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                      </svg>
+                      View
+                    </button>
+                    <button className="btn-action delete" onClick={() => handleDeleteBike(bike.id)}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                      </svg>
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          }) : (
+            <div className="empty-state-large">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M2 12h20"/>
+              </svg>
+              <h3>{bikeSearch || bikeFilter !== 'all' ? 'No bikes found' : 'No bikes yet'}</h3>
+              <p>
+                {bikeSearch || bikeFilter !== 'all' 
+                  ? 'Try adjusting your search or filters' 
+                  : 'Start by adding your first bike to manage rentals'}
+              </p>
+              {!bikeSearch && bikeFilter === 'all' && (
+                <button 
+                  className="btn-primary" 
+                  onClick={() => { 
+                    setEditingBike(null); 
+                    resetBikeForm(); 
+                    setShowBikeModal(true); 
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  Add Your First Bike
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Render Bike Modal
+  const renderBikeModal = () => (
+    <div className="modal-backdrop-modern" onClick={() => { setShowBikeModal(false); setEditingBike(null); resetBikeForm(); }}>
+      <div className="modal-dialog-modern" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header-modern">
+          <h2 className="modal-title-modern">{editingBike ? 'Edit Bike' : 'Add New Bike'}</h2>
+          <button className="modal-close-btn-modern" onClick={() => { setShowBikeModal(false); setEditingBike(null); resetBikeForm(); }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        
+        <form onSubmit={editingBike ? handleUpdateBike : handleAddBike} className="modal-body-modern">
+          <div className="form-section">
+            <h3 className="form-section-title">Bike Information</h3>
+            
+            <div className="form-row">
+              <div className="form-field">
+                <label className="form-label">
+                  Bike Name <span className="required">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={bikeForm.name}
+                  onChange={(e) => setBikeForm({ ...bikeForm, name: e.target.value })}
+                  placeholder="e.g., Honda CB350"
+                  required
+                />
+              </div>
+              <div className="form-field">
+                <label className="form-label">
+                  Brand <span className="required">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={bikeForm.brand}
+                  onChange={(e) => setBikeForm({ ...bikeForm, brand: e.target.value })}
+                  placeholder="e.g., Honda"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-field">
+                <label className="form-label">
+                  Model <span className="required">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={bikeForm.model}
+                  onChange={(e) => setBikeForm({ ...bikeForm, model: e.target.value })}
+                  placeholder="e.g., CB350"
+                  required
+                />
+              </div>
+              <div className="form-field">
+                <label className="form-label">
+                  Type <span className="required">*</span>
+                </label>
+                <select
+                  className="form-select"
+                  value={bikeForm.type}
+                  onChange={(e) => setBikeForm({ ...bikeForm, type: e.target.value })}
+                  required
+                >
+                  {bikeTypes.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-field">
+                <label className="form-label">
+                  Year <span className="required">*</span>
+                </label>
+                <input
+                  type="number"
+                  className="form-input"
+                  min="1990"
+                  max={new Date().getFullYear() + 1}
+                  value={bikeForm.year}
+                  onChange={(e) => setBikeForm({ ...bikeForm, year: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-field">
+                <label className="form-label">Engine Capacity (cc)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  min="0"
+                  value={bikeForm.engineCapacity}
+                  onChange={(e) => setBikeForm({ ...bikeForm, engineCapacity: e.target.value })}
+                  placeholder="e.g., 350"
+                />
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-field">
+                <label className="form-label">
+                  Fuel Type <span className="required">*</span>
+                </label>
+                <select
+                  className="form-select"
+                  value={bikeForm.fuelType}
+                  onChange={(e) => setBikeForm({ ...bikeForm, fuelType: e.target.value })}
+                  required
+                >
+                  <option value="Petrol">Petrol</option>
+                  <option value="Electric">Electric</option>
+                  <option value="Hybrid">Hybrid</option>
+                  <option value="None">None (Bicycle)</option>
+                </select>
+              </div>
+              <div className="form-field">
+                <label className="form-label">
+                  Status <span className="required">*</span>
+                </label>
+                <select
+                  className="form-select"
+                  value={bikeForm.status}
+                  onChange={(e) => setBikeForm({ ...bikeForm, status: e.target.value })}
+                  required
+                >
+                  <option value="Available">Available</option>
+                  <option value="Rented">Rented</option>
+                  <option value="Maintenance">Maintenance</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="form-section">
+            <h3 className="form-section-title">Pricing</h3>
+            
+            <div className="form-row">
+              <div className="form-field">
+                <label className="form-label">
+                  Daily Rate (NPR) <span className="required">*</span>
+                </label>
+                <input
+                  type="number"
+                  className="form-input"
+                  min="0"
+                  step="0.01"
+                  value={bikeForm.dailyRate}
+                  onChange={(e) => setBikeForm({ ...bikeForm, dailyRate: e.target.value })}
+                  placeholder="e.g., 1500"
+                  required
+                />
+              </div>
+              <div className="form-field">
+                <label className="form-label">
+                  Weekly Rate (NPR) <span className="required">*</span>
+                </label>
+                <input
+                  type="number"
+                  className="form-input"
+                  min="0"
+                  step="0.01"
+                  value={bikeForm.weeklyRate}
+                  onChange={(e) => setBikeForm({ ...bikeForm, weeklyRate: e.target.value })}
+                  placeholder="e.g., 9000"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-field">
+                <label className="form-label">Monthly Rate (NPR)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  min="0"
+                  step="0.01"
+                  value={bikeForm.monthlyRate}
+                  onChange={(e) => setBikeForm({ ...bikeForm, monthlyRate: e.target.value })}
+                  placeholder="e.g., 35000"
+                />
+              </div>
+              <div className="form-field">
+                <label className="form-label">
+                  Security Deposit (NPR) <span className="required">*</span>
+                </label>
+                <input
+                  type="number"
+                  className="form-input"
+                  min="0"
+                  step="0.01"
+                  value={bikeForm.securityDeposit}
+                  onChange={(e) => setBikeForm({ ...bikeForm, securityDeposit: e.target.value })}
+                  placeholder="e.g., 5000"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="form-section">
+            <h3 className="form-section-title">Location & Details</h3>
+            
+            <div className="form-row">
+              <div className="form-field">
+                <label className="form-label">
+                  Location <span className="required">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={bikeForm.location}
+                  onChange={(e) => setBikeForm({ ...bikeForm, location: e.target.value })}
+                  placeholder="e.g., Kathmandu, Nepal"
+                  required
+                />
+              </div>
+              <div className="form-field">
+                <label className="form-label">Pickup Location</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={bikeForm.pickupLocation}
+                  onChange={(e) => setBikeForm({ ...bikeForm, pickupLocation: e.target.value })}
+                  placeholder="Specific pickup address"
+                />
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-field">
+                <label className="form-label">Minimum Age</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  min="16"
+                  max="70"
+                  value={bikeForm.minimumAge}
+                  onChange={(e) => setBikeForm({ ...bikeForm, minimumAge: e.target.value })}
+                />
+              </div>
+              <div className="form-field">
+                <label className="form-label" style={{alignItems: 'center', display: 'flex', gap: '8px'}}>
+                  <input
+                    type="checkbox"
+                    checked={bikeForm.licenseRequired}
+                    onChange={(e) => setBikeForm({ ...bikeForm, licenseRequired: e.target.checked })}
+                  />
+                  License Required
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="form-section">
+            <h3 className="form-section-title">Features</h3>
+            <div className="amenities-grid-modern">
+              {bikeFeaturesList.map(feature => (
+                <label key={feature} className="amenity-checkbox-modern">
+                  <input
+                    type="checkbox"
+                    checked={bikeForm.features.includes(feature)}
+                    onChange={() => toggleBikeFeature(feature)}
+                  />
+                  <span className="checkbox-custom"></span>
+                  <span className="amenity-label">{feature}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-section">
+            <h3 className="form-section-title">Description</h3>
+            <div className="form-row">
+              <div className="form-field full-width">
+                <label className="form-label">Bike Description</label>
+                <textarea
+                  className="form-textarea"
+                  rows="4"
+                  value={bikeForm.description}
+                  onChange={(e) => setBikeForm({ ...bikeForm, description: e.target.value })}
+                  placeholder="Describe the bike's condition, special features, maintenance history, etc."
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="modal-footer-modern">
+            <button type="button" className="btn-secondary" onClick={() => { setShowBikeModal(false); setEditingBike(null); resetBikeForm(); }}>
+              Cancel
+            </button>
+            <button type="submit" className="btn-primary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              {editingBike ? 'Update Bike' : 'Add Bike'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="loading-container">
@@ -1767,6 +2704,18 @@ const PropertyManagementDashboard = () => {
               </svg>
               {!sidebarCollapsed && <span>Settings</span>}
             </button>
+            <button 
+              className={`menu-item ${activeTab === 'bikes' ? 'active' : ''}`} 
+              onClick={() => setActiveTab('bikes')}
+              title="Bike Management"
+            >
+              <svg className="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+              {!sidebarCollapsed && <span>Bikes</span>}
+              {bikeStats.totalBikes > 0 && <span className="badge">{bikeStats.totalBikes}</span>}
+            </button>
           </div>
         </nav>
 
@@ -1794,6 +2743,7 @@ const PropertyManagementDashboard = () => {
               {activeTab === 'tenants' && 'Manage your tenant relationships'}
               {activeTab === 'payments' && 'Track all your payments and transactions'}
               {activeTab === 'settings' && 'Customize your account preferences'}
+              {activeTab === 'bikes' && 'Manage all your bikes and rentals'}
             </p>
           </div>
           <div className="header-actions">
@@ -1862,11 +2812,13 @@ const PropertyManagementDashboard = () => {
               <p>Customize your account preferences and manage your profile. Coming soon.</p>
             </div>
           )}
+          {activeTab === 'bikes' && renderBikes()}
         </div>
       </main>
 
       {showPropertyModal && renderPropertyModal()}
       {renderLocationMap()}
+      {showBikeModal && renderBikeModal()}
     </div>
   );
 };

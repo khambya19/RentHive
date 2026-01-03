@@ -5,6 +5,7 @@ const fs = require('fs');
 // Ensure upload directories exist
 const profilesDir = path.join(__dirname, '../uploads/profiles');
 const propertiesDir = path.join(__dirname, '../uploads/properties');
+const bikesDir = path.join(__dirname, '../uploads/bikes');
 
 if (!fs.existsSync(profilesDir)) {
   fs.mkdirSync(profilesDir, { recursive: true });
@@ -12,6 +13,10 @@ if (!fs.existsSync(profilesDir)) {
 
 if (!fs.existsSync(propertiesDir)) {
   fs.mkdirSync(propertiesDir, { recursive: true });
+}
+
+if (!fs.existsSync(bikesDir)) {
+  fs.mkdirSync(bikesDir, { recursive: true });
 }
 
 // Configure storage for profile images
@@ -33,6 +38,17 @@ const propertyStorage = multer.diskStorage({
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     cb(null, 'property-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+// Configure storage for bike images
+const bikeStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/bikes/');
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'bike-' + uniqueSuffix + path.extname(file.originalname));
   }
 });
 
@@ -59,6 +75,14 @@ const propertyUpload = multer({
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit per file
 });
 
+// Bike upload (up to 10 images, 10MB each)
+const bikeUpload = multer({ 
+  storage: bikeStorage,
+  fileFilter: fileFilter,
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit per file
+});
+
 module.exports = profileUpload;
 module.exports.profileUpload = profileUpload;
 module.exports.propertyUpload = propertyUpload;
+module.exports.bikeUpload = bikeUpload;

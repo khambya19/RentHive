@@ -72,7 +72,7 @@ const OtpModal = ({ email, onClose, onVerify }) => {
     setLoading(true);
     setError("");
     try {
-      const res = await axios.post("/api/auth/verify-otp", { 
+      const res = await axios.post("http://localhost:3001/api/auth/verify-otp", { 
         email, 
         otp: otpString 
       });
@@ -93,7 +93,7 @@ const OtpModal = ({ email, onClose, onVerify }) => {
   const handleResend = async () => {
     setLoading(true);
     try {
-      await axios.post("/api/auth/resend-otp", { email });
+      await axios.post("http://localhost:3001/api/auth/resend-otp", { email });
       setOtp(["", "", "", "", "", ""]);
       setTimeLeft(600);
       setCanResend(false);

@@ -8,6 +8,9 @@ require('dotenv').config();
 const SALT_ROUNDS = 10;
 
 function validateRegisterBody(body) {
+  // Add safety check for undefined body
+  if (!body) return 'Request body is missing or invalid';
+  
   const { type, fullName, email, password, confirmPassword } = body;
   if (!type || !['lessor', 'owner', 'vendor', 'renter'].includes(type)) return 'Invalid type';
   if (!fullName) return 'fullName required';
@@ -24,8 +27,11 @@ exports.register = async (req, res) => {
 
     const {
       type, fullName, email, phone, password, address,
-      idNumber, businessName, ownershipType, profileImage
+      idNumber, businessName, ownershipType
     } = req.body;
+
+    // Handle uploaded profile image
+    const profileImage = req.file ? req.file.filename : null;
 
     let user = await User.findOne({ where: { email } });
 
@@ -69,10 +75,19 @@ exports.register = async (req, res) => {
 
     try {
       await sendEmail({ to: email, subject: 'RentHive - Verify your email', html });
+      console.log('✅ OTP email sent successfully to:', email);
     } catch (emailErr) {
-      console.error('Email sending failed:', emailErr);
-      // Continue anyway - user created, just log the OTP for dev
-      console.log('OTP for', email, ':', otp);
+      console.error('❌ Email sending failed:', emailErr.message);
+      console.error('Email error details:', emailErr);
+      // Log the OTP for development purposes
+      console.log('🔑 OTP for', email, ':', otp, '(expires in', process.env.OTP_EXPIRE_MINUTES || 10, 'minutes)');
+      
+      // In development, we can continue. In production, you might want to return an error
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(500).json({ 
+          error: 'Failed to send verification email. Please check your email configuration.' 
+        });
+      }
     }
 
     return res.status(201).json({ message: 'OTP sent to email', email, otp: process.env.NODE_ENV === 'development' ? otp : undefined });

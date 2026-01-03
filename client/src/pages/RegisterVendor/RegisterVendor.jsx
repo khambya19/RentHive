@@ -42,38 +42,84 @@ const RegisterVendor = () => {
     }
 
     try {
-      console.log('Sending registration request...');
-      const response = await fetch('/api/auth/register', {
+      console.log('Form data before processing:', form);
+      
+      let body;
+      let headers = {
+        'Accept': 'application/json',
+      };
+
+      // Always use JSON for now to debug the issue
+      const requestBody = {
+        type: 'vendor',
+        fullName: form.fullName,
+        email: form.email,
+        phone: form.phoneNumber,
+        password: form.password,
+        confirmPassword: form.confirmPassword,
+        address: form.address,
+        businessName: form.businessName,
+        ownershipType: form.ownershipType,
+      };
+      
+      console.log('Request body being sent:', requestBody);
+      
+      body = JSON.stringify(requestBody);
+      headers['Content-Type'] = 'application/json';
+      
+      console.log('Headers:', headers);
+      console.log('Body string:', body);
+
+      const response = await fetch('http://localhost:3001/api/auth/register', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          type: 'vendor',
-          fullName: form.fullName,
-          email: form.email,
-          phone: form.phoneNumber,
-          password: form.password,
-          confirmPassword: form.confirmPassword,
-          address: form.address,
-          businessName: form.businessName,
-          ownershipType: form.ownershipType,
-        }),
+        headers,
+        mode: 'cors',
+        body,
       });
 
-      const data = await response.json();
-      console.log('Response:', response.status, data);
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
-      if (response.ok) {
-        setSuccess('Registration successful! Please verify your email.');
-        setRegisteredEmail(form.email);
-        setShowOtpModal(true);
-      } else {
-        setError(data.error || data.message || 'Registration failed');
+      // Read the response text only once
+      const responseText = await response.text();
+      console.log('Raw response text:', responseText);
+
+      if (!response.ok) {
+        console.error('Response not ok:', response.status, response.statusText);
+        try {
+          const errorData = JSON.parse(responseText);
+          setError(errorData.error || errorData.message || `Server error: ${response.status}`);
+        } catch {
+          setError(`Server error: ${response.status} - ${responseText}`);
+        }
+        return;
       }
+
+      // Parse the response text as JSON
+      let data;
+      try {
+        data = JSON.parse(responseText);
+        console.log('Response data:', data);
+      } catch (parseError) {
+        console.error('Failed to parse response as JSON:', parseError);
+        setError('Server returned invalid response format');
+        return;
+      }
+
+      setSuccess('Registration successful! Please verify your email.');
+      setRegisteredEmail(form.email);
+      setShowOtpModal(true);
+      
     } catch (error) {
-      console.error('Registration error:', error);
-      setError(`Unable to connect to server: ${error.message}`);
+      console.error('Registration error details:', error);
+      
+      if (error.name === 'SyntaxError' && error.message.includes('JSON')) {
+        setError('Server returned invalid response. Please try again.');
+      } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        setError('Unable to connect to server. Please check your connection.');
+      } else {
+        setError(`Registration failed: ${error.message}`);
+      }
     }
   };
 

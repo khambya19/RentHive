@@ -25,7 +25,7 @@ const Login = () => {
     setError(null);
     try {
         console.log('Attempting login with:', email);
-        const response = await axios.post('/api/auth/login', { email, password });
+        const response = await axios.post('http://localhost:3001/api/auth/login', { email, password });
         console.log('Login response:', response.data);
         const { token, user } = response.data;
         

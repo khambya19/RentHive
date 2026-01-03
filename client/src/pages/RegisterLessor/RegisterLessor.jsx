@@ -41,21 +41,24 @@ const RegisterLessor = () => {
     }
 
     try {
-      const response = await fetch('http://localhost:5000/api/auth/register', {
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append('type', 'lessor');
+      formData.append('fullName', form.fullName);
+      formData.append('email', form.email);
+      formData.append('phone', form.phone);
+      formData.append('password', form.password);
+      formData.append('confirmPassword', form.confirmPassword);
+      formData.append('address', form.address);
+      formData.append('idNumber', form.citizenshipNumber); // Server expects idNumber
+      
+      if (form.photo) {
+        formData.append('profileImage', form.photo); // Server expects profileImage
+      }
+
+      const response = await fetch('http://localhost:3001/api/auth/register', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          type: 'lessor',
-          fullName: form.fullName,
-          email: form.email,
-          phone: form.phone,
-          password: form.password,
-          confirmPassword: form.confirmPassword,
-          address: form.address,
-          citizenshipNumber: form.citizenshipNumber,
-        }),
+        body: formData, // Send FormData instead of JSON
       });
 
       const data = await response.json();

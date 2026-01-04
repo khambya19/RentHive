@@ -1,24 +1,33 @@
-// RENTHIVE/server/server.js
 
+// server/index.js
 const express = require('express');
-const { connectDB, sequelize } = require('./config/database');
-const authRoutes = require('./routes/auth');
 const cors = require('cors');
-
 require('dotenv').config();
 
+const sequelize = require('./config/db');
+const authRoutes = require('./routes/authRoutes');
+const User = require('./models/User'); 
+
 const app = express();
-const PORT = process.env.PORT || 5000;
 
-// Connect to DB and synchronize models (Ensure DB_NAME is set to RentHiveDB in .env)
-connectDB();
-// sequelize.sync(); // Uncomment to auto-create tables
-
-// Middleware
-app.use(express.json({ extended: false }));
 app.use(cors());
+app.use(express.json());
 
-// Define Routes
 app.use('/api/auth', authRoutes);
 
-app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+app.get('/', (req, res) => res.send('RentHive API'));
+
+(async () => {
+  try {
+    await sequelize.authenticate();
+    console.log('DB connected');
+    await sequelize.sync({ alter: true }); 
+    console.log('DB synced');
+
+    const port = process.env.PORT || 5000;
+    app.listen(port, () => console.log(`Server running on port ${port}`));
+  } catch (err) {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  }
+})();

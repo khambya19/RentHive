@@ -1,12 +1,18 @@
 import React from 'react';
-import './joinRenthive.css'; 
-
-
-const handleRegister = (userType) => {
-  console.log(`Navigating to ${userType} registration page.`);
-};
+import { useNavigate } from 'react-router-dom';
+import './joinRenthive.css';
 
 const JoinRenthive = () => {
+  const navigate = useNavigate();
+
+  const handleRegister = (userType) => {
+    if (userType === 'Tenant') {
+      navigate('/register-lessor');
+    } else if (userType === 'Vendor') {
+      navigate('/register-vendor');
+    }
+  };
+
   return (
     <section className="registration-cta-section">
       <h2 className="cta-headline">Join RentHive Today</h2>

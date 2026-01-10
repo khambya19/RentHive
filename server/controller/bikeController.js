@@ -149,8 +149,8 @@ exports.bookBike = async (req, res) => {
       // Monthly rate if available
       totalAmount = bike.monthlyRate ? bike.monthlyRate * Math.ceil(totalDays / 30) : bike.dailyRate * totalDays;
     } else if (totalDays >= 7) {
-      // Weekly rate
-      totalAmount = bike.weeklyRate * Math.ceil(totalDays / 7);
+      // Weekly rate (fallback to daily rate if weeklyRate not set)
+      totalAmount = bike.weeklyRate ? bike.weeklyRate * Math.ceil(totalDays / 7) : bike.dailyRate * totalDays;
     } else {
       // Daily rate
       totalAmount = bike.dailyRate * totalDays;
@@ -282,8 +282,8 @@ exports.bookBikeDirect = async (req, res) => {
     if (totalDays >= 30 && bike.monthlyRate) {
       // Monthly rate if available
       totalAmount = parseFloat(bike.monthlyRate) * Math.ceil(totalDays / 30);
-    } else if (totalDays >= 7) {
-      // Weekly rate
+    } else if (totalDays >= 7 && bike.weeklyRate) {
+      // Weekly rate (fallback to daily rate if weeklyRate not set)
       totalAmount = parseFloat(bike.weeklyRate) * Math.ceil(totalDays / 7);
     } else {
       // Daily rate

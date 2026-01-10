@@ -2,16 +2,18 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const http = require('http');
+const { Server } = require('socket.io');
 
 // Load environment variables before anything else
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const sequelize = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
-const vendorRoutes = require('./routes/vendorRoutes');
+const userRoutes = require('./routes/userRoutes');
 const propertyRoutes = require('./routes/propertyRoutes');
 const bikeRoutes = require('./routes/bikeRoutes');
-const lessorRoutes = require('./routes/lessorRoutes');
+const ownerRoutes = require('./routes/ownerRoutes');
 const User = require('./models/User');
 const Property = require('./models/Property');
 const Booking = require('./models/Booking');
@@ -21,6 +23,14 @@ const Bike = require('./models/Bike');
 const BikeBooking = require('./models/BikeBooking');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
 
 // Enhanced CORS configuration
 app.use(cors({
@@ -70,15 +80,30 @@ app.use((req, res, next) => {
 });
 
 app.use('/api/auth', authRoutes);
-app.use('/api/vendors', vendorRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/properties', propertyRoutes);
 app.use('/api/bikes', bikeRoutes);
-app.use('/api/lessors', lessorRoutes);
+app.use('/api/owners', ownerRoutes);
 
 // Serve uploaded files
 app.use('/uploads', express.static('uploads'));
 
 app.get('/', (req, res) => res.send('RentHive API'));
+
+// Socket.io connection handling
+io.on('connection', (socket) => {
+  console.log('✅ Client connected:', socket.id);
+
+  socket.on('register', (userId) => {
+    socket.userId = userId;
+    socket.join(`user_${userId}`);
+    console.log(`User ${userId} registered to socket ${socket.id}`);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('❌ Client disconnected:', socket.id);
+  });
+});
 
 (async () => {
   try {
@@ -123,7 +148,7 @@ app.get('/', (req, res) => res.send('RentHive API'));
     console.log('DB synced');
 
     const port = process.env.PORT || 5001;
-    app.listen(port, () => console.log(`Server running on port ${port}`));
+    server.listen(port, () => console.log(`Server running on port ${port}`));
   } catch (err) {
     console.error('Failed to start server:', err);
     process.exit(1);

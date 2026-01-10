@@ -20,7 +20,7 @@ const Login = () => {
     setShowPassword(prevShowPassword => !prevShowPassword);
   };
 
-  const handleSubmit = async (e) => {
+    const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
     try {
@@ -33,10 +33,15 @@ const Login = () => {
         login(user, token);
         
         // Redirect based on user type
-        if (user.type === 'vendor' || user.type === 'owner') {
-            navigate('/vendor/dashboard');
+        // Owner → Owner Dashboard (full management)
+        // Lessor/Vendor → Tenant Dashboard (browse only)
+        if (user.type === 'owner') {
+            navigate('/owner/dashboard');
+        } else if (user.type === 'lessor' || user.type === 'vendor') {
+            navigate('/tenant/dashboard');
         } else {
-            navigate('/lessor/dashboard');
+            // Fallback
+            navigate('/tenant/dashboard');
         }
     } catch (err) {
         console.error('Login error:', err);

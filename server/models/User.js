@@ -17,7 +17,7 @@ const User = sequelize.define('User', {
 
   profileImage: { type: DataTypes.STRING, allowNull: true },
 
-  type: { type: DataTypes.ENUM('lessor', 'owner', 'vendor', 'renter'), allowNull: false },
+  type: { type: DataTypes.ENUM('lessor', 'owner', 'vendor'), allowNull: false },
 
   otp: { type: DataTypes.STRING, allowNull: true },
   otpExpiry: { type: DataTypes.DATE, allowNull: true },

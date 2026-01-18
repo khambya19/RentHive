@@ -28,6 +28,16 @@ const UserDashboard = () => {
   const [savedListings, setSavedListings] = useState([]);
   const [upcomingPayments, setUpcomingPayments] = useState([]);
 
+  // Property details and booking modal state
+  const [selectedProperty, setSelectedProperty] = useState(null);
+  const [showPropertyModal, setShowPropertyModal] = useState(false);
+  const [bookingForm, setBookingForm] = useState({
+    moveInDate: '',
+    moveOutDate: '',
+    message: ''
+  });
+  const [bookingLoading, setBookingLoading] = useState(false);
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -37,27 +47,47 @@ const UserDashboard = () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
-        showError('Error', 'Please login first');
+        showError('Auth required', 'Please login first');
         navigate('/login');
         return;
       }
 
       const headers = { 'Authorization': `Bearer ${token}` };
 
-      // Fetch available properties and bikes
+      // Tenant/Lessor browsing endpoints (NOT vendor-owned routes)
       const [propertiesRes, bikesRes] = await Promise.all([
-        fetch('http://localhost:3001/api/properties', { headers }),
-        fetch('http://localhost:3001/api/bikes', { headers }),
+        // Properties available to rent
+        fetch('http://localhost:3001/api/properties/available', { headers }),
+        // Bikes available to rent
+        fetch('http://localhost:3001/api/bikes/available', { headers }),
       ]);
+
+      // If backend rejects the token, force re-auth.
+      if ([401, 403].includes(propertiesRes.status) || [401, 403].includes(bikesRes.status)) {
+        showError('Session expired', 'Please login again');
+        logout();
+        navigate('/login');
+        return;
+      }
 
       if (propertiesRes.ok) {
         const propertiesData = await propertiesRes.json();
-        setProperties(propertiesData.filter(p => p.availability === 'Available'));
+        console.log('Properties data:', propertiesData);
+        // API shape may differ; normalize to an array.
+        const list = Array.isArray(propertiesData) ? propertiesData : (propertiesData?.data || propertiesData?.properties || []);
+        setProperties(list);
+      } else {
+        const errorText = await propertiesRes.text();
+        console.error('Failed to load properties:', propertiesRes.status, errorText);
+        showError('Error', `Failed to load properties: ${propertiesRes.status}`);
       }
 
       if (bikesRes.ok) {
         const bikesData = await bikesRes.json();
-        setBikes(bikesData.filter(b => b.status === 'Available'));
+        const list = Array.isArray(bikesData) ? bikesData : (bikesData?.data || bikesData?.bikes || []);
+        setBikes(list);
+      } else {
+        console.warn('Failed to load bikes:', bikesRes.status);
       }
 
     } catch (error) {
@@ -75,6 +105,53 @@ const UserDashboard = () => {
 
   const toggleSidebar = () => {
     setSidebarCollapsed(!sidebarCollapsed);
+  };
+
+  const handleViewProperty = (property) => {
+    setSelectedProperty(property);
+    setShowPropertyModal(true);
+    setBookingForm({
+      moveInDate: '',
+      moveOutDate: '',
+      message: ''
+    });
+  };
+
+  const handleBookProperty = async (e) => {
+    e.preventDefault();
+    setBookingLoading(true);
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:3001/api/properties/book', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          propertyId: selectedProperty.id,
+          moveInDate: bookingForm.moveInDate,
+          moveOutDate: bookingForm.moveOutDate,
+          message: bookingForm.message
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        showSuccess('Booking Submitted!', 'Your booking request has been sent to the property owner. They will review it soon.');
+        setShowPropertyModal(false);
+        setSelectedProperty(null);
+      } else {
+        showError('Booking Failed', data.error || 'Failed to submit booking request');
+      }
+    } catch (error) {
+      console.error('Error booking property:', error);
+      showError('Error', 'Failed to submit booking request');
+    } finally {
+      setBookingLoading(false);
+    }
   };
 
   const renderOverview = () => (
@@ -229,22 +306,72 @@ const UserDashboard = () => {
                   <div key={property.id} className="listing-card">
                     <div className="listing-image">
                       {property.images && property.images.length > 0 ? (
-                        <img src={`http://localhost:3001${property.images[0]}`} alt={property.title} />
+                        <img 
+                          src={`http://localhost:3001/uploads/properties/${property.images[0]}`} 
+                          alt={property.title}
+                          onError={(e) => {
+                            e.target.src = 'https://via.placeholder.com/400x300?text=No+Image';
+                          }}
+                        />
                       ) : (
-                        <div className="no-image">No Image</div>
+                        <div className="no-image-placeholder">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <circle cx="8.5" cy="8.5" r="1.5"/>
+                            <polyline points="21 15 16 10 5 21"/>
+                          </svg>
+                          <span>No Image</span>
+                        </div>
                       )}
+                      <div className="listing-badge">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                        </svg>
+                        {property.propertyType}
+                      </div>
                     </div>
                     <div className="listing-content">
                       <h4>{property.title}</h4>
-                      <p className="listing-location">{property.address}, {property.city}</p>
+                      <p className="listing-location">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                          <circle cx="12" cy="10" r="3"/>
+                        </svg>
+                        {property.address}, {property.city}
+                      </p>
                       <div className="listing-details">
-                        <span>{property.bedrooms} Bed</span>
-                        <span>{property.bathrooms} Bath</span>
-                        <span>{property.area} sq.ft</span>
+                        <div className="detail-item">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                            <polyline points="9 22 9 12 15 12 15 22"/>
+                          </svg>
+                          <span>{property.bedrooms} Bed{property.bedrooms > 1 ? 's' : ''}</span>
+                        </div>
+                        <div className="detail-item">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M9 2v4m6-4v4m-6.75 3h7.5M5 10h14a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7a2 2 0 012-2z"/>
+                          </svg>
+                          <span>{property.bathrooms} Bath{property.bathrooms > 1 ? 's' : ''}</span>
+                        </div>
+                        <div className="detail-item">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                          </svg>
+                          <span>{property.area > 0 ? property.area : 'N/A'} sq.ft</span>
+                        </div>
                       </div>
                       <div className="listing-footer">
-                        <p className="listing-price">NPR {property.rentPrice?.toLocaleString('en-NP') || 'N/A'}/month</p>
-                        <button className="btn-primary">View Details</button>
+                        <div className="price-section">
+                          <span className="price-label">Monthly Rent</span>
+                          <p className="listing-price">NPR {property.rentPrice ? Number(property.rentPrice).toLocaleString('en-NP') : 'N/A'}</p>
+                        </div>
+                        <button className="btn-view-details" onClick={() => handleViewProperty(property)}>
+                          View Details
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                            <polyline points="12 5 19 12 12 19"/>
+                          </svg>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -338,6 +465,17 @@ const UserDashboard = () => {
         return renderOverview();
     }
   };
+
+  // If user context is missing, show something explicit instead of a seemingly blank UI.
+  if (!user) {
+    return (
+      <div style={{ padding: 24 }}>
+        <h2>Not logged in</h2>
+        <p>Please login to view your dashboard.</p>
+        <button onClick={() => navigate('/login')}>Go to login</button>
+      </div>
+    );
+  }
 
   return (
     <div className="tenant-dashboard">
@@ -492,7 +630,7 @@ const UserDashboard = () => {
       </aside>
 
       {/* Main Content */}
-      <main className="main-content">
+      <main className={`main-content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         <div className="content-header">
           <div className="header-left">
             <h1>
@@ -552,6 +690,232 @@ const UserDashboard = () => {
               </div>
               <div className="settings-body">
                 <div className="placeholder">Settings - Coming Soon</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Property Details & Booking Modal */}
+        {showPropertyModal && selectedProperty && (
+          <div className="modal-backdrop" onClick={() => setShowPropertyModal(false)}>
+            <div className="modal-dialog property-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>{selectedProperty.title}</h2>
+                <button className="modal-close" onClick={() => setShowPropertyModal(false)}>×</button>
+              </div>
+              
+              <div className="modal-body">
+                {/* Property Images */}
+                {selectedProperty.images && selectedProperty.images.length > 0 && (
+                  <div className="property-images">
+                    <img 
+                      src={`http://localhost:3001${selectedProperty.images[0]}`} 
+                      alt={selectedProperty.title}
+                      style={{ width: '100%', borderRadius: '8px', marginBottom: '20px' }}
+                    />
+                  </div>
+                )}
+
+                {/* Property Details Grid */}
+                <div className="property-details-grid">
+                  <div className="detail-item">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '20px', height: '20px' }}>
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                      <circle cx="12" cy="10" r="3"/>
+                    </svg>
+                    <div>
+                      <strong>Location</strong>
+                      <p>{selectedProperty.address}, {selectedProperty.city}</p>
+                    </div>
+                  </div>
+
+                  <div className="detail-item">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '20px', height: '20px' }}>
+                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                    </svg>
+                    <div>
+                      <strong>Property Type</strong>
+                      <p>{selectedProperty.propertyType}</p>
+                    </div>
+                  </div>
+
+                  <div className="detail-item">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '20px', height: '20px' }}>
+                      <rect x="3" y="3" width="18" height="18"/>
+                    </svg>
+                    <div>
+                      <strong>Area</strong>
+                      <p>{selectedProperty.area} sq.ft</p>
+                    </div>
+                  </div>
+
+                  <div className="detail-item">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '20px', height: '20px' }}>
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                      <circle cx="9" cy="7" r="4"/>
+                    </svg>
+                    <div>
+                      <strong>Rooms</strong>
+                      <p>{selectedProperty.bedrooms} Bedrooms, {selectedProperty.bathrooms} Bathrooms</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Description */}
+                {selectedProperty.description && (
+                  <div style={{ marginTop: '20px' }}>
+                    <h3>Description</h3>
+                    <p style={{ color: '#666', lineHeight: '1.6' }}>{selectedProperty.description}</p>
+                  </div>
+                )}
+
+                {/* Amenities */}
+                {selectedProperty.amenities && selectedProperty.amenities.length > 0 && (
+                  <div style={{ marginTop: '20px' }}>
+                    <h3>Amenities</h3>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '10px' }}>
+                      {selectedProperty.amenities.map((amenity, index) => (
+                        <span key={index} style={{ 
+                          padding: '6px 12px', 
+                          background: '#f0f0f0', 
+                          borderRadius: '20px',
+                          fontSize: '14px'
+                        }}>
+                          {amenity}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Price */}
+                <div style={{ 
+                  marginTop: '20px', 
+                  padding: '20px', 
+                  background: '#f8f9fa', 
+                  borderRadius: '8px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div>
+                    <p style={{ margin: 0, color: '#666', fontSize: '14px' }}>Monthly Rent</p>
+                    <h2 style={{ margin: '5px 0 0 0', color: '#2563eb' }}>
+                      NPR {selectedProperty.rentPrice?.toLocaleString('en-NP')}
+                    </h2>
+                  </div>
+                  {selectedProperty.securityDeposit && (
+                    <div style={{ textAlign: 'right' }}>
+                      <p style={{ margin: 0, color: '#666', fontSize: '14px' }}>Security Deposit</p>
+                      <p style={{ margin: '5px 0 0 0', fontWeight: 'bold' }}>
+                        NPR {selectedProperty.securityDeposit?.toLocaleString('en-NP')}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Booking Form */}
+                <div style={{ marginTop: '30px', padding: '20px', border: '2px solid #e5e7eb', borderRadius: '8px' }}>
+                  <h3 style={{ marginTop: 0 }}>Book This Property</h3>
+                  <form onSubmit={handleBookProperty}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', fontWeight: '600' }}>
+                          Move-In Date <span style={{ color: 'red' }}>*</span>
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          min={new Date().toISOString().split('T')[0]}
+                          value={bookingForm.moveInDate}
+                          onChange={(e) => setBookingForm({ ...bookingForm, moveInDate: e.target.value })}
+                          style={{
+                            width: '100%',
+                            padding: '10px',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '6px',
+                            fontSize: '14px'
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', fontWeight: '600' }}>
+                          Move-Out Date (Optional)
+                        </label>
+                        <input
+                          type="date"
+                          min={bookingForm.moveInDate || new Date().toISOString().split('T')[0]}
+                          value={bookingForm.moveOutDate}
+                          onChange={(e) => setBookingForm({ ...bookingForm, moveOutDate: e.target.value })}
+                          style={{
+                            width: '100%',
+                            padding: '10px',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '6px',
+                            fontSize: '14px'
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: '15px' }}>
+                      <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', fontWeight: '600' }}>
+                        Message to Owner (Optional)
+                      </label>
+                      <textarea
+                        rows="3"
+                        placeholder="Tell the owner about yourself, your rental needs, or ask any questions..."
+                        value={bookingForm.message}
+                        onChange={(e) => setBookingForm({ ...bookingForm, message: e.target.value })}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '6px',
+                          fontSize: '14px',
+                          fontFamily: 'inherit',
+                          resize: 'vertical'
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowPropertyModal(false)}
+                        style={{
+                          flex: 1,
+                          padding: '12px',
+                          border: '1px solid #d1d5db',
+                          background: 'white',
+                          borderRadius: '6px',
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={bookingLoading}
+                        style={{
+                          flex: 2,
+                          padding: '12px',
+                          border: 'none',
+                          background: bookingLoading ? '#9ca3af' : '#2563eb',
+                          color: 'white',
+                          borderRadius: '6px',
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          cursor: bookingLoading ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        {bookingLoading ? 'Submitting...' : 'Submit Booking Request'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
               </div>
             </div>
           </div>

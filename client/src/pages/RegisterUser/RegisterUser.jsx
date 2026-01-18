@@ -51,7 +51,7 @@ const RegisterUser = () => {
 
       // Always use JSON for now to debug the issue
       const requestBody = {
-        type: 'vendor',
+        type: 'lessor',
         fullName: form.fullName,
         email: form.email,
         phone: form.phoneNumber,

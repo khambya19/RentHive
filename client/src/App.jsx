@@ -28,10 +28,11 @@ const ProtectedRoute = ({ children, allowedTypes }) => {
         // Redirect based on user type
         if (user.type === 'lessor') {
             return <Navigate to="/user/dashboard" replace />;
-        } else if (user.type === 'owner') {
+        } else if (user.type === 'owner' || user.type === 'vendor') {
+            // Vendors are not lessors; treat them as part of the owner/vendor dashboard area
             return <Navigate to="/owner/dashboard" replace />;
         } else {
-            return <Navigate to="/user/dashboard" replace />;
+            return <Navigate to="/login" replace />;
         }
     }
     
@@ -65,6 +66,8 @@ function AppContent() {
                 <Route path="/register" element={<Register />} />
                 <Route path="/register-user" element={<RegisterUser />} />
                 <Route path="/register-owner" element={<RegisterOwner />} />
+                {/* Backward/alternate route used elsewhere in the app */}
+                <Route path="/register-vendor" element={<RegisterOwner />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 
                 {/* Protected Dashboard Routes */}
@@ -89,6 +92,9 @@ function AppContent() {
                         <OwnerDashboard />
                     </ProtectedRoute>
                 } />
+
+                {/* Fallback for unknown routes */}
+                <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
             
             {showFooter && <Footer />}

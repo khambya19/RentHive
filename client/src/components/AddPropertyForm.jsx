@@ -191,9 +191,64 @@ const AddPropertyForm = ({ onSubmit, onCancel, initialData = null }) => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSubmit(formData);
+    
+    // First, upload images if any
+    let uploadedImageFilenames = [];
+    if (formData.images.length > 0) {
+      try {
+        const imageFormData = new FormData();
+        formData.images.forEach(file => {
+          imageFormData.append('images', file);
+        });
+
+        const token = localStorage.getItem('token');
+        const uploadResponse = await fetch('http://localhost:3001/api/properties/upload-images', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: imageFormData
+        });
+
+        if (uploadResponse.ok) {
+          const uploadData = await uploadResponse.json();
+          uploadedImageFilenames = uploadData.images;
+          console.log('Images uploaded:', uploadedImageFilenames);
+        } else {
+          console.error('Failed to upload images');
+          alert('Failed to upload images. Please try again.');
+          return;
+        }
+      } catch (error) {
+        console.error('Error uploading images:', error);
+        alert('Error uploading images. Please try again.');
+        return;
+      }
+    }
+
+    // Prepare data for submission - map form fields to backend expected fields
+    const propertyData = {
+      title: formData.title,
+      propertyType: formData.propertyType,
+      address: formData.address,
+      city: formData.city,
+      bedrooms: formData.bedrooms,
+      bathrooms: formData.bathrooms,
+      area: formData.area,
+      // Map the price fields correctly
+      rentPrice: formData.listingType === 'For Rent' ? formData.monthlyRent : formData.price,
+      securityDeposit: formData.securityDeposit,
+      amenities: formData.combinedFeatures,
+      description: formData.description,
+      images: uploadedImageFilenames,
+      latitude: formData.latitude,
+      longitude: formData.longitude
+    };
+
+    console.log('Submitting property data:', propertyData);
+    onSubmit(propertyData);
   };
 
   const renderStepIndicator = () => (

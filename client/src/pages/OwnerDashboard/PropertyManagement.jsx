@@ -59,14 +59,13 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
     }
   };
 
-  const handleAddProperty = async (e) => {
-    e.preventDefault();
+  const handleAddProperty = async (formData) => {
     try {
       const token = localStorage.getItem('token');
       
       // Include location data in the property form
       const propertyData = {
-        ...propertyForm,
+        ...formData,
         latitude: selectedLocation?.lat || null,
         longitude: selectedLocation?.lng || null,
       };
@@ -85,14 +84,17 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
         setProperties([...properties, newProperty]);
         setShowPropertyModal(false);
         resetForm();
-        alert('Property added successfully!');
+        if (showSuccess) showSuccess('Success', 'Property added successfully!');
+        else alert('Property added successfully!');
       } else {
         const errorData = await response.json();
-        alert(`Failed to add property: ${errorData.error || 'Unknown error'}`);
+        if (showError) showError('Error', `Failed to add property: ${errorData.error || 'Unknown error'}`);
+        else alert(`Failed to add property: ${errorData.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error adding property:', error);
-      alert('Failed to add property');
+      if (showError) showError('Error', 'Failed to add property');
+      else alert('Failed to add property');
     }
   };
 
@@ -180,8 +182,11 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
           <div key={property.id} className="property-card">
             <div className="property-image">
               <img 
-                src={property.images?.[0] ? `http://localhost:5000/uploads/properties/${property.images[0]}` : 'https://via.placeholder.com/300x200'}
+                src={property.images?.[0] ? `http://localhost:3001/uploads/properties/${property.images[0]}` : 'https://via.placeholder.com/300x200'}
                 alt={property.title}
+                onError={(e) => {
+                  e.target.src = 'https://via.placeholder.com/300x200?text=No+Image';
+                }}
               />
               <span className={`status-badge status-${property.status?.toLowerCase()}`}>
                 {property.status || 'Available'}
@@ -189,6 +194,7 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
             </div>
             <div className="property-content">
               <h3>{property.title}</h3>
+              <p className="property-type">{property.propertyType}</p>
               <p className="property-location">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
@@ -200,12 +206,12 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
                 )}
               </p>
               <div className="property-features">
-                <span>{property.bedrooms} Bed</span>
-                <span>{property.bathrooms} Bath</span>
-                <span>{property.area} sq ft</span>
+                <span>🛏️ {property.bedrooms} Bed{property.bedrooms > 1 ? 's' : ''}</span>
+                <span>🚿 {property.bathrooms} Bath{property.bathrooms > 1 ? 's' : ''}</span>
+                <span>📐 {property.area} sq.ft</span>
               </div>
               <div className="property-price">
-                NPR {parseInt(property.rentPrice).toLocaleString()}/month
+                NPR {property.rentPrice ? Number(property.rentPrice).toLocaleString() : '0'}/month
               </div>
               <div className="property-actions">
                 <button className="btn-outline" onClick={() => {/* Edit logic */}}>Edit</button>

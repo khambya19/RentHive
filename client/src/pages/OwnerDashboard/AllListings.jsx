@@ -219,6 +219,9 @@ const AllListings = ({ showSuccess, showError }) => {
           <img 
             src={`http://localhost:3001/uploads/properties/${property.images[0]}`} 
             alt={property.title}
+            onError={(e) => {
+              e.target.src = 'https://via.placeholder.com/300x200?text=No+Image';
+            }}
           />
         ) : (
           <div className="placeholder-image">🏠</div>
@@ -234,7 +237,7 @@ const AllListings = ({ showSuccess, showError }) => {
           <span>📐 {property.area} sq.ft</span>
         </div>
         <div className="listing-pricing">
-          <span className="price">NPR {property.rentPrice?.toLocaleString()}/month</span>
+          <span className="price">NPR {property.rentPrice ? Number(property.rentPrice).toLocaleString() : '0'}/month</span>
           <span className={`status ${property.status?.toLowerCase()}`}>{property.status}</span>
         </div>
       </div>
@@ -265,13 +268,16 @@ const AllListings = ({ showSuccess, showError }) => {
           <img 
             src={`http://localhost:3001/uploads/bikes/${bike.images[0]}`} 
             alt={`${bike.brand} ${bike.model}`}
+            onError={(e) => {
+              e.target.src = 'https://via.placeholder.com/300x200?text=No+Image';
+            }}
           />
         ) : (
           <div className="placeholder-image">🚴</div>
         )}
       </div>
       <div className="listing-content">
-        <h3>{bike.brand} {bike.model}</h3>
+        <h3>{bike.name || `${bike.brand} ${bike.model}`}</h3>
         <p className="listing-type">{bike.type}</p>
         <p className="listing-location">📍 {bike.location}</p>
         <div className="listing-details">
@@ -280,7 +286,7 @@ const AllListings = ({ showSuccess, showError }) => {
           {bike.registrationNumber && <span>🔢 {bike.registrationNumber}</span>}
         </div>
         <div className="listing-pricing">
-          <span className="price">NPR {bike.dailyRate?.toLocaleString()}/day</span>
+          <span className="price">NPR {bike.dailyRate ? Number(bike.dailyRate).toLocaleString() : '0'}/day</span>
           <span className={`status ${bike.status?.toLowerCase()}`}>{bike.status}</span>
         </div>
       </div>

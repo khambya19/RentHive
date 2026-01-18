@@ -14,6 +14,7 @@ const userRoutes = require('./routes/userRoutes');
 const propertyRoutes = require('./routes/propertyRoutes');
 const bikeRoutes = require('./routes/bikeRoutes');
 const ownerRoutes = require('./routes/ownerRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 const User = require('./models/User');
 const Property = require('./models/Property');
 const Booking = require('./models/Booking');
@@ -84,6 +85,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/properties', propertyRoutes);
 app.use('/api/bikes', bikeRoutes);
 app.use('/api/owners', ownerRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Serve uploaded files
 app.use('/uploads', express.static('uploads'));

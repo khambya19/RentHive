@@ -5,6 +5,62 @@ const Inquiry = require('../models/Inquiry');
 const User = require('../models/User');
 const { Op } = require('sequelize');
 
+// Get all available properties for browsing (tenant/lessor)
+exports.getAvailableProperties = async (req, res) => {
+  try {
+    const { search, city, minPrice, maxPrice, type } = req.query;
+
+    const whereClause = { status: 'Available' };
+
+    if (type) {
+      whereClause.propertyType = type;
+    }
+    if (city) {
+      whereClause.city = { [Op.iLike || Op.like]: `%${city}%` };
+    }
+    if (minPrice || maxPrice) {
+      whereClause.rentPrice = {};
+      if (minPrice) whereClause.rentPrice[Op.gte] = parseFloat(minPrice);
+      if (maxPrice) whereClause.rentPrice[Op.lte] = parseFloat(maxPrice);
+    }
+    if (search) {
+      whereClause[Op.or] = [
+        { title: { [Op.iLike || Op.like]: `%${search}%` } },
+        { address: { [Op.iLike || Op.like]: `%${search}%` } },
+        { city: { [Op.iLike || Op.like]: `%${search}%` } }
+      ];
+    }
+
+    const properties = await Property.findAll({
+      where: whereClause,
+      order: [['createdAt', 'DESC']]
+    });
+
+    return res.json(properties.map(p => ({
+      id: p.id,
+      title: p.title,
+      propertyType: p.propertyType,
+      address: p.address,
+      city: p.city,
+      bedrooms: p.bedrooms,
+      bathrooms: p.bathrooms,
+      area: p.area,
+      rentPrice: p.rentPrice,
+      securityDeposit: p.securityDeposit,
+      amenities: p.amenities,
+      description: p.description,
+      images: p.images,
+      status: p.status,
+      latitude: p.latitude,
+      longitude: p.longitude,
+      createdAt: p.createdAt
+    })));
+  } catch (error) {
+    console.error('Error fetching available properties:', error);
+    return res.status(500).json({ error: 'Failed to fetch properties' });
+  }
+};
+
 // Get all properties for a vendor
 exports.getVendorProperties = async (req, res) => {
   try {
@@ -345,6 +401,110 @@ exports.uploadPropertyImages = async (req, res) => {
   } catch (error) {
     console.error('Error uploading images:', error);
     return res.status(500).json({ success: false, error: 'Failed to upload images' });
+  }
+};
+
+// Book a property (tenant/lessor action)
+exports.bookProperty = async (req, res) => {
+  try {
+    const tenantId = req.user.id;
+    const { propertyId, moveInDate, moveOutDate, message } = req.body;
+
+    if (!propertyId || !moveInDate) {
+      return res.status(400).json({ error: 'Property ID and move-in date are required' });
+    }
+
+    // Get property details
+    const property = await Property.findOne({
+      where: { id: propertyId, status: 'Available' },
+      include: [
+        {
+          model: User,
+          as: 'vendor',
+          attributes: ['id', 'fullName', 'email', 'phone']
+        }
+      ]
+    });
+
+    if (!property) {
+      return res.status(404).json({ error: 'Property not found or not available' });
+    }
+
+    // Get tenant info
+    const tenant = await User.findByPk(tenantId, {
+      attributes: ['id', 'fullName', 'email', 'phone']
+    });
+
+    if (!tenant) {
+      return res.status(404).json({ error: 'Tenant not found' });
+    }
+
+    // Create booking
+    const booking = await Booking.create({
+      propertyId,
+      tenantId,
+      vendorId: property.vendorId,
+      moveInDate,
+      moveOutDate: moveOutDate || null,
+      monthlyRent: property.rentPrice,
+      status: 'Pending',
+      message: message || ''
+    });
+
+    // Send notification to property owner
+    try {
+      const { createUserNotification } = require('./notificationController');
+      
+      const moveInFormatted = new Date(moveInDate).toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      });
+      
+      const moveOutFormatted = moveOutDate 
+        ? new Date(moveOutDate).toLocaleDateString('en-US', {
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric'
+          })
+        : 'Not specified';
+
+      const notificationTitle = `🏠 New Property Booking Request`;
+      const notificationMessage = `${tenant.fullName} wants to rent your property "${property.title}" from ${moveInFormatted}${moveOutDate ? ` to ${moveOutFormatted}` : ''}. Monthly rent: NPR ${parseInt(property.rentPrice).toLocaleString()}`;
+
+      await createUserNotification({
+        body: {
+          userId: property.vendorId,
+          title: notificationTitle,
+          message: notificationMessage,
+          type: 'booking',
+          link: `/owner/bookings/${booking.id}`
+        }
+      }, {
+        status: (code) => ({
+          json: (data) => console.log('Notification created:', data)
+        })
+      });
+    } catch (notificationError) {
+      console.error('Error sending notification:', notificationError);
+      // Don't fail the booking if notification fails
+    }
+
+    return res.json({
+      success: true,
+      message: 'Booking request sent successfully',
+      booking: {
+        id: booking.id,
+        propertyTitle: property.title,
+        moveInDate: booking.moveInDate,
+        moveOutDate: booking.moveOutDate,
+        monthlyRent: booking.monthlyRent,
+        status: booking.status
+      }
+    });
+  } catch (error) {
+    console.error('Error booking property:', error);
+    return res.status(500).json({ error: 'Failed to book property' });
   }
 };
 

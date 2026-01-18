@@ -7,6 +7,12 @@ const { propertyUpload } = require('../config/upload');
 // All routes require authentication
 router.use(protect);
 
+// Browse available properties (for all authenticated users)
+router.get('/available', propertyController.getAvailableProperties);
+
+// Book a property (for tenants/lessors)
+router.post('/book', propertyController.bookProperty);
+
 // Get vendor's properties
 router.get('/', propertyController.getVendorProperties);
 

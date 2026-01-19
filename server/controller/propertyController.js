@@ -410,6 +410,8 @@ exports.bookProperty = async (req, res) => {
     const tenantId = req.user.id;
     const { propertyId, moveInDate, moveOutDate, message } = req.body;
 
+    console.log('📝 Booking request received:', { tenantId, propertyId, moveInDate, moveOutDate, message });
+
     if (!propertyId || !moveInDate) {
       return res.status(400).json({ error: 'Property ID and move-in date are required' });
     }
@@ -427,6 +429,7 @@ exports.bookProperty = async (req, res) => {
     });
 
     if (!property) {
+      console.log('❌ Property not found or not available:', propertyId);
       return res.status(404).json({ error: 'Property not found or not available' });
     }
 
@@ -436,6 +439,7 @@ exports.bookProperty = async (req, res) => {
     });
 
     if (!tenant) {
+      console.log('❌ Tenant not found:', tenantId);
       return res.status(404).json({ error: 'Tenant not found' });
     }
 
@@ -449,6 +453,13 @@ exports.bookProperty = async (req, res) => {
       monthlyRent: property.rentPrice,
       status: 'Pending',
       message: message || ''
+    });
+
+    console.log('✅ Booking created successfully:', { 
+      bookingId: booking.id, 
+      tenantId, 
+      propertyId, 
+      status: booking.status 
     });
 
     // Send notification to property owner
@@ -472,19 +483,54 @@ exports.bookProperty = async (req, res) => {
       const notificationTitle = `🏠 New Property Booking Request`;
       const notificationMessage = `${tenant.fullName} wants to rent your property "${property.title}" from ${moveInFormatted}${moveOutDate ? ` to ${moveOutFormatted}` : ''}. Monthly rent: NPR ${parseInt(property.rentPrice).toLocaleString()}`;
 
-      await createUserNotification({
-        body: {
-          userId: property.vendorId,
-          title: notificationTitle,
-          message: notificationMessage,
-          type: 'booking',
-          link: `/owner/bookings/${booking.id}`
-        }
-      }, {
-        status: (code) => ({
-          json: (data) => console.log('Notification created:', data)
+      // Create notification with booking metadata
+      const notification = await Notification.create({
+        userId: property.vendorId,
+        title: notificationTitle,
+        message: notificationMessage,
+        type: 'booking',
+        isBroadcast: false,
+        link: `/owner/bookings`,
+        metadata: JSON.stringify({
+          bookingId: booking.id,
+          tenantName: tenant.fullName,
+          tenantEmail: tenant.email,
+          tenantPhone: tenant.phone,
+          propertyTitle: property.title,
+          moveInDate: moveInDate,
+          moveOutDate: moveOutDate,
+          monthlyRent: property.rentPrice,
+          message: message,
+          requiresAction: true
         })
       });
+
+      // Emit real-time notification
+      const { io, connectedUsers } = require('./notificationController').getSocketIO
+        ? require('./notificationController').getSocketIO()
+        : { io: null, connectedUsers: null };
+      
+      if (io && connectedUsers) {
+        const socketId = connectedUsers.get(property.vendorId.toString());
+        if (socketId) {
+          io.to(socketId).emit('new-notification', {
+            id: notification.id,
+            title: notification.title,
+            message: notification.message,
+            type: notification.type,
+            link: notification.link,
+            isRead: false,
+            createdAt: notification.created_at,
+            metadata: {
+              bookingId: booking.id,
+              tenantName: tenant.fullName,
+              propertyTitle: property.title,
+              moveInDate: moveInDate,
+              requiresAction: true
+            }
+          });
+        }
+      }
     } catch (notificationError) {
       console.error('Error sending notification:', notificationError);
       // Don't fail the booking if notification fails
@@ -503,7 +549,7 @@ exports.bookProperty = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error booking property:', error);
+    console.error('❌ Error booking property:', error);
     return res.status(500).json({ error: 'Failed to book property' });
   }
 };

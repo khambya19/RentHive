@@ -56,4 +56,22 @@ const Booking = sequelize.define('Booking', {
   timestamps: true
 });
 
+// Define associations
+Booking.associate = (models) => {
+  Booking.belongsTo(models.Property, {
+    foreignKey: 'propertyId',
+    as: 'property'
+  });
+  
+  Booking.belongsTo(models.User, {
+    foreignKey: 'tenantId',
+    as: 'tenant'
+  });
+  
+  Booking.belongsTo(models.User, {
+    foreignKey: 'vendorId',
+    as: 'vendor'
+  });
+};
+
 module.exports = Booking;

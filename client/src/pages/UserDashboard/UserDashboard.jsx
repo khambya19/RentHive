@@ -40,6 +40,7 @@ const UserDashboard = () => {
 
   useEffect(() => {
     fetchData();
+    fetchMyApplications();
   }, []);
 
   const fetchData = async () => {
@@ -98,6 +99,36 @@ const UserDashboard = () => {
     }
   };
 
+  const fetchMyApplications = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch('http://localhost:3001/api/users/my-applications', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Applications data:', data);
+        const allApplications = data.applications || [];
+        setMyApplications(allApplications);
+        
+        // Filter approved/active bookings for "My Current Rentals"
+        const activeRentals = allApplications.filter(app => 
+          app.status?.toLowerCase() === 'approved' || app.status?.toLowerCase() === 'active'
+        );
+        setMyRentals(activeRentals);
+      } else {
+        console.error('Failed to fetch applications:', response.status);
+      }
+    } catch (error) {
+      console.error('Error fetching applications:', error);
+    }
+  };
+
   const handleLogout = () => {
     logout();
     navigate('/login');
@@ -143,6 +174,12 @@ const UserDashboard = () => {
         showSuccess('Booking Submitted!', 'Your booking request has been sent to the property owner. They will review it soon.');
         setShowPropertyModal(false);
         setSelectedProperty(null);
+        
+        // Refresh applications to show the new pending booking
+        await fetchMyApplications();
+        
+        // Automatically switch to applications tab to show the pending request
+        setActiveTab('applications');
       } else {
         showError('Booking Failed', data.error || 'Failed to submit booking request');
       }
@@ -437,6 +474,342 @@ const UserDashboard = () => {
     </div>
   );
 
+  const renderApplications = () => {
+    const formatDate = (dateString) => {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    };
+
+    const getStatusClass = (status) => {
+      switch (status?.toLowerCase()) {
+        case 'pending':
+          return 'status-pending';
+        case 'approved':
+        case 'active':
+          return 'status-approved';
+        case 'rejected':
+          return 'status-rejected';
+        case 'cancelled':
+          return 'status-cancelled';
+        default:
+          return 'status-pending';
+      }
+    };
+
+    if (myApplications.length === 0) {
+      return (
+        <div className="empty-state">
+          <div className="empty-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+          </div>
+          <h3>No Applications Yet</h3>
+          <p>You haven't submitted any property rental applications. Start browsing properties to find your perfect home!</p>
+          <button className="btn-primary" onClick={() => setActiveTab('browse')} style={{ marginTop: '20px' }}>
+            Browse Properties
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="applications-section">
+        <div className="applications-header">
+          <div className="stats-summary">
+            <div className="stat-item">
+              <span className="stat-number">{myApplications.filter(app => app.status?.toLowerCase() === 'pending').length}</span>
+              <span className="stat-label">Pending</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-number">{myApplications.filter(app => app.status?.toLowerCase() === 'approved').length}</span>
+              <span className="stat-label">Approved</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-number">{myApplications.filter(app => app.status?.toLowerCase() === 'rejected').length}</span>
+              <span className="stat-label">Rejected</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="applications-grid">
+          {myApplications.map((application) => (
+            <div key={application.id} className="application-card">
+              <div className="application-header">
+                <div className={`application-status ${getStatusClass(application.status)}`}>
+                  {application.status?.toUpperCase() || 'PENDING'}
+                </div>
+                <span className="application-date">Applied {formatDate(application.createdAt)}</span>
+              </div>
+
+              <div className="application-content">
+                <div className="application-image">
+                  {application.property?.images && application.property.images.length > 0 ? (
+                    <img 
+                      src={`http://localhost:3001/uploads/properties/${application.property.images[0]}`} 
+                      alt={application.property.title}
+                      onError={(e) => {
+                        e.target.src = 'https://via.placeholder.com/150x150?text=No+Image';
+                      }}
+                    />
+                  ) : (
+                    <div className="no-image-placeholder">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                        <polyline points="9 22 9 12 15 12 15 22"/>
+                      </svg>
+                    </div>
+                  )}
+                </div>
+
+                <div className="application-details">
+                  <h3>{application.property?.title || 'Property'}</h3>
+                  <p className="application-location">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                      <circle cx="12" cy="10" r="3"/>
+                    </svg>
+                    {application.property?.address}, {application.property?.city}
+                  </p>
+
+                  <div className="application-info-grid">
+                    <div className="info-item">
+                      <span className="info-label">Property Type</span>
+                      <span className="info-value">{application.property?.propertyType || 'N/A'}</span>
+                    </div>
+                    <div className="info-item">
+                      <span className="info-label">Move-In Date</span>
+                      <span className="info-value">{formatDate(application.moveInDate)}</span>
+                    </div>
+                    <div className="info-item">
+                      <span className="info-label">Monthly Rent</span>
+                      <span className="info-value rent-amount">NPR {Number(application.monthlyRent).toLocaleString('en-NP')}</span>
+                    </div>
+                    <div className="info-item">
+                      <span className="info-label">Owner</span>
+                      <span className="info-value">{application.vendor?.fullName || 'N/A'}</span>
+                    </div>
+                  </div>
+
+                  {application.message && (
+                    <div className="application-message">
+                      <strong>Your Message:</strong>
+                      <p>"{application.message}"</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="application-footer">
+                {application.status?.toLowerCase() === 'pending' && (
+                  <div className="pending-notice">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                    <span>Waiting for owner's response</span>
+                  </div>
+                )}
+                {application.status?.toLowerCase() === 'approved' && (
+                  <div className="approved-notice">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <span>Congratulations! Your application has been approved. The owner will contact you soon.</span>
+                  </div>
+                )}
+                {application.status?.toLowerCase() === 'rejected' && (
+                  <div className="rejected-notice">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="15" y1="9" x2="9" y2="15"/>
+                      <line x1="9" y1="9" x2="15" y2="15"/>
+                    </svg>
+                    <span>Unfortunately, this application was declined. Keep looking for other properties!</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderRentals = () => {
+    const formatDate = (dateString) => {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    };
+
+    if (myRentals.length === 0) {
+      return (
+        <div className="empty-state">
+          <div className="empty-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              <polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+          </div>
+          <h3>No Active Rentals</h3>
+          <p>You don't have any active rentals at the moment. Browse properties and submit applications to get started!</p>
+          <button className="btn-primary" onClick={() => setActiveTab('browse')} style={{ marginTop: '20px' }}>
+            Browse Properties
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="rentals-section">
+        <div className="rentals-header">
+          <h2>Your Active Rentals</h2>
+          <div className="stats-summary">
+            <div className="stat-item">
+              <span className="stat-number">{myRentals.length}</span>
+              <span className="stat-label">Active Rental{myRentals.length !== 1 ? 's' : ''}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="rentals-grid">
+          {myRentals.map((rental) => (
+            <div key={rental.id} className="rental-card">
+              <div className="rental-header">
+                <div className="rental-status status-approved">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '16px', height: '16px' }}>
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  ACTIVE RENTAL
+                </div>
+                <span className="rental-date">Since {formatDate(rental.moveInDate)}</span>
+              </div>
+
+              <div className="rental-content">
+                <div className="rental-image">
+                  {rental.property?.images && rental.property.images.length > 0 ? (
+                    <img 
+                      src={`http://localhost:3001/uploads/properties/${rental.property.images[0]}`} 
+                      alt={rental.property.title}
+                      onError={(e) => {
+                        e.target.src = 'https://via.placeholder.com/150x150?text=No+Image';
+                      }}
+                    />
+                  ) : (
+                    <div className="no-image-placeholder">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                        <polyline points="9 22 9 12 15 12 15 22"/>
+                      </svg>
+                    </div>
+                  )}
+                </div>
+
+                <div className="rental-details">
+                  <h3>{rental.property?.title || 'Property'}</h3>
+                  <p className="rental-location">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                      <circle cx="12" cy="10" r="3"/>
+                    </svg>
+                    {rental.property?.address}, {rental.property?.city}
+                  </p>
+
+                  <div className="rental-info-grid">
+                    <div className="info-item">
+                      <span className="info-label">Property Type</span>
+                      <span className="info-value">{rental.property?.propertyType || 'N/A'}</span>
+                    </div>
+                    <div className="info-item">
+                      <span className="info-label">Move-In Date</span>
+                      <span className="info-value">{formatDate(rental.moveInDate)}</span>
+                    </div>
+                    {rental.moveOutDate && (
+                      <div className="info-item">
+                        <span className="info-label">Move-Out Date</span>
+                        <span className="info-value">{formatDate(rental.moveOutDate)}</span>
+                      </div>
+                    )}
+                    <div className="info-item">
+                      <span className="info-label">Monthly Rent</span>
+                      <span className="info-value rent-amount">NPR {Number(rental.monthlyRent).toLocaleString('en-NP')}</span>
+                    </div>
+                    <div className="info-item">
+                      <span className="info-label">Bedrooms</span>
+                      <span className="info-value">{rental.property?.bedrooms || 'N/A'}</span>
+                    </div>
+                    <div className="info-item">
+                      <span className="info-label">Bathrooms</span>
+                      <span className="info-value">{rental.property?.bathrooms || 'N/A'}</span>
+                    </div>
+                  </div>
+
+                  <div className="rental-owner-info">
+                    <h4>Property Owner</h4>
+                    <div className="owner-details">
+                      <div className="owner-avatar">
+                        {rental.vendor?.fullName?.[0]?.toUpperCase() || 'O'}
+                      </div>
+                      <div>
+                        <p className="owner-name">{rental.vendor?.fullName || 'N/A'}</p>
+                        <p className="owner-contact">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '14px', height: '14px' }}>
+                            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                          </svg>
+                          {rental.vendor?.phone || 'N/A'}
+                        </p>
+                        <p className="owner-contact">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '14px', height: '14px' }}>
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                            <polyline points="22,6 12,13 2,6"/>
+                          </svg>
+                          {rental.vendor?.email || 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rental-actions">
+                <button 
+                  className="btn-secondary"
+                  onClick={() => setActiveTab('payments')}
+                  style={{ flex: 1 }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '16px', height: '16px' }}>
+                    <line x1="12" y1="1" x2="12" y2="23"/>
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                  </svg>
+                  View Payments
+                </button>
+                <button 
+                  className="btn-secondary"
+                  onClick={() => setActiveTab('maintenance')}
+                  style={{ flex: 1 }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '16px', height: '16px' }}>
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                  </svg>
+                  Request Maintenance
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   const renderContent = () => {
     if (loading) {
       return <div className="loading">Loading...</div>;
@@ -450,9 +823,9 @@ const UserDashboard = () => {
       case 'saved':
         return <div className="placeholder">Saved Favorites - Coming Soon</div>;
       case 'applications':
-        return <div className="placeholder">My Applications - Coming Soon</div>;
+        return renderApplications();
       case 'rentals':
-        return <div className="placeholder">My Current Rentals - Coming Soon</div>;
+        return renderRentals();
       case 'payments':
         return <div className="placeholder">Payments - Coming Soon</div>;
       case 'maintenance':
@@ -709,8 +1082,11 @@ const UserDashboard = () => {
                 {selectedProperty.images && selectedProperty.images.length > 0 && (
                   <div className="property-images">
                     <img 
-                      src={`http://localhost:3001${selectedProperty.images[0]}`} 
+                      src={`http://localhost:3001/uploads/properties/${selectedProperty.images[0]}`} 
                       alt={selectedProperty.title}
+                      onError={(e) => {
+                        e.target.src = 'https://via.placeholder.com/400x300?text=No+Image';
+                      }}
                       style={{ width: '100%', borderRadius: '8px', marginBottom: '20px' }}
                     />
                   </div>
@@ -751,171 +1127,89 @@ const UserDashboard = () => {
 
                   <div className="detail-item">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '20px', height: '20px' }}>
-                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                      <circle cx="9" cy="7" r="4"/>
+                      <rect x="3" y="3" width="18" height="18"/>
                     </svg>
                     <div>
-                      <strong>Rooms</strong>
-                      <p>{selectedProperty.bedrooms} Bedrooms, {selectedProperty.bathrooms} Bathrooms</p>
+                      <strong>Area</strong>
+                      <p>{selectedProperty.area} sq.ft</p>
                     </div>
                   </div>
-                </div>
 
-                {/* Description */}
-                {selectedProperty.description && (
-                  <div style={{ marginTop: '20px' }}>
-                    <h3>Description</h3>
-                    <p style={{ color: '#666', lineHeight: '1.6' }}>{selectedProperty.description}</p>
-                  </div>
-                )}
-
-                {/* Amenities */}
-                {selectedProperty.amenities && selectedProperty.amenities.length > 0 && (
-                  <div style={{ marginTop: '20px' }}>
-                    <h3>Amenities</h3>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '10px' }}>
-                      {selectedProperty.amenities.map((amenity, index) => (
-                        <span key={index} style={{ 
-                          padding: '6px 12px', 
-                          background: '#f0f0f0', 
-                          borderRadius: '20px',
-                          fontSize: '14px'
-                        }}>
-                          {amenity}
-                        </span>
-                      ))}
+                  <div className="detail-item">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '20px', height: '20px' }}>
+                      <path d="M12 2l9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9l9-7z"/>
+                    </svg>
+                    <div>
+                      <strong>Bedrooms</strong>
+                      <p>{selectedProperty.bedrooms}</p>
                     </div>
                   </div>
-                )}
 
-                {/* Price */}
-                <div style={{ 
-                  marginTop: '20px', 
-                  padding: '20px', 
-                  background: '#f8f9fa', 
-                  borderRadius: '8px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
-                  <div>
-                    <p style={{ margin: 0, color: '#666', fontSize: '14px' }}>Monthly Rent</p>
-                    <h2 style={{ margin: '5px 0 0 0', color: '#2563eb' }}>
-                      NPR {selectedProperty.rentPrice?.toLocaleString('en-NP')}
-                    </h2>
-                  </div>
-                  {selectedProperty.securityDeposit && (
-                    <div style={{ textAlign: 'right' }}>
-                      <p style={{ margin: 0, color: '#666', fontSize: '14px' }}>Security Deposit</p>
-                      <p style={{ margin: '5px 0 0 0', fontWeight: 'bold' }}>
-                        NPR {selectedProperty.securityDeposit?.toLocaleString('en-NP')}
-                      </p>
+                  <div className="detail-item">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '20px', height: '20px' }}>
+                      <circle cx="12" cy="12" r="10"/>
+                    </svg>
+                    <div>
+                      <strong>Bathrooms</strong>
+                      <p>{selectedProperty.bathrooms}</p>
                     </div>
-                  )}
+                  </div>
+
+                  <div className="detail-item">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '20px', height: '20px' }}>
+                      <line x1="12" y1="1" x2="12" y2="23"/>
+                      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                    </svg>
+                    <div>
+                      <strong>Monthly Rent</strong>
+                      <p>NPR {selectedProperty.rentPrice?.toLocaleString('en-NP')}</p>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Booking Form */}
-                <div style={{ marginTop: '30px', padding: '20px', border: '2px solid #e5e7eb', borderRadius: '8px' }}>
-                  <h3 style={{ marginTop: 0 }}>Book This Property</h3>
-                  <form onSubmit={handleBookProperty}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
-                      <div>
-                        <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', fontWeight: '600' }}>
-                          Move-In Date <span style={{ color: 'red' }}>*</span>
-                        </label>
-                        <input
-                          type="date"
-                          required
-                          min={new Date().toISOString().split('T')[0]}
-                          value={bookingForm.moveInDate}
-                          onChange={(e) => setBookingForm({ ...bookingForm, moveInDate: e.target.value })}
-                          style={{
-                            width: '100%',
-                            padding: '10px',
-                            border: '1px solid #d1d5db',
-                            borderRadius: '6px',
-                            fontSize: '14px'
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', fontWeight: '600' }}>
-                          Move-Out Date (Optional)
-                        </label>
-                        <input
-                          type="date"
-                          min={bookingForm.moveInDate || new Date().toISOString().split('T')[0]}
-                          value={bookingForm.moveOutDate}
-                          onChange={(e) => setBookingForm({ ...bookingForm, moveOutDate: e.target.value })}
-                          style={{
-                            width: '100%',
-                            padding: '10px',
-                            border: '1px solid #d1d5db',
-                            borderRadius: '6px',
-                            fontSize: '14px'
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={{ marginBottom: '15px' }}>
-                      <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', fontWeight: '600' }}>
-                        Message to Owner (Optional)
-                      </label>
-                      <textarea
-                        rows="3"
-                        placeholder="Tell the owner about yourself, your rental needs, or ask any questions..."
-                        value={bookingForm.message}
-                        onChange={(e) => setBookingForm({ ...bookingForm, message: e.target.value })}
-                        style={{
-                          width: '100%',
-                          padding: '10px',
-                          border: '1px solid #d1d5db',
-                          borderRadius: '6px',
-                          fontSize: '14px',
-                          fontFamily: 'inherit',
-                          resize: 'vertical'
-                        }}
+                <form onSubmit={handleBookProperty} style={{ marginTop: '30px' }}>
+                  <h3>Book This Property</h3>
+                  <div style={{ display: 'grid', gap: '20px', marginTop: '20px' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>Move-In Date</label>
+                      <input
+                        type="date"
+                        required
+                        value={bookingForm.moveInDate}
+                        onChange={(e) => setBookingForm({ ...bookingForm, moveInDate: e.target.value })}
+                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
                       />
                     </div>
-
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                      <button
-                        type="button"
-                        onClick={() => setShowPropertyModal(false)}
-                        style={{
-                          flex: 1,
-                          padding: '12px',
-                          border: '1px solid #d1d5db',
-                          background: 'white',
-                          borderRadius: '6px',
-                          fontSize: '14px',
-                          fontWeight: '600',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={bookingLoading}
-                        style={{
-                          flex: 2,
-                          padding: '12px',
-                          border: 'none',
-                          background: bookingLoading ? '#9ca3af' : '#2563eb',
-                          color: 'white',
-                          borderRadius: '6px',
-                          fontSize: '14px',
-                          fontWeight: '600',
-                          cursor: bookingLoading ? 'not-allowed' : 'pointer'
-                        }}
-                      >
-                        {bookingLoading ? 'Submitting...' : 'Submit Booking Request'}
-                      </button>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>Move-Out Date (Optional)</label>
+                      <input
+                        type="date"
+                        value={bookingForm.moveOutDate}
+                        onChange={(e) => setBookingForm({ ...bookingForm, moveOutDate: e.target.value })}
+                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                      />
                     </div>
-                  </form>
-                </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>Message to Owner</label>
+                      <textarea
+                        rows="4"
+                        placeholder="Tell the owner about yourself and why you're interested..."
+                        value={bookingForm.message}
+                        onChange={(e) => setBookingForm({ ...bookingForm, message: e.target.value })}
+                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                      />
+                    </div>
+                    <button 
+                      type="submit" 
+                      className="btn-primary" 
+                      disabled={bookingLoading}
+                      style={{ padding: '12px', fontSize: '16px' }}
+                    >
+                      {bookingLoading ? 'Submitting...' : 'Submit Booking Request'}
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
           </div>

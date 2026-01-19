@@ -196,4 +196,58 @@ exports.uploadProfilePicture = async (req, res) => {
   }
 };
 
+// Get user's booking applications
+exports.getMyApplications = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    console.log('📋 Fetching applications for user:', userId);
+    
+    const Booking = require('../models/Booking');
+    const Property = require('../models/Property');
+    const User = require('../models/User');
+
+    // Fetch all bookings where the user is the tenant
+    const applications = await Booking.findAll({
+      where: { tenantId: userId },
+      include: [
+        {
+          model: Property,
+          as: 'property',
+          attributes: ['id', 'title', 'address', 'city', 'propertyType', 'images', 'rentPrice', 'bedrooms', 'bathrooms']
+        },
+        {
+          model: User,
+          as: 'vendor',
+          attributes: ['id', 'fullName', 'email', 'phone']
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    console.log(`✅ Found ${applications.length} applications for user ${userId}`);
+    
+    const formattedApplications = applications.map(app => ({
+      id: app.id,
+      property: app.property,
+      vendor: app.vendor,
+      moveInDate: app.moveInDate,
+      moveOutDate: app.moveOutDate,
+      monthlyRent: app.monthlyRent,
+      status: app.status,
+      message: app.message,
+      createdAt: app.createdAt
+    }));
+
+    console.log('📤 Sending applications:', JSON.stringify(formattedApplications, null, 2));
+
+    return res.json({
+      success: true,
+      applications: formattedApplications
+    });
+  } catch (error) {
+    console.error('❌ Error fetching applications:', error);
+    return res.status(500).json({ success: false, error: 'Failed to fetch applications', details: error.message });
+  }
+};
+
 module.exports = exports;

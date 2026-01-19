@@ -31,7 +31,8 @@ router.delete('/:id', propertyController.deleteProperty);
 // Upload property images
 router.post('/upload-images', propertyUpload.array('images', 10), propertyController.uploadPropertyImages);
 
-// Update booking status
+// Update booking status (support both PUT and PATCH)
+router.patch('/bookings/:id/status', propertyController.updateBookingStatus);
 router.put('/bookings/:id/status', propertyController.updateBookingStatus);
 
 module.exports = router;

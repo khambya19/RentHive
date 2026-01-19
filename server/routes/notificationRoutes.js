@@ -6,8 +6,10 @@ const {
   getUserNotifications,
   markAsRead,
   markAllAsRead,
-  deleteNotification
+  deleteNotification,
+  handleBookingResponse
 } = require('../controller/notificationController');
+const { protect } = require('../middleware/auth');
 
 /**
  * @route   POST /api/notifications/broadcast
@@ -51,5 +53,12 @@ router.patch('/user/:userId/read-all', markAllAsRead);
  * @access  Private
  */
 router.delete('/:id', deleteNotification);
+
+/**
+ * @route   POST /api/notifications/booking-response
+ * @desc    Handle booking request response (Accept/Decline)
+ * @access  Private (Owner only)
+ */
+router.post('/booking-response', protect, handleBookingResponse);
 
 module.exports = router;

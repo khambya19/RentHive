@@ -26,10 +26,9 @@ const ProtectedRoute = ({ children, allowedTypes }) => {
     
     if (allowedTypes && !allowedTypes.includes(user.type)) {
         // Redirect based on user type
-        if (user.type === 'lessor') {
+        if (user.type === 'renter' || user.type === 'lessor') {
             return <Navigate to="/user/dashboard" replace />;
         } else if (user.type === 'owner' || user.type === 'vendor') {
-            // Vendors are not lessors; treat them as part of the owner/vendor dashboard area
             return <Navigate to="/owner/dashboard" replace />;
         } else {
             return <Navigate to="/login" replace />;
@@ -74,21 +73,21 @@ function AppContent() {
                 
                 {/* User/Tenant Dashboard - Browse and Rent Properties/Bikes */}
                 <Route path="/user/dashboard" element={
-                    <ProtectedRoute allowedTypes={['lessor']}>
+                    <ProtectedRoute allowedTypes={['renter', 'lessor']}>
                         <UserDashboard />
                     </ProtectedRoute>
                 } />
                 
                 {/* Alias route for tenant dashboard */}
                 <Route path="/tenant/dashboard" element={
-                    <ProtectedRoute allowedTypes={['lessor']}>
+                    <ProtectedRoute allowedTypes={['renter', 'lessor']}>
                         <UserDashboard />
                     </ProtectedRoute>
                 } />
                 
                 {/* Owner Dashboard - List and Manage Properties/Bikes */}
                 <Route path="/owner/dashboard" element={
-                    <ProtectedRoute allowedTypes={['owner']}>
+                    <ProtectedRoute allowedTypes={['owner', 'vendor']}>
                         <OwnerDashboard />
                     </ProtectedRoute>
                 } />

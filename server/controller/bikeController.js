@@ -854,4 +854,54 @@ exports.getVendorCustomers = async (req, res) => {
   }
 };
 
+// Approve bike booking
+exports.approveBooking = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const vendorId = req.user.id;
+
+    const booking = await BikeBooking.findOne({
+      where: { id: bookingId, vendorId }
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found or unauthorized' });
+    }
+
+    booking.status = 'Active';
+    await booking.save();
+
+    console.log(`✅ Bike booking ${bookingId} approved and set to Active`);
+    return res.json({ message: 'Booking approved successfully', booking });
+  } catch (error) {
+    console.error('❌ Error approving bike booking:', error);
+    return res.status(500).json({ error: 'Failed to approve booking', details: error.message });
+  }
+};
+
+// Reject bike booking
+exports.rejectBooking = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const vendorId = req.user.id;
+
+    const booking = await BikeBooking.findOne({
+      where: { id: bookingId, vendorId }
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found or unauthorized' });
+    }
+
+    booking.status = 'Rejected';
+    await booking.save();
+
+    console.log(`✅ Bike booking ${bookingId} rejected`);
+    return res.json({ message: 'Booking rejected successfully', booking });
+  } catch (error) {
+    console.error('❌ Error rejecting bike booking:', error);
+    return res.status(500).json({ error: 'Failed to reject booking', details: error.message });
+  }
+};
+
 module.exports = exports;

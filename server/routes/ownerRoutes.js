@@ -168,10 +168,60 @@ router.get('/all-bookings', async (req, res) => {
       bikeBookings
     });
   } catch (error) {
-    console.error(' Error fetching all owner bookings:', error);
+    console.error('❌ Error fetching all owner bookings:', error);
     console.error('Error details:', error.message);
     console.error('Stack:', error.stack);
     return res.status(500).json({ error: 'Failed to fetch all bookings', details: error.message });
+  }
+});
+
+// Approve property booking
+router.patch('/bookings/:bookingId/approve', async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const ownerId = req.user.id;
+
+    const booking = await Booking.findOne({
+      where: { id: bookingId, vendorId: ownerId }
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found or unauthorized' });
+    }
+
+    booking.status = 'Active';
+    await booking.save();
+
+    console.log(`✅ Booking ${bookingId} approved and set to Active`);
+    return res.json({ message: 'Booking approved successfully', booking });
+  } catch (error) {
+    console.error('❌ Error approving booking:', error);
+    return res.status(500).json({ error: 'Failed to approve booking', details: error.message });
+  }
+});
+
+// Reject property booking
+router.patch('/bookings/:bookingId/reject', async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const ownerId = req.user.id;
+
+    const booking = await Booking.findOne({
+      where: { id: bookingId, vendorId: ownerId }
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found or unauthorized' });
+    }
+
+    booking.status = 'Rejected';
+    await booking.save();
+
+    console.log(`✅ Booking ${bookingId} rejected`);
+    return res.json({ message: 'Booking rejected successfully', booking });
+  } catch (error) {
+    console.error('❌ Error rejecting booking:', error);
+    return res.status(500).json({ error: 'Failed to reject booking', details: error.message });
   }
 });
 

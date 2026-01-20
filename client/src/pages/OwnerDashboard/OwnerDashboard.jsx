@@ -5,9 +5,11 @@ import { useSocket } from '../../context/SocketContext';
 import { useNotifications } from '../../hooks/useNotifications';
 import DashboardNotifications from '../../components/DashboardNotifications';
 import NotificationBell from '../../components/NotificationBell';
+import PaymentManagement from '../../components/PaymentManagement';
 import OwnerBookings from "./OwnerBookings";
 import UnifiedPostingForm from "./UnifiedPostingForm";
 import AllListings from "./AllListings";
+import API_BASE_URL from '../../config/api';
 import "./OwnerDashboard.css";
 
 const OwnerDashboard = () => {
@@ -83,10 +85,10 @@ const OwnerDashboard = () => {
 
       const headers = { 'Authorization': `Bearer ${token}` };
       
-      console.log('🚀 Making API request to:', 'http://localhost:3001/api/owners/stats');
+      console.log('🚀 Making API request to:', `${API_BASE_URL}/owners/stats`);
       
       // Fetch owner stats (properties they own + bike rentals they've made)
-      const response = await fetch('http://localhost:3001/api/owners/stats', { headers });
+      const response = await fetch(`${API_BASE_URL}/owners/stats`, { headers });
       
       console.log('Response status:', response.status);
       console.log('Response ok:', response.ok);
@@ -402,7 +404,7 @@ const OwnerDashboard = () => {
           {activeTab === 'overview' && renderOverview()}
           {activeTab === 'listings' && <AllListings showSuccess={showSuccess} showError={showError} />}
           {activeTab === 'bookings' && <OwnerBookings showSuccess={showSuccess} showError={showError} />}
-          {activeTab === 'payments' && <div className="placeholder">Payments & Finances - Coming Soon</div>}
+          {activeTab === 'payments' && <PaymentManagement />}
           {activeTab === 'messages' && <div className="placeholder">Messages - Coming Soon</div>}
           {activeTab === 'add-listing' && <UnifiedPostingForm showSuccess={showSuccess} showError={showError} />}
         </div>

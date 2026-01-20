@@ -4,8 +4,10 @@ import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../hooks/useNotifications';
 import DashboardNotifications from '../../components/DashboardNotifications';
 import NotificationBell from '../../components/NotificationBell';
+import PaymentManagement from '../../components/PaymentManagement';
 import './UserDashboard.css';
 import bikeFallback from '../../assets/bike3.jpg';
+import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
 
 const UserDashboard = () => {
   const navigate = useNavigate();
@@ -58,9 +60,9 @@ const UserDashboard = () => {
       // Tenant/Lessor browsing endpoints (NOT vendor-owned routes)
       const [propertiesRes, bikesRes] = await Promise.all([
         // Properties available to rent
-        fetch('http://localhost:3001/api/properties/available', { headers }),
+        fetch(`${API_BASE_URL}/properties/available`, { headers }),
         // Bikes available to rent
-        fetch('http://localhost:3001/api/bikes/available', { headers }),
+        fetch(`${API_BASE_URL}/bikes/available`, { headers }),
       ]);
 
       // If backend rejects the token, force re-auth.
@@ -154,7 +156,7 @@ const UserDashboard = () => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3001/api/properties/book', {
+      const response = await fetch(`${API_BASE_URL}/properties/book`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -344,7 +346,7 @@ const UserDashboard = () => {
                     <div className="listing-image">
                       {property.images && property.images.length > 0 ? (
                         <img 
-                          src={`http://localhost:3001/uploads/properties/${property.images[0]}`} 
+                          src={`${SERVER_BASE_URL}/uploads/properties/${property.images[0]}`} 
                           alt={property.title}
                           onError={(e) => {
                             e.target.src = 'https://via.placeholder.com/400x300?text=No+Image';
@@ -448,7 +450,7 @@ const UserDashboard = () => {
                   <div key={bike.id} className="listing-card">
                     <div className="listing-image">
                       {bike.images && bike.images.length > 0 ? (
-                        <img src={`http://localhost:3001${bike.images[0]}`} alt={bike.name} />
+                        <img src={`${SERVER_BASE_URL}${bike.images[0]}`} alt={bike.name} />
                       ) : (
                         <img src={bikeFallback} alt={bike.name} />
                       )}
@@ -827,7 +829,7 @@ const UserDashboard = () => {
       case 'rentals':
         return renderRentals();
       case 'payments':
-        return <div className="placeholder">Payments - Coming Soon</div>;
+        return <PaymentManagement />;
       case 'maintenance':
         return <div className="placeholder">Maintenance Requests - Coming Soon</div>;
       case 'messages':
@@ -886,7 +888,7 @@ const UserDashboard = () => {
           <div className="user-avatar">
             {user?.profilePicture ? (
               <img 
-                src={`http://localhost:3001${user.profilePicture}`} 
+                src={`${SERVER_BASE_URL}${user.profilePicture}`} 
                 alt={user.fullName} 
               />
             ) : (
@@ -1082,7 +1084,7 @@ const UserDashboard = () => {
                 {selectedProperty.images && selectedProperty.images.length > 0 && (
                   <div className="property-images">
                     <img 
-                      src={`http://localhost:3001/uploads/properties/${selectedProperty.images[0]}`} 
+                      src={`${SERVER_BASE_URL}${selectedProperty.images[0]}`} 
                       alt={selectedProperty.title}
                       onError={(e) => {
                         e.target.src = 'https://via.placeholder.com/400x300?text=No+Image';

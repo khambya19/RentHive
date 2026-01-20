@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import "./OtpModal.css";
+import API_BASE_URL from '../config/api';
 
 const OtpModal = ({ email, onClose, onVerify }) => {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
@@ -72,7 +73,7 @@ const OtpModal = ({ email, onClose, onVerify }) => {
     setLoading(true);
     setError("");
     try {
-      const res = await axios.post("http://localhost:3001/api/auth/verify-otp", { 
+      const res = await axios.post(`${API_BASE_URL}/auth/verify-otp`, { 
         email, 
         otp: otpString 
       });
@@ -93,7 +94,7 @@ const OtpModal = ({ email, onClose, onVerify }) => {
   const handleResend = async () => {
     setLoading(true);
     try {
-      await axios.post("http://localhost:3001/api/auth/resend-otp", { email });
+      await axios.post(`${API_BASE_URL}/auth/resend-otp`, { email });
       setOtp(["", "", "", "", "", ""]);
       setTimeLeft(600);
       setCanResend(false);

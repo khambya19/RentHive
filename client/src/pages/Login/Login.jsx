@@ -3,6 +3,7 @@ import axios from 'axios';
 import './Login.css';
 import { useNavigate } from 'react-router-dom'; 
 import { useAuth } from '../../context/AuthContext';
+import API_BASE_URL from '../../config/api';
 
 import RenthiveLogo from '../../assets/Logo.png'; 
 import LoginIllustration from '../../assets/Login_page.png'; 
@@ -25,7 +26,7 @@ const Login = () => {
     setError(null);
     try {
         console.log('Attempting login with:', email);
-        const response = await axios.post('http://localhost:3001/api/auth/login', { email, password });
+        const response = await axios.post(`${API_BASE_URL}/auth/login`, { email, password });
         console.log('Login response:', response.data);
         const { token, user } = response.data;
         
@@ -33,15 +34,15 @@ const Login = () => {
         login(user, token);
         
         // Redirect based on user type
-        // Owner → Owner Dashboard (full management)
-        // Lessor/Vendor → Tenant Dashboard (browse only)
-        if (user.type === 'owner') {
+        // owner/vendor → Owner Dashboard (manage properties/bikes)
+        // renter/lessor → User Dashboard (browse and rent)
+        if (user.type === 'owner' || user.type === 'vendor') {
             navigate('/owner/dashboard');
-        } else if (user.type === 'lessor' || user.type === 'vendor') {
-            navigate('/tenant/dashboard');
+        } else if (user.type === 'renter' || user.type === 'lessor') {
+            navigate('/user/dashboard');
         } else {
             // Fallback
-            navigate('/tenant/dashboard');
+            navigate('/user/dashboard');
         }
     } catch (err) {
         console.error('Login error:', err);

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import PropertyManagement from './PropertyManagement';
 import PropertyLocationMap from '../../components/PropertyLocationMap';
 import './UnifiedPostingForm.css';
+import API_BASE_URL from '../../config/api';
 
 const UnifiedPostingForm = ({ showSuccess, showError }) => {
   const [listingType, setListingType] = useState(null); // 'property' or 'automobile'
@@ -47,7 +48,7 @@ const UnifiedPostingForm = ({ showSuccess, showError }) => {
         }
       });
 
-      const response = await fetch('http://localhost:3001/api/bikes/vendor', {
+      const response = await fetch(`${API_BASE_URL}/bikes/vendor`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

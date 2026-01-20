@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import PropertyLocationMap from '../../components/PropertyLocationMap';
 import AddPropertyForm from '../../components/AddPropertyForm';
 import '../../components/PropertyLocationMap.css';
+import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
 
 const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
   const { user } = useAuth();
@@ -44,7 +45,7 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
   const fetchProperties = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3001/api/properties', {
+      const response = await fetch(`${API_BASE_URL}/properties`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -70,7 +71,7 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
         longitude: selectedLocation?.lng || null,
       };
 
-      const response = await fetch('http://localhost:3001/api/properties', {
+      const response = await fetch(`${API_BASE_URL}/properties`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -182,7 +183,7 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
           <div key={property.id} className="property-card">
             <div className="property-image">
               <img 
-                src={property.images?.[0] ? `http://localhost:3001/uploads/properties/${property.images[0]}` : 'https://via.placeholder.com/300x200'}
+                src={property.images?.[0] ? `${SERVER_BASE_URL}/uploads/properties/${property.images[0]}` : 'https://via.placeholder.com/300x200'}
                 alt={property.title}
                 onError={(e) => {
                   e.target.src = 'https://via.placeholder.com/300x200?text=No+Image';

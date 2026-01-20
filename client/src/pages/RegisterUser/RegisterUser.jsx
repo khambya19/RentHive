@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import OtpModal from '../../components/otpModal';
+import API_BASE_URL from '../../config/api';
 
 const RegisterUser = () => {
   const navigate = useNavigate();
@@ -51,7 +52,7 @@ const RegisterUser = () => {
 
       // Always use JSON for now to debug the issue
       const requestBody = {
-        type: 'lessor',
+        type: 'renter',
         fullName: form.fullName,
         email: form.email,
         phone: form.phoneNumber,
@@ -70,7 +71,7 @@ const RegisterUser = () => {
       console.log('Headers:', headers);
       console.log('Body string:', body);
 
-      const response = await fetch('http://localhost:3001/api/auth/register', {
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
         headers,
         mode: 'cors',

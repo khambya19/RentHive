@@ -204,7 +204,7 @@ const AddPropertyForm = ({ onSubmit, onCancel, initialData = null }) => {
         });
 
         const token = localStorage.getItem('token');
-        const uploadResponse = await fetch('http://localhost:3001/api/properties/upload-images', {
+        const uploadResponse = await fetch('http://localhost:5001/api/properties/upload-images', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`

@@ -86,8 +86,8 @@ const OwnerBookings = ({ showSuccess, showError }) => {
     try {
       const token = localStorage.getItem('token');
       const endpoint = bookingType === 'property' 
-        ? `http://localhost:3001/api/properties/bookings/${bookingId}/status`
-        : `http://localhost:3001/api/bikes/bookings/${bookingId}/status`;
+        ? `http://localhost:5001/api/properties/bookings/${bookingId}/status`
+        : `http://localhost:5001/api/bikes/bookings/${bookingId}/status`;
 
       const status = action === 'accept' ? 'Approved' : 'Rejected';
 
@@ -282,22 +282,6 @@ const OwnerBookings = ({ showSuccess, showError }) => {
 
         <div className="booking-footer">
           <small>Booked on {formatDate(booking.createdAt)}</small>
-          {booking.status?.toLowerCase() === 'pending' && (
-            <div className="booking-actions">
-              <button 
-                className="btn-approve"
-                onClick={() => handleApproveBooking(booking.id, 'property')}
-              >
-                ✓ Accept
-              </button>
-              <button 
-                className="btn-reject"
-                onClick={() => handleRejectBooking(booking.id, 'property')}
-              >
-                ✗ Reject
-              </button>
-            </div>
-          )}
         </div>
       </div>
     ));

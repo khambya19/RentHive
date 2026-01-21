@@ -16,7 +16,6 @@ const bikeRoutes = require('./routes/bikeRoutes');
 const ownerRoutes = require('./routes/ownerRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
-const testRoutes = require('./routes/testRoutes');
 const User = require('./models/User');
 const Property = require('./models/Property');
 const Booking = require('./models/Booking');
@@ -35,6 +34,12 @@ const io = new Server(server, {
     credentials: true
   }
 });
+
+// Connected users tracking for real-time notifications
+const connectedUsers = new Map();
+
+// Export io and connectedUsers for use in controllers
+module.exports = { io, connectedUsers };
 
 // Enhanced CORS configuration
 app.use(cors({
@@ -90,7 +95,6 @@ app.use('/api/bikes', bikeRoutes);
 app.use('/api/owners', ownerRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/payments', paymentRoutes);
-app.use('/api/test', testRoutes); // Test endpoints for payment scheduler
 
 // Serve uploaded files
 app.use('/uploads', express.static('uploads'));
@@ -104,11 +108,18 @@ io.on('connection', (socket) => {
   socket.on('register', (userId) => {
     socket.userId = userId;
     socket.join(`user_${userId}`);
-    console.log(`User ${userId} registered to socket ${socket.id}`);
+    connectedUsers.set(userId.toString(), socket.id);
+    console.log(`👤 User ${userId} registered to socket ${socket.id}`);
+    console.log(`📊 Total connected users: ${connectedUsers.size}`);
   });
 
   socket.on('disconnect', () => {
+    if (socket.userId) {
+      connectedUsers.delete(socket.userId.toString());
+      console.log(`👋 User ${socket.userId} disconnected`);
+    }
     console.log('❌ Client disconnected:', socket.id);
+    console.log(`📊 Total connected users: ${connectedUsers.size}`);
   });
 });
 

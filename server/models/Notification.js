@@ -14,17 +14,16 @@ const Notification = {
       message, 
       type = 'info', 
       isBroadcast = false, 
-      link = null,
-      metadata = null
+      link = null
     } = notificationData;
 
     try {
       const result = await pool.query(
         `INSERT INTO notifications 
-         (user_id, title, message, type, is_broadcast, link, metadata, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW()) 
+         (user_id, title, message, type, is_broadcast, link, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW()) 
          RETURNING *`,
-        [userId, title, message, type, isBroadcast, link, metadata]
+        [userId, title, message, type, isBroadcast, link]
       );
       
       console.log('✅ Notification created:', result.rows[0].id);

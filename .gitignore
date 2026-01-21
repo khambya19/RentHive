@@ -23,9 +23,12 @@ build/
 out/
 
 # Uploads (user-generated content)
-server/uploads/
+server/uploads/profiles/
+server/uploads/properties/
+server/uploads/bikes/
 **/uploads/profiles/
 **/uploads/properties/
+**/uploads/bikes/
 
 # OS files
 .DS_Store
@@ -80,3 +83,19 @@ coverage/
 # Misc
 .eslintcache
 *.tsbuildinfo
+
+# Documentation files (conversation artifacts)
+ADVANCED_SEARCH_FILTER_GUIDE.md
+IMPLEMENTATION_SUMMARY.md
+PAYMENT_SYSTEM_GUIDE.md
+PAYMENT_SYSTEM_README.md
+
+# Scripts and test files
+server/scripts/check*.js
+server/scripts/test*.js
+server/scripts/delete*.js
+server/scripts/*Test*.js
+server/routes/testRoutes.js
+**/*test*.js
+**/test/
+server/check-property.js

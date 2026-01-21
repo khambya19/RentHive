@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { useNotifications } from '../../hooks/useNotifications';
@@ -14,6 +14,7 @@ import "./OwnerDashboard.css";
 
 const OwnerDashboard = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, logout } = useAuth();
   const socket = useSocket();
   const { notifications, removeNotification, showSuccess, showError } = useNotifications();
@@ -30,6 +31,14 @@ const OwnerDashboard = () => {
     bikeRentals: 0,
   });
   const [loading, setLoading] = useState(true);
+
+  // Handle tab from URL query parameter
+  useEffect(() => {
+    const tabFromUrl = searchParams.get('tab');
+    if (tabFromUrl) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -380,13 +389,7 @@ const OwnerDashboard = () => {
             </p>
           </div>
           <div className="header-right">
-            <NotificationBell 
-              notifications={notifications}
-              onNotificationClick={(notif) => {
-                // Handle notification click
-                console.log('Notification clicked:', notif);
-              }}
-            />
+            <NotificationBell userId={user?.id} />
             <button 
               className="settings-btn"
               onClick={() => setShowSettings(!showSettings)}

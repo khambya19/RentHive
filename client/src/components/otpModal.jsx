@@ -72,18 +72,19 @@ const OtpModal = ({ email, onClose, onVerify }) => {
     setLoading(true);
     setError("");
     try {
-      const res = await axios.post("http://localhost:3000/api/auth/verify-otp", { 
+      const res = await axios.post("http://localhost:3001/api/auth/verify-otp", { 
         email, 
         otp: otpString 
       });
-      if (res.data.message) {
+      if (res.data.success || res.data.message) {
         onVerify();
         onClose();
       } else {
-        setError(res.data.message || "Invalid OTP");
+        setError(res.data.error || "Invalid OTP");
       }
     } catch (err) {
-      setError(err.response?.data?.message || "Something went wrong");
+      console.error('Verify OTP error:', err);
+      setError(err.response?.data?.error || err.response?.data?.message || "Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -92,7 +93,7 @@ const OtpModal = ({ email, onClose, onVerify }) => {
   const handleResend = async () => {
     setLoading(true);
     try {
-      await axios.post("http://localhost:3000/api/auth/resend-otp", { email });
+      await axios.post("http://localhost:3001/api/auth/resend-otp", { email });
       setOtp(["", "", "", "", "", ""]);
       setTimeLeft(600);
       setCanResend(false);

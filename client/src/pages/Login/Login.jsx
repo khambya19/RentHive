@@ -7,8 +7,6 @@ import { useAuth } from '../../context/AuthContext';
 import RenthiveLogo from '../../assets/Logo.png'; 
 import LoginIllustration from '../../assets/Login_page.png'; 
 
-const API_BASE_URL = 'http://localhost:3000/api/auth';
-
 const Login = () => {
   const navigate = useNavigate(); 
   const { login } = useAuth();
@@ -22,23 +20,31 @@ const Login = () => {
     setShowPassword(prevShowPassword => !prevShowPassword);
   };
 
-  const handleSubmit = async (e) => {
+    const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
     try {
-        const response = await axios.post(`${API_BASE_URL}/login`, { email, password });
+        console.log('Attempting login with:', email);
+        const response = await axios.post('http://localhost:3001/api/auth/login', { email, password });
+        console.log('Login response:', response.data);
         const { token, user } = response.data;
         
         // Use AuthContext login
         login(user, token);
         
         // Redirect based on user type
-        if (user.type === 'vendor' || user.type === 'owner') {
-            navigate('/vendor/dashboard');
+        // Owner → Owner Dashboard (full management)
+        // Lessor/Vendor → Tenant Dashboard (browse only)
+        if (user.type === 'owner') {
+            navigate('/owner/dashboard');
+        } else if (user.type === 'lessor' || user.type === 'vendor') {
+            navigate('/tenant/dashboard');
         } else {
-            navigate('/lessor/dashboard');
+            // Fallback
+            navigate('/tenant/dashboard');
         }
     } catch (err) {
+        console.error('Login error:', err);
         setError(err.response?.data?.error || 'Login failed. Please check your credentials.');
     }
   };

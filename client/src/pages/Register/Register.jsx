@@ -20,7 +20,7 @@ const Register = () => {
             <p>List your properties and vehicles for rent</p>
           </div>
 
-          <div className="register-option" onClick={() => navigate('/register-lessor')}>
+          <div className="register-option" onClick={() => navigate('/register-user')}>
             <div className="option-icon">🏠</div>
             <h3>Register as Lessor</h3>
             <p>Find and rent properties or vehicles</p>

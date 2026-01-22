@@ -5,7 +5,7 @@ import axios from 'axios';
 import './ForgotPassword.css'; 
 import { useNavigate } from 'react-router-dom';
 
-const API_BASE_URL = 'http://localhost:3000/api/auth';
+const API_BASE_URL = 'http://localhost:5000/api/auth';
 
 const ForgotPassword = () => {
     const navigate = useNavigate(); 

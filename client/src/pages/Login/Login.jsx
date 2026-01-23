@@ -32,9 +32,7 @@ const Login = () => {
         // Use AuthContext login
         login(user, token);
         
-        // Redirect based on user type
-        // Owner → Owner Dashboard (full management)
-        // Lessor/Vendor → Tenant Dashboard (browse only)
+
         if (user.type === 'owner') {
             navigate('/owner/dashboard');
         } else if (user.type === 'lessor' || user.type === 'vendor') {

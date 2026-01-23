@@ -65,6 +65,8 @@ function AppContent() {
                 <Route path="/register" element={<Register />} />
                 <Route path="/register-user" element={<RegisterUser />} />
                 <Route path="/register-owner" element={<RegisterOwner />} />
+                <Route path="/register-vendor" element={<RegisterUser />} />
+                <Route path="/register-lessor" element={<RegisterOwner />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 
                 {/* Protected Dashboard Routes */}

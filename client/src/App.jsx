@@ -26,12 +26,12 @@ const ProtectedRoute = ({ children, allowedTypes }) => {
     
     if (allowedTypes && !allowedTypes.includes(user.type)) {
         // Redirect based on user type
-        if (user.type === 'lessor') {
+        if (user.type === 'renter' || user.type === 'lessor') {
             return <Navigate to="/user/dashboard" replace />;
-        } else if (user.type === 'owner') {
+        } else if (user.type === 'owner' || user.type === 'vendor') {
             return <Navigate to="/owner/dashboard" replace />;
         } else {
-            return <Navigate to="/user/dashboard" replace />;
+            return <Navigate to="/login" replace />;
         }
     }
     
@@ -65,32 +65,35 @@ function AppContent() {
                 <Route path="/register" element={<Register />} />
                 <Route path="/register-user" element={<RegisterUser />} />
                 <Route path="/register-owner" element={<RegisterOwner />} />
-                <Route path="/register-vendor" element={<RegisterUser />} />
-                <Route path="/register-lessor" element={<RegisterOwner />} />
+                    <Route path="/register-vendor" element={<RegisterOwner />} />
+                    <Route path="/register-lessor" element={<RegisterOwner />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 
                 {/* Protected Dashboard Routes */}
                 
                 {/* User/Tenant Dashboard - Browse and Rent Properties/Bikes */}
                 <Route path="/user/dashboard" element={
-                    <ProtectedRoute allowedTypes={['lessor']}>
+                    <ProtectedRoute allowedTypes={['renter', 'lessor']}>
                         <UserDashboard />
                     </ProtectedRoute>
                 } />
                 
                 {/* Alias route for tenant dashboard */}
                 <Route path="/tenant/dashboard" element={
-                    <ProtectedRoute allowedTypes={['lessor']}>
+                    <ProtectedRoute allowedTypes={['renter', 'lessor']}>
                         <UserDashboard />
                     </ProtectedRoute>
                 } />
                 
                 {/* Owner Dashboard - List and Manage Properties/Bikes */}
                 <Route path="/owner/dashboard" element={
-                    <ProtectedRoute allowedTypes={['owner']}>
+                    <ProtectedRoute allowedTypes={['owner', 'vendor']}>
                         <OwnerDashboard />
                     </ProtectedRoute>
                 } />
+
+                {/* Fallback for unknown routes */}
+                <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
             
             {showFooter && <Footer />}

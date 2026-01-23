@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../context/SocketContext';
 import './NotificationBell.css';
 
 const NotificationBell = ({ userId }) => {
+  const navigate = useNavigate();
   const {
     notifications,
     unreadCount,
@@ -81,13 +83,20 @@ const NotificationBell = ({ userId }) => {
 
   // Handle notification click
   const handleNotificationClick = async (notification) => {
+    console.log('🔔 Notification clicked:', notification);
+    console.log('📍 Link value:', notification.link);
+    console.log('📍 Link type:', typeof notification.link);
+    
     if (!notification.is_read) {
       await markNotificationAsRead(notification.id);
     }
 
-    // Navigate to link if provided
-    if (notification.link) {
-      window.location.href = notification.link;
+    setIsOpen(false);
+
+    // Navigate to link if provided using React Router
+    if (notification.link && notification.link !== 'null' && notification.link !== '') {
+      console.log('✅ Navigating to:', notification.link);
+      navigate(notification.link, { replace: false });
     }
   };
 

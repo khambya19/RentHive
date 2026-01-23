@@ -353,3 +353,79 @@
     font-size: 14px;
   }
 }
+
+/* Accept/Decline Action Buttons */
+.booking-actions {
+  display: flex;
+  gap: 12px;
+  padding: 15px 20px;
+  background: #f8fafc;
+  border-top: 1px solid #e0e6ed;
+}
+
+.booking-actions button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.booking-actions button svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Accept button styles */
+.booking-actions .btn-accept,
+.btn-approve {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.booking-actions .btn-accept:hover,
+.btn-approve:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+/* Decline/Reject button styles */
+.booking-actions .btn-decline,
+.btn-reject {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+}
+
+.booking-actions .btn-decline:hover,
+.btn-reject:hover {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+.booking-actions button:active,
+.btn-approve:active,
+.btn-reject:active {
+  transform: translateY(0);
+}
+
+/* Mobile responsive for action buttons */
+@media (max-width: 480px) {
+  .booking-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .booking-actions button {
+    width: 100%;
+  }
+}

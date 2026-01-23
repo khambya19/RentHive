@@ -291,11 +291,126 @@ const deleteNotification = async (req, res) => {
   }
 };
 
+/**
+ * Handle booking response (Accept/Decline)
+ * @route POST /api/notifications/booking-response
+ */
+const handleBookingResponse = async (req, res) => {
+  try {
+    const { bookingId, action, notificationId } = req.body;
+    const vendorId = req.user.id;
+
+    // Validate required fields
+    if (!bookingId || !action || !['accept', 'decline'].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Booking ID and valid action (accept/decline) are required'
+      });
+    }
+
+    const Booking = require('../models/Booking');
+    const Property = require('../models/Property');
+    const User = require('../models/User');
+
+    // Get the booking
+    const booking = await Booking.findOne({
+      where: { id: bookingId, vendorId },
+      include: [
+        { model: User, as: 'tenant', attributes: ['id', 'fullName', 'email'] },
+        { model: Property, as: 'property', attributes: ['id', 'title'] }
+      ]
+    });
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: 'Booking not found'
+      });
+    }
+
+    // Update booking status
+    const newStatus = action === 'accept' ? 'Approved' : 'Rejected';
+    await booking.update({ status: newStatus });
+
+    // Update property status if accepted
+    if (action === 'accept') {
+      await Property.update(
+        { status: 'Rented' },
+        { where: { id: booking.propertyId } }
+      );
+    }
+
+    // Mark the original notification as read
+    if (notificationId) {
+      await Notification.markAsRead(parseInt(notificationId), vendorId);
+    }
+
+    // Send notification to tenant about the response
+    const moveInFormatted = new Date(booking.moveInDate).toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
+    });
+
+    const responseTitle = action === 'accept' 
+      ? '✅ Booking Request Accepted!' 
+      : '❌ Booking Request Declined';
+    
+    const responseMessage = action === 'accept'
+      ? `Great news! Your booking request for "${booking.property.title}" starting ${moveInFormatted} has been approved. The owner will contact you soon with next steps.`
+      : `Unfortunately, your booking request for "${booking.property.title}" starting ${moveInFormatted} has been declined. Please try another property.`;
+
+    // Create notification for tenant
+    const tenantNotification = await Notification.create({
+      userId: booking.tenantId,
+      title: responseTitle,
+      message: responseMessage,
+      type: action === 'accept' ? 'success' : 'error',
+      isBroadcast: false,
+      link: `/user/applications`
+    });
+
+    // Emit real-time notification to tenant
+    const { io, connectedUsers } = getSocketIO();
+    if (io && connectedUsers) {
+      const tenantSocketId = connectedUsers.get(booking.tenantId.toString());
+      if (tenantSocketId) {
+        io.to(tenantSocketId).emit('new-notification', {
+          id: tenantNotification.id,
+          title: tenantNotification.title,
+          message: tenantNotification.message,
+          type: tenantNotification.type,
+          link: tenantNotification.link,
+          isRead: false,
+          createdAt: tenantNotification.created_at
+        });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Booking ${action === 'accept' ? 'accepted' : 'declined'} successfully`,
+      data: {
+        bookingId: booking.id,
+        status: newStatus
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error handling booking response:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to process booking response',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   createBroadcast,
   createUserNotification,
   getUserNotifications,
   markAsRead,
   markAllAsRead,
-  deleteNotification
+  deleteNotification,
+  handleBookingResponse
 };

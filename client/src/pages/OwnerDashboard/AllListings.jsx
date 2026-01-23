@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import './AllListings.css';
+import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
 
 const AllListings = ({ showSuccess, showError }) => {
   const { user } = useAuth();
@@ -26,7 +27,7 @@ const AllListings = ({ showSuccess, showError }) => {
   const fetchProperties = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3001/api/properties', {
+      const response = await fetch(`${API_BASE_URL}/properties`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -42,7 +43,7 @@ const AllListings = ({ showSuccess, showError }) => {
   const fetchBikes = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3001/api/bikes/vendor', {
+      const response = await fetch(`${API_BASE_URL}/bikes/vendor`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -60,7 +61,7 @@ const AllListings = ({ showSuccess, showError }) => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:3001/api/properties/${propertyId}`, {
+      const response = await fetch(`${API_BASE_URL}/properties/${propertyId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -82,7 +83,7 @@ const AllListings = ({ showSuccess, showError }) => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:3001/api/bikes/vendor/${bikeId}`, {
+      const response = await fetch(`${API_BASE_URL}/bikes/vendor/${bikeId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -143,7 +144,7 @@ const AllListings = ({ showSuccess, showError }) => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:3001/api/properties/${editingItem.id}`, {
+      const response = await fetch(`${API_BASE_URL}/properties/${editingItem.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -170,7 +171,7 @@ const AllListings = ({ showSuccess, showError }) => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:3001/api/bikes/vendor/${editingItem.id}`, {
+      const response = await fetch(`${API_BASE_URL}/bikes/vendor/${editingItem.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -217,8 +218,11 @@ const AllListings = ({ showSuccess, showError }) => {
       <div className="listing-image">
         {property.images && property.images.length > 0 ? (
           <img 
-            src={`http://localhost:3001/uploads/properties/${property.images[0]}`} 
+            src={`${SERVER_BASE_URL}/uploads/properties/${property.images[0]}`} 
             alt={property.title}
+            onError={(e) => {
+              e.target.src = 'https://via.placeholder.com/300x200?text=No+Image';
+            }}
           />
         ) : (
           <div className="placeholder-image">🏠</div>
@@ -234,7 +238,7 @@ const AllListings = ({ showSuccess, showError }) => {
           <span>📐 {property.area} sq.ft</span>
         </div>
         <div className="listing-pricing">
-          <span className="price">NPR {property.rentPrice?.toLocaleString()}/month</span>
+          <span className="price">NPR {property.rentPrice ? Number(property.rentPrice).toLocaleString() : '0'}/month</span>
           <span className={`status ${property.status?.toLowerCase()}`}>{property.status}</span>
         </div>
       </div>
@@ -263,15 +267,18 @@ const AllListings = ({ showSuccess, showError }) => {
       <div className="listing-image">
         {bike.images && bike.images.length > 0 ? (
           <img 
-            src={`http://localhost:3001/uploads/bikes/${bike.images[0]}`} 
+            src={`${SERVER_BASE_URL}/uploads/bikes/${bike.images[0]}`} 
             alt={`${bike.brand} ${bike.model}`}
+            onError={(e) => {
+              e.target.src = 'https://via.placeholder.com/300x200?text=No+Image';
+            }}
           />
         ) : (
           <div className="placeholder-image">🚴</div>
         )}
       </div>
       <div className="listing-content">
-        <h3>{bike.brand} {bike.model}</h3>
+        <h3>{bike.name || `${bike.brand} ${bike.model}`}</h3>
         <p className="listing-type">{bike.type}</p>
         <p className="listing-location">📍 {bike.location}</p>
         <div className="listing-details">
@@ -280,7 +287,7 @@ const AllListings = ({ showSuccess, showError }) => {
           {bike.registrationNumber && <span>🔢 {bike.registrationNumber}</span>}
         </div>
         <div className="listing-pricing">
-          <span className="price">NPR {bike.dailyRate?.toLocaleString()}/day</span>
+          <span className="price">NPR {bike.dailyRate ? Number(bike.dailyRate).toLocaleString() : '0'}/day</span>
           <span className={`status ${bike.status?.toLowerCase()}`}>{bike.status}</span>
         </div>
       </div>

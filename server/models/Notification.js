@@ -14,7 +14,7 @@ const Notification = {
       message, 
       type = 'info', 
       isBroadcast = false, 
-      link = null 
+      link = null
     } = notificationData;
 
     try {

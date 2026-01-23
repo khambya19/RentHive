@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../../context/SocketContext';
 import './OwnerBookings.css';
+import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
 
 const OwnerBookings = ({ showSuccess, showError }) => {
   const socket = useSocket();
@@ -55,7 +56,7 @@ const OwnerBookings = ({ showSuccess, showError }) => {
       }
 
       console.log('Fetching bookings from /api/owners/all-bookings');
-      const response = await fetch('http://localhost:3001/api/owners/all-bookings', {
+      const response = await fetch(`${API_BASE_URL}/owners/all-bookings`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -81,12 +82,106 @@ const OwnerBookings = ({ showSuccess, showError }) => {
     }
   };
 
+  const handleBookingAction = async (bookingId, action, bookingType) => {
+    try {
+      const token = localStorage.getItem('token');
+      const endpoint = bookingType === 'property' 
+        ? `http://localhost:5001/api/properties/bookings/${bookingId}/status`
+        : `http://localhost:5001/api/bikes/bookings/${bookingId}/status`;
+
+      const status = action === 'accept' ? 'Approved' : 'Rejected';
+
+      const response = await fetch(endpoint, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status })
+      });
+
+      if (response.ok) {
+        showSuccess(
+          action === 'accept' ? 'Booking Accepted!' : 'Booking Declined',
+          `The booking has been ${action === 'accept' ? 'accepted' : 'declined'} successfully.`
+        );
+        fetchBookings(); // Refresh the bookings list
+      } else {
+        const errorData = await response.json();
+        showError('Failed to update booking', errorData.error || 'Please try again');
+      }
+    } catch (error) {
+      console.error('Error updating booking:', error);
+      showError('Error', 'Failed to update booking status');
+    }
+  };
+
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  const handleApproveBooking = async (bookingId, type) => {
+    try {
+      const token = localStorage.getItem('token');
+      const endpoint = type === 'property' 
+        ? `${API_BASE_URL}/owners/bookings/${bookingId}/approve`
+        : `${API_BASE_URL}/bikes/bookings/${bookingId}/approve`;
+
+      const response = await fetch(endpoint, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        showSuccess('Booking Approved', 'Payment reminders will be sent automatically');
+        fetchBookings();
+      } else {
+        const error = await response.json();
+        showError('Failed to approve', error.message || 'Something went wrong');
+      }
+    } catch (error) {
+      console.error('Error approving booking:', error);
+      showError('Error', 'Failed to approve booking');
+    }
+  };
+
+  const handleRejectBooking = async (bookingId, type) => {
+    if (!confirm('Are you sure you want to reject this booking?')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const endpoint = type === 'property'
+        ? `${API_BASE_URL}/owners/bookings/${bookingId}/reject`
+        : `${API_BASE_URL}/bikes/bookings/${bookingId}/reject`;
+
+      const response = await fetch(endpoint, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        showSuccess('Booking Rejected', 'The booking has been rejected');
+        fetchBookings();
+      } else {
+        const error = await response.json();
+        showError('Failed to reject', error.message || 'Something went wrong');
+      }
+    } catch (error) {
+      console.error('Error rejecting booking:', error);
+      showError('Error', 'Failed to reject booking');
+    }
   };
 
   const getStatusClass = (status) => {
@@ -119,16 +214,16 @@ const OwnerBookings = ({ showSuccess, showError }) => {
     return bookings.propertyBookings.map((booking) => (
       <div key={`property-${booking.id}`} className="booking-card">
         <div className="booking-header">
-          <div className="booking-type-badge property">Property Rental</div>
+          <div className="booking-type-badge property">PROPERTY RENTAL</div>
           <div className={`booking-status ${getStatusClass(booking.status)}`}>
-            {booking.status || 'Pending'}
+            {booking.status?.toUpperCase() || 'PENDING'}
           </div>
         </div>
         <div className="booking-content">
           <div className="booking-image">
             {booking.property?.images?.[0] ? (
               <img 
-                src={`http://localhost:3001/uploads/properties/${booking.property.images[0]}`} 
+                src={`${SERVER_BASE_URL}/uploads/properties/${booking.property.images[0]}`} 
                 alt={booking.property.title}
               />
             ) : (
@@ -137,19 +232,54 @@ const OwnerBookings = ({ showSuccess, showError }) => {
           </div>
           <div className="booking-details">
             <h3>{booking.property?.title || 'Property'}</h3>
-            <p className="booking-location">📍 {booking.property?.location}</p>
-            <p className="booking-type">Type: {booking.property?.propertyType}</p>
-            <p className="booking-renter">Renter: {booking.renter?.fullName}</p>
-            <p className="booking-contact">📞 {booking.renter?.phone}</p>
+            <p className="booking-location">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '16px', height: '16px', marginRight: '4px' }}>
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                <circle cx="12" cy="10" r="3"/>
+              </svg>
+              {booking.property?.address}, {booking.property?.city}
+            </p>
+            <p className="booking-type">Type: {booking.property?.propertyType || 'House'}</p>
+            <p className="booking-renter">Renter: <strong>{booking.tenant?.fullName || booking.renter?.fullName}</strong></p>
+            <p className="booking-contact">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '16px', height: '16px', marginRight: '4px' }}>
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+              </svg>
+              {booking.tenant?.phone || booking.renter?.phone || '9811387634'}
+            </p>
             <div className="booking-dates">
-              <span>From: {formatDate(booking.startDate)}</span>
-              <span>To: {formatDate(booking.endDate)}</span>
+              <span>From: <strong>{formatDate(booking.moveInDate || booking.startDate)}</strong></span>
+              <span>To: <strong>{formatDate(booking.moveOutDate || booking.endDate)}</strong></span>
             </div>
-            {booking.totalAmount && (
-              <p className="booking-amount">Amount: NPR {booking.totalAmount.toLocaleString()}</p>
-            )}
+            <p className="booking-amount">Amount: <strong>NPR {(booking.monthlyRent || booking.totalAmount || 0).toLocaleString()}</strong></p>
           </div>
         </div>
+        
+        {/* Accept/Decline buttons for pending bookings */}
+        {booking.status?.toLowerCase() === 'pending' && (
+          <div className="booking-actions">
+            <button 
+              className="btn-accept"
+              onClick={() => handleBookingAction(booking.id, 'accept', 'property')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Accept
+            </button>
+            <button 
+              className="btn-decline"
+              onClick={() => handleBookingAction(booking.id, 'decline', 'property')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+              Decline
+            </button>
+          </div>
+        )}
+
         <div className="booking-footer">
           <small>Booked on {formatDate(booking.createdAt)}</small>
         </div>
@@ -180,7 +310,7 @@ const OwnerBookings = ({ showSuccess, showError }) => {
           <div className="booking-image">
             {booking.bike?.images?.[0] ? (
               <img 
-                src={`http://localhost:3001/uploads/bikes/${booking.bike.images[0]}`} 
+                src={`${SERVER_BASE_URL}/uploads/bikes/${booking.bike.images[0]}`} 
                 alt={`${booking.bike.brand} ${booking.bike.model}`}
               />
             ) : (

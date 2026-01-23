@@ -23,10 +23,13 @@ export const SocketProvider = ({ children }) => {
   useEffect(() => {
     // Skip socket initialization if server doesn't support it
     let socketInstance = null;
-    
+
     try {
-      socketInstance = io('http://localhost:3001', {
-        transports: ['websocket', 'polling'],
+      socketInstance = io('http://localhost:5001', {
+        // Prefer polling first to avoid 'WebSocket is closed before the connection is established'
+        // in dev/proxy/CORS scenarios; socket.io will upgrade to websocket when available.
+        transports: ['polling', 'websocket'],
+        upgrade: true,
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionAttempts: 3,
@@ -36,7 +39,7 @@ export const SocketProvider = ({ children }) => {
       socketInstance.on('connect', () => {
         console.log('✅ Socket connected:', socketInstance.id);
         setIsConnected(true);
-        
+
         // Re-register user if they were registered before
         if (currentUserId) {
           socketInstance.emit('register', currentUserId);
@@ -57,20 +60,22 @@ export const SocketProvider = ({ children }) => {
       // Listen for new notifications
       socketInstance.on('new-notification', (notification) => {
         console.log('🔔 New notification received:', notification);
-        
+
         // Add notification to state
         setNotifications((prev) => [notification, ...prev]);
         setUnreadCount((prev) => prev + 1);
 
-        // Request browser notification permission and show notification
-        if (Notification.permission === 'granted') {
-          showBrowserNotification(notification);
-        } else if (Notification.permission !== 'denied') {
-          Notification.requestPermission().then((permission) => {
-            if (permission === 'granted') {
-              showBrowserNotification(notification);
-            }
-          });
+        // Browser notifications are optional; guard for unsupported environments
+        if (typeof window !== 'undefined' && 'Notification' in window) {
+          if (Notification.permission === 'granted') {
+            showBrowserNotification(notification);
+          } else if (Notification.permission !== 'denied') {
+            Notification.requestPermission().then((permission) => {
+              if (permission === 'granted') {
+                showBrowserNotification(notification);
+              }
+            });
+          }
         }
       });
 
@@ -101,7 +106,7 @@ export const SocketProvider = ({ children }) => {
     try {
       const { title, message, type } = notification;
       const icon = getNotificationIcon(type);
-      
+
       new Notification(title, {
         body: message,
         icon: '/favicon.ico', // You can customize this
@@ -130,7 +135,7 @@ export const SocketProvider = ({ children }) => {
   const registerUser = useCallback((userId) => {
     console.log('👤 Registering user:', userId);
     setCurrentUserId(userId);
-    
+
     if (socket && isConnected) {
       socket.emit('register', userId);
     }
@@ -138,18 +143,20 @@ export const SocketProvider = ({ children }) => {
     // Fetch existing notifications
     fetchUserNotifications(userId);
 
-    // Request notification permission
-    if (Notification.permission === 'default') {
-      Notification.requestPermission().then((permission) => {
-        console.log('🔔 Notification permission:', permission);
-      });
+    // Request notification permission (optional)
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().then((permission) => {
+          console.log('🔔 Notification permission:', permission);
+        });
+      }
     }
   }, [socket, isConnected]);
 
   // Fetch user notifications from API
   const fetchUserNotifications = async (userId) => {
     try {
-      const response = await axios.get(`http://localhost:3001/api/notifications/user/${userId}`);
+      const response = await axios.get(`http://localhost:5001/api/notifications/user/${userId}`);
       if (response.data.success) {
         setNotifications(response.data.data.notifications);
         setUnreadCount(response.data.data.unreadCount);
@@ -166,7 +173,7 @@ export const SocketProvider = ({ children }) => {
 
     try {
       const response = await axios.patch(
-        `http://localhost:3001/api/notifications/${notificationId}/read`,
+        `http://localhost:5001/api/notifications/${notificationId}/read`,
         { userId: currentUserId }
       );
 
@@ -191,7 +198,7 @@ export const SocketProvider = ({ children }) => {
 
     try {
       const response = await axios.patch(
-        `http://localhost:3001/api/notifications/user/${currentUserId}/read-all`
+        `http://localhost:5001/api/notifications/user/${currentUserId}/read-all`
       );
 
       if (response.data.success) {
@@ -213,7 +220,7 @@ export const SocketProvider = ({ children }) => {
 
     try {
       const response = await axios.delete(
-        `http://localhost:3001/api/notifications/${notificationId}`,
+        `http://localhost:5001/api/notifications/${notificationId}`,
         { data: { userId: currentUserId } }
       );
 

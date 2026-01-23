@@ -14,6 +14,8 @@ const userRoutes = require('./routes/userRoutes');
 const propertyRoutes = require('./routes/propertyRoutes');
 const bikeRoutes = require('./routes/bikeRoutes');
 const ownerRoutes = require('./routes/ownerRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 const User = require('./models/User');
 const Property = require('./models/Property');
 const Booking = require('./models/Booking');
@@ -21,6 +23,7 @@ const PropertyView = require('./models/PropertyView');
 const Inquiry = require('./models/Inquiry');
 const Bike = require('./models/Bike');
 const BikeBooking = require('./models/BikeBooking');
+const Payment = require('./models/Payment');
 
 const app = express();
 const server = http.createServer(app);
@@ -31,6 +34,12 @@ const io = new Server(server, {
     credentials: true
   }
 });
+
+// Connected users tracking for real-time notifications
+const connectedUsers = new Map();
+
+// Export io and connectedUsers for use in controllers
+module.exports = { io, connectedUsers };
 
 // Enhanced CORS configuration
 app.use(cors({
@@ -84,6 +93,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/properties', propertyRoutes);
 app.use('/api/bikes', bikeRoutes);
 app.use('/api/owners', ownerRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Serve uploaded files
 app.use('/uploads', express.static('uploads'));
@@ -97,11 +108,18 @@ io.on('connection', (socket) => {
   socket.on('register', (userId) => {
     socket.userId = userId;
     socket.join(`user_${userId}`);
-    console.log(`User ${userId} registered to socket ${socket.id}`);
+    connectedUsers.set(userId.toString(), socket.id);
+    console.log(`👤 User ${userId} registered to socket ${socket.id}`);
+    console.log(`📊 Total connected users: ${connectedUsers.size}`);
   });
 
   socket.on('disconnect', () => {
+    if (socket.userId) {
+      connectedUsers.delete(socket.userId.toString());
+      console.log(`👋 User ${socket.userId} disconnected`);
+    }
     console.log('❌ Client disconnected:', socket.id);
+    console.log(`📊 Total connected users: ${connectedUsers.size}`);
   });
 });
 
@@ -141,16 +159,72 @@ io.on('connection', (socket) => {
     BikeBooking.belongsTo(User, { foreignKey: 'lessorId', as: 'lessor' });
     BikeBooking.belongsTo(User, { foreignKey: 'vendorId', as: 'vendor' });
     
+    // Payment relationships
+    Payment.belongsTo(Booking, { foreignKey: 'bookingId' });
+    Payment.belongsTo(User, { foreignKey: 'tenantId', as: 'tenant' });
+    Payment.belongsTo(User, { foreignKey: 'ownerId', as: 'owner' });
+    Booking.hasMany(Payment, { foreignKey: 'bookingId' });
+    
     // Use { force: true } to drop and recreate tables (WARNING: deletes all data!)
     // Use { alter: true } to modify existing tables (may cause errors with existing data)
     // Use {} for no changes, just connect
     await sequelize.sync(); // Changed from { force: true } to preserve user data
     console.log('DB synced');
+    
+    // Initialize payment scheduler (runs every day at midnight)
+    const paymentScheduler = require('./services/paymentScheduler');
+    const schedule = require('node-schedule');
+    
+    // Run daily at midnight
+    schedule.scheduleJob('0 0 * * *', async () => {
+      console.log('🕒 Running daily payment scheduler...');
+      await paymentScheduler.createMonthlyPayments();
+      await paymentScheduler.checkOverduePayments();
+    });
+    
+    // Run reminder check twice daily (8 AM and 4 PM)
+    schedule.scheduleJob('0 8,16 * * *', async () => {
+      console.log('🕒 Running payment reminder scheduler...');
+      await paymentScheduler.sendUpcomingPaymentReminders();
+    });
+    
+    console.log('✅ Payment scheduler initialized');
 
     const port = process.env.PORT || 5001;
-    server.listen(port, () => console.log(`Server running on port ${port}`));
+    const serverInstance = server.listen(port, () => {
+      console.log(`Server running on port ${port}`);
+      console.log('✅ Server is ready to accept connections');
+    });
+    
+    // Prevent server from exiting
+    serverInstance.on('error', (error) => {
+      console.error('❌ Server error:', error);
+    });
+    
+    // Keep process alive
+    setInterval(() => {
+      // Empty interval to keep the event loop running
+    }, 1000 * 60 * 60); // Run every hour
+    
+    // Handle unhandled promise rejections
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+    });
+    
+    process.on('uncaughtException', (error) => {
+      console.error('❌ Uncaught Exception:', error);
+    });
   } catch (err) {
     console.error('Failed to start server:', err);
     process.exit(1);
   }
 })();
+
+// Add exit handler to debug
+process.on('exit', (code) => {
+  console.log(`❌ About to exit with code: ${code}`);
+});
+
+process.on('beforeExit', (code) => {
+  console.log(`❌ Before exit with code: ${code}`);
+});

@@ -10,6 +10,9 @@ router.get('/', userController.getAllVendors);
 // Get user statistics
 router.get('/stats', userController.getVendorStats);
 
+// Get user's booking applications (protected route)
+router.get('/my-applications', protect, userController.getMyApplications);
+
 // Upload profile picture (protected route)
 router.post('/upload-profile', protect, profileUpload.single('profilePicture'), userController.uploadProfilePicture);
 

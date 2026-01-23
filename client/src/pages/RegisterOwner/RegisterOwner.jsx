@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './RegisterOwner.css';
 import OtpModal from '../../components/otpModal';
+import API_BASE_URL from '../../config/api';
 
 const RegisterOwner = () => {
   const navigate = useNavigate();
@@ -53,7 +54,7 @@ const RegisterOwner = () => {
         citizenshipNumber: form.citizenshipNumber,
       };
 
-      const response = await fetch('http://localhost:3001/api/auth/register', {
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -3,7 +3,121 @@ const Booking = require('../models/Booking');
 const PropertyView = require('../models/PropertyView');
 const Inquiry = require('../models/Inquiry');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
 const { Op } = require('sequelize');
+
+// Get all available properties for browsing (tenant/lessor)
+exports.getAvailableProperties = async (req, res) => {
+  try {
+    const { 
+      search, 
+      city, 
+      minPrice, 
+      maxPrice, 
+      type, 
+      bedrooms, 
+      bathrooms, 
+      minArea, 
+      maxArea, 
+      amenities,
+      sortBy = 'createdAt',
+      sortOrder = 'DESC'
+    } = req.query;
+
+    const whereClause = { status: 'Available' };
+
+    // Property type filter
+    if (type && type !== 'all') {
+      whereClause.propertyType = type;
+    }
+
+    // City/Location filter
+    if (city) {
+      whereClause.city = { [Op.iLike || Op.like]: `%${city}%` };
+    }
+
+    // Price range filter
+    if (minPrice || maxPrice) {
+      whereClause.rentPrice = {};
+      if (minPrice) whereClause.rentPrice[Op.gte] = parseFloat(minPrice);
+      if (maxPrice) whereClause.rentPrice[Op.lte] = parseFloat(maxPrice);
+    }
+
+    // Bedrooms filter
+    if (bedrooms) {
+      whereClause.bedrooms = parseInt(bedrooms);
+    }
+
+    // Bathrooms filter
+    if (bathrooms) {
+      whereClause.bathrooms = parseInt(bathrooms);
+    }
+
+    // Area range filter
+    if (minArea || maxArea) {
+      whereClause.area = {};
+      if (minArea) whereClause.area[Op.gte] = parseFloat(minArea);
+      if (maxArea) whereClause.area[Op.lte] = parseFloat(maxArea);
+    }
+
+    // Amenities filter (check if property has all selected amenities)
+    if (amenities) {
+      const amenitiesList = amenities.split(',').map(a => a.trim());
+      whereClause.amenities = {
+        [Op.contains]: amenitiesList
+      };
+    }
+
+    // Search by title, address, or city
+    if (search) {
+      whereClause[Op.or] = [
+        { title: { [Op.iLike || Op.like]: `%${search}%` } },
+        { address: { [Op.iLike || Op.like]: `%${search}%` } },
+        { city: { [Op.iLike || Op.like]: `%${search}%` } },
+        { description: { [Op.iLike || Op.like]: `%${search}%` } }
+      ];
+    }
+
+    // Determine sort order
+    let orderClause = [];
+    const validSortFields = ['createdAt', 'rentPrice', 'area', 'bedrooms', 'bathrooms'];
+    const validSortOrders = ['ASC', 'DESC'];
+    
+    if (validSortFields.includes(sortBy) && validSortOrders.includes(sortOrder.toUpperCase())) {
+      orderClause.push([sortBy, sortOrder.toUpperCase()]);
+    } else {
+      orderClause.push(['createdAt', 'DESC']);
+    }
+
+    const properties = await Property.findAll({
+      where: whereClause,
+      order: orderClause
+    });
+
+    return res.json(properties.map(p => ({
+      id: p.id,
+      title: p.title,
+      propertyType: p.propertyType,
+      address: p.address,
+      city: p.city,
+      bedrooms: p.bedrooms,
+      bathrooms: p.bathrooms,
+      area: p.area,
+      rentPrice: p.rentPrice,
+      securityDeposit: p.securityDeposit,
+      amenities: p.amenities,
+      description: p.description,
+      images: p.images,
+      status: p.status,
+      latitude: p.latitude,
+      longitude: p.longitude,
+      createdAt: p.createdAt
+    })));
+  } catch (error) {
+    console.error('Error fetching available properties:', error);
+    return res.status(500).json({ error: 'Failed to fetch properties' });
+  }
+};
 
 // Get all properties for a vendor
 exports.getVendorProperties = async (req, res) => {
@@ -318,6 +432,63 @@ exports.updateBookingStatus = async (req, res) => {
       );
     }
 
+    // Send notification to tenant about status change
+    const property = await Property.findByPk(booking.propertyId);
+    const { io, connectedUsers } = require('../server');
+    
+    let notificationTitle = '';
+    let notificationMessage = '';
+    
+    if (status === 'Approved') {
+      notificationTitle = '✅ Booking Approved!';
+      notificationMessage = `Your booking request for "${property.title}" has been approved!`;
+    } else if (status === 'Rejected') {
+      notificationTitle = '❌ Booking Rejected';
+      notificationMessage = `Your booking request for "${property.title}" has been rejected.`;
+    } else if (status === 'Completed') {
+      notificationTitle = '🎉 Tenancy Completed';
+      notificationMessage = `Your tenancy for "${property.title}" has been marked as completed.`;
+    } else if (status === 'Cancelled') {
+      notificationTitle = '🚫 Booking Cancelled';
+      notificationMessage = `Your booking for "${property.title}" has been cancelled.`;
+    }
+    
+    if (notificationTitle) {
+      try {
+        const notification = await Notification.create({
+          userId: booking.tenantId,
+          title: notificationTitle,
+          message: notificationMessage,
+          type: 'info',
+          isBroadcast: false,
+          link: `/tenant/dashboard?tab=applications`
+        });
+
+        console.log(`📧 STATUS UPDATE (${status}): Sending notification to TENANT (tenantId: ${booking.tenantId})`);
+        console.log(`   Owner ID who ${status.toLowerCase()}: ${vendorId}`);
+        console.log(`   This notification should ONLY go to tenant, NOT owner`);
+        
+        if (io && connectedUsers) {
+          const socketId = connectedUsers.get(booking.tenantId.toString());
+          if (socketId) {
+            io.to(socketId).emit('new-notification', {
+              id: notification.id,
+              title: notification.title,
+              message: notification.message,
+              type: notification.type,
+              link: notification.link,
+              is_read: false,
+              created_at: notification.created_at,
+              is_broadcast: false
+            });
+            console.log(`✅ Booking status notification sent to tenant ${booking.tenantId}`);
+          }
+        }
+      } catch (notificationError) {
+        console.error('Error sending notification:', notificationError);
+      }
+    }
+
     return res.json({
       success: true,
       message: 'Booking status updated successfully'
@@ -345,6 +516,145 @@ exports.uploadPropertyImages = async (req, res) => {
   } catch (error) {
     console.error('Error uploading images:', error);
     return res.status(500).json({ success: false, error: 'Failed to upload images' });
+  }
+};
+
+// Book a property (tenant/lessor action)
+exports.bookProperty = async (req, res) => {
+  try {
+    const tenantId = req.user.id;
+    const { propertyId, moveInDate, moveOutDate, message } = req.body;
+
+    console.log('📝 Booking request received:', { tenantId, propertyId, moveInDate, moveOutDate, message });
+
+    if (!propertyId || !moveInDate) {
+      return res.status(400).json({ error: 'Property ID and move-in date are required' });
+    }
+
+    // Get property details
+    const property = await Property.findOne({
+      where: { id: propertyId, status: 'Available' },
+      include: [
+        {
+          model: User,
+          as: 'vendor',
+          attributes: ['id', 'fullName', 'email', 'phone']
+        }
+      ]
+    });
+
+    if (!property) {
+      console.log('❌ Property not found or not available:', propertyId);
+      return res.status(404).json({ error: 'Property not found or not available' });
+    }
+
+    // Get tenant info
+    const tenant = await User.findByPk(tenantId, {
+      attributes: ['id', 'fullName', 'email', 'phone']
+    });
+
+    if (!tenant) {
+      console.log('❌ Tenant not found:', tenantId);
+      return res.status(404).json({ error: 'Tenant not found' });
+    }
+
+    // Prevent self-booking
+    if (property.vendorId === tenantId) {
+      return res.status(400).json({ error: 'You cannot book your own property' });
+    }
+
+    // Create booking
+    const booking = await Booking.create({
+      propertyId,
+      tenantId,
+      vendorId: property.vendorId,
+      moveInDate,
+      moveOutDate: moveOutDate || null,
+      monthlyRent: property.rentPrice,
+      status: 'Pending',
+      message: message || ''
+    });
+
+    console.log('✅ Booking created successfully:', { 
+      bookingId: booking.id, 
+      tenantId, 
+      propertyId, 
+      status: booking.status 
+    });
+
+    // Send notification to property owner
+    try {
+      const { io, connectedUsers } = require('../server');
+      
+      const moveInFormatted = new Date(moveInDate).toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      });
+      
+      const moveOutFormatted = moveOutDate 
+        ? new Date(moveOutDate).toLocaleDateString('en-US', {
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric'
+          })
+        : 'Not specified';
+
+      const notificationTitle = '🏠 New Property Booking Request';
+      const notificationMessage = `${tenant.fullName} wants to rent your property "${property.title}" from ${moveInFormatted}${moveOutDate ? ` to ${moveOutFormatted}` : ''}. Monthly rent: NPR ${parseInt(property.rentPrice).toLocaleString()}`;
+
+      // Create notification
+      const notification = await Notification.create({
+        userId: property.vendorId,
+        title: notificationTitle,
+        message: notificationMessage,
+        type: 'info',
+        isBroadcast: false,
+        link: `/owner/dashboard?tab=bookings`
+      });
+
+      console.log('✅ Notification created:', notification.id);
+      console.log(`📧 BOOKING REQUEST: Sending notification to OWNER (vendorId: ${property.vendorId})`);
+      console.log(`   Tenant ID who booked: ${tenantId}`);
+      console.log(`   This notification should ONLY go to owner, NOT tenant`);
+
+      // Emit real-time notification
+      if (io && connectedUsers) {
+        const socketId = connectedUsers.get(property.vendorId.toString());
+        if (socketId) {
+          io.to(socketId).emit('new-notification', {
+            id: notification.id,
+            title: notification.title,
+            message: notification.message,
+            type: notification.type,
+            link: notification.link,
+            is_read: false,
+            created_at: notification.created_at,
+            is_broadcast: false
+          });
+          console.log(`✅ Booking request notification sent to owner ${property.vendorId}`);
+        }
+      }
+    } catch (notificationError) {
+      console.error('Error sending notification:', notificationError);
+      // Don't fail the booking if notification fails
+    }
+
+    return res.json({
+      success: true,
+      message: 'Booking request sent successfully',
+      booking: {
+        id: booking.id,
+        propertyTitle: property.title,
+        moveInDate: booking.moveInDate,
+        moveOutDate: booking.moveOutDate,
+        monthlyRent: booking.monthlyRent,
+        status: booking.status
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error booking property:', error);
+    return res.status(500).json({ error: 'Failed to book property' });
   }
 };
 

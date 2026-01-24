@@ -209,4 +209,57 @@ exports.createPayment = async (req, res) => {
   }
 };
 
+exports.getPaymentHistory = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { type, startDate, endDate, limit = 50 } = req.query;
+    
+    let whereClause = {};
+    
+    if (type === 'tenant') {
+      whereClause.tenantId = userId;
+    } else if (type === 'owner') {
+      whereClause.ownerId = userId;
+    } else {
+      whereClause[Op.or] = [
+        { tenantId: userId },
+        { ownerId: userId }
+      ];
+    }
+    
+    if (startDate || endDate) {
+      whereClause.createdAt = {};
+      if (startDate) whereClause.createdAt[Op.gte] = startDate;
+      if (endDate) whereClause.createdAt[Op.lte] = endDate;
+    }
+    
+    const payments = await Payment.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: Booking,
+          include: [{ model: Property, as: 'property' }]
+        },
+        { model: User, as: 'tenant', attributes: ['id', 'fullName', 'email', 'phone'] },
+        { model: User, as: 'owner', attributes: ['id', 'fullName', 'email', 'phone'] }
+      ],
+      order: [['createdAt', 'DESC']],
+      limit: parseInt(limit)
+    });
+    
+    const stats = {
+      total: payments.length,
+      totalAmount: payments.reduce((sum, p) => sum + parseFloat(p.amount), 0),
+      paid: payments.filter(p => p.status === 'Paid').length,
+      pending: payments.filter(p => p.status === 'Pending').length,
+      overdue: payments.filter(p => p.status === 'Overdue').length
+    };
+    
+    res.json({ payments, stats });
+  } catch (error) {
+    console.error('Error fetching payment history:', error);
+    res.status(500).json({ error: 'Failed to fetch payment history' });
+  }
+};
+
 module.exports = exports;

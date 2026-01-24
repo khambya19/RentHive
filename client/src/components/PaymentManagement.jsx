@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import API_BASE_URL from '../config/api';
+import PaymentHistory from './PaymentHistory';
 import './PaymentManagement.css';
 
 const PaymentManagement = () => {
@@ -8,10 +9,11 @@ const PaymentManagement = () => {
   const [payments, setPayments] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all'); // all, pending, overdue, paid
+  const [filter, setFilter] = useState('all');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [notification, setNotification] = useState({ show: false, message: '', type: '' });
+  const [activeTab, setActiveTab] = useState('current');
   const [paymentForm, setPaymentForm] = useState({
     paymentMethod: '',
     transactionId: '',
@@ -148,7 +150,6 @@ const PaymentManagement = () => {
 
   return (
     <div className="payment-management">
-      {/* Notification Toast */}
       {notification.show && (
         <div className={`notification-toast ${notification.type}`}>
           {notification.message}
@@ -157,36 +158,55 @@ const PaymentManagement = () => {
       
       <div className="payment-header">
         <h2>💳 Rent Payment Management</h2>
-        <p className="subtitle">Track and manage your rent payments easily</p>
-        
-        {stats && (
-          <div className="payment-stats">
-            <div className="stat-card pending-card">
-              <div className="stat-icon">⏳</div>
-              <div className="stat-content">
-                <h3>Rs. {stats.totalPending?.toLocaleString() || 0}</h3>
-                <p>Pending Payments</p>
-              </div>
-            </div>
-            <div className="stat-card overdue-card">
-              <div className="stat-icon">⚠️</div>
-              <div className="stat-content">
-                <h3>Rs. {stats.totalOverdue?.toLocaleString() || 0}</h3>
-                <p>Overdue ({stats.overdueCount || 0} payments)</p>
-              </div>
-            </div>
-            <div className="stat-card success-card">
-              <div className="stat-icon">✅</div>
-              <div className="stat-content">
-                <h3>Rs. {stats.totalCollected?.toLocaleString() || 0}</h3>
-                <p>Collected This Month</p>
-              </div>
-            </div>
-          </div>
-        )}
+        <div className="tab-navigation">
+          <button 
+            className={activeTab === 'current' ? 'tab-btn active' : 'tab-btn'}
+            onClick={() => setActiveTab('current')}
+          >
+            Current Payments
+          </button>
+          <button 
+            className={activeTab === 'history' ? 'tab-btn active' : 'tab-btn'}
+            onClick={() => setActiveTab('history')}
+          >
+            Payment History
+          </button>
+        </div>
       </div>
 
-      <div className="payment-filters">
+      {activeTab === 'history' ? (
+        <PaymentHistory />
+      ) : (
+        <>
+          <p className="subtitle">Track and manage your rent payments easily</p>
+          
+          {stats && (
+            <div className="payment-stats">
+              <div className="stat-card pending-card">
+                <div className="stat-icon">⏳</div>
+                <div className="stat-content">
+                  <h3>Rs. {stats.totalPending?.toLocaleString() || 0}</h3>
+                  <p>Pending Payments</p>
+                </div>
+              </div>
+              <div className="stat-card overdue-card">
+                <div className="stat-icon">⚠️</div>
+                <div className="stat-content">
+                  <h3>Rs. {stats.totalOverdue?.toLocaleString() || 0}</h3>
+                  <p>Overdue ({stats.overdueCount || 0} payments)</p>
+                </div>
+              </div>
+              <div className="stat-card success-card">
+                <div className="stat-icon">✅</div>
+                <div className="stat-content">
+                  <h3>Rs. {stats.totalCollected?.toLocaleString() || 0}</h3>
+                  <p>Collected This Month</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="payment-filters">
         <button 
           className={filter === 'all' ? 'filter-btn active' : 'filter-btn'} 
           onClick={() => setFilter('all')}
@@ -374,6 +394,8 @@ const PaymentManagement = () => {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

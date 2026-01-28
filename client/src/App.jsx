@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { SocketProvider } from "./context/SocketContext";
 import NavBar from "./pages/LandingPage/NavBar.jsx"; 
 import { Body } from "./pages/LandingPage/Body.jsx"; 
+import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
 import Footer from "./pages/LandingPage/Footer.jsx";
 import LoginPage from "./pages/Login/Login.jsx";
 import Register from "./pages/Register/Register.jsx";
@@ -24,11 +25,14 @@ const ProtectedRoute = ({ children, allowedTypes }) => {
         return <Navigate to="/login" replace />;
     }
     
-    if (allowedTypes && !allowedTypes.includes(user.type)) {
+    // Check both user.type and user.role for compatibility
+    const userType = user.type || user.role;
+    
+    if (allowedTypes && !allowedTypes.includes(userType)) {
         // Redirect based on user type
-        if (user.type === 'renter' || user.type === 'lessor') {
+        if (userType === 'renter' || userType === 'lessor') {
             return <Navigate to="/user/dashboard" replace />;
-        } else if (user.type === 'owner' || user.type === 'vendor') {
+        } else if (userType === 'owner' || userType === 'vendor') {
             return <Navigate to="/owner/dashboard" replace />;
         } else {
             return <Navigate to="/login" replace />;
@@ -44,7 +48,8 @@ function AppContent() {
     // Hide navbar and footer on dashboard pages
     const isDashboard = location.pathname.startsWith('/user') || 
                        location.pathname.startsWith('/owner') ||
-                       location.pathname.startsWith('/tenant');
+                       location.pathname.startsWith('/tenant') ||
+                       location.pathname.startsWith('/admin');
     
     const showFooter = location.pathname !== '/login' && 
                        location.pathname !== '/register' &&
@@ -89,6 +94,13 @@ function AppContent() {
                 <Route path="/owner/dashboard" element={
                     <ProtectedRoute allowedTypes={['owner', 'vendor']}>
                         <OwnerDashboard />
+                    </ProtectedRoute>
+                } />
+                
+                {/* Admin Dashboard - Only for admin or super_admin users */}
+                <Route path="/admin/dashboard" element={
+                    <ProtectedRoute allowedTypes={['admin', 'super_admin']}>
+                        <AdminDashboard />
                     </ProtectedRoute>
                 } />
 

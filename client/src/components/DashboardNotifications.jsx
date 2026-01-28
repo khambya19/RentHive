@@ -9,7 +9,7 @@ const DashboardNotifications = ({ notifications, onRemove }) => {
     
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/notifications/booking-response', {
+      const response = await fetch(`${API_BASE_URL}/notifications/booking-response`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

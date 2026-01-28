@@ -63,7 +63,6 @@ const RegisterOwner = () => {
         mode: 'cors',
         body: JSON.stringify(requestBody),
       });
-
       const responseText = await response.text();
       
       if (!response.ok) {

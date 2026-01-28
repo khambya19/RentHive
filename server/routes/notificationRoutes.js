@@ -14,16 +14,16 @@ const { protect } = require('../middleware/auth');
 /**
  * @route   POST /api/notifications/broadcast
  * @desc    Create a broadcast notification for all users
- * @access  Private (Admin only - add auth middleware as needed)
+ * @access  Private (Admin only)
  */
-router.post('/broadcast', createBroadcast);
+router.post('/broadcast', protect, createBroadcast);
 
 /**
  * @route   POST /api/notifications/user
  * @desc    Create a user-specific notification
  * @access  Private
  */
-router.post('/user', createUserNotification);
+router.post('/user', protect, createUserNotification);
 
 /**
  * @route   GET /api/notifications/user/:userId

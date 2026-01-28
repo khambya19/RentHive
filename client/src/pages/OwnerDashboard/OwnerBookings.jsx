@@ -86,8 +86,8 @@ const OwnerBookings = ({ showSuccess, showError }) => {
     try {
       const token = localStorage.getItem('token');
       const endpoint = bookingType === 'property' 
-        ? `http://localhost:5001/api/properties/bookings/${bookingId}/status`
-        : `http://localhost:5001/api/bikes/bookings/${bookingId}/status`;
+        ? `${API_BASE_URL}/properties/bookings/${bookingId}/status`
+        : `${API_BASE_URL}/bikes/bookings/${bookingId}/status`;
 
       const status = action === 'accept' ? 'Approved' : 'Rejected';
 

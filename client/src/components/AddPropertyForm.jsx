@@ -1,6 +1,8 @@
+
 import React, { useState } from 'react';
 import PropertyLocationMap from './PropertyLocationMap';
 import './AddPropertyForm.css';
+import API_BASE_URL from '../config/api';
 
 const AddPropertyForm = ({ onSubmit, onCancel, initialData = null }) => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -204,7 +206,7 @@ const AddPropertyForm = ({ onSubmit, onCancel, initialData = null }) => {
         });
 
         const token = localStorage.getItem('token');
-        const uploadResponse = await fetch('http://localhost:5001/api/properties/upload-images', {
+        const uploadResponse = await fetch(`${API_BASE_URL}/properties/upload-images`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`

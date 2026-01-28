@@ -17,6 +17,7 @@ const NotificationBell = ({ userId }) => {
 
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [currentTime, setCurrentTime] = useState(Date.now());
   const dropdownRef = useRef(null);
 
   // Register user when component mounts
@@ -26,6 +27,15 @@ const NotificationBell = ({ userId }) => {
       console.log('🔔 NotificationBell: Registered user', userId);
     }
   }, [userId, registerUser]);
+
+  // Update current time every minute for real-time relative timestamps
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 60000); // Update every minute
+
+    return () => clearInterval(timer);
+  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {

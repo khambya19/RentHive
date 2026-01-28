@@ -1,3 +1,80 @@
+const User = require('../models/User');
+const crypto = require('crypto');
+// const { Op } = require('sequelize'); // Already declared above, remove duplicate
+
+// List all users with search/filter (super admin)
+exports.getAllUsers = async (req, res) => {
+  try {
+    const { search, role, status } = req.query;
+    let where = {};
+    if (search) {
+      where[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+        { phone: { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+    if (role) where.role = role;
+    if (status === 'active') where.active = true;
+    if (status === 'blocked') where.active = false;
+    const users = await User.findAll({ where, paranoid: false });
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// View user profile/details
+exports.getUserById = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.params.id, { paranoid: false });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    // Optionally add bookings count, etc.
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Block/unblock user
+exports.toggleBlockUser = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    user.active = !user.active;
+    await user.save();
+    res.json({ success: true, active: user.active });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Soft delete user
+exports.softDeleteUser = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    await user.destroy();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Reset password (generate temp password)
+exports.resetUserPassword = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const tempPassword = crypto.randomBytes(4).toString('hex');
+    user.password = tempPassword; // Hash in real app!
+    await user.save();
+    // TODO: Email/send temp password
+    res.json({ success: true, tempPassword });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
 const Vendor = require('../models/Vendor');
 const { Op } = require('sequelize');
 

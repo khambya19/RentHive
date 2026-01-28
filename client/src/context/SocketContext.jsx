@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+} from 'react';
 import { io } from 'socket.io-client';
 import axios from 'axios';
 
@@ -13,230 +20,182 @@ export const useSocket = () => {
 };
 
 export const SocketProvider = ({ children }) => {
+  const socketRef = useRef(null);
   const [socket, setSocket] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
 
-  // Initialize socket connection
+  // Initialize socket once
   useEffect(() => {
-    // Skip socket initialization if server doesn't support it
-    let socketInstance = null;
+    const url = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5050';
 
-    try {
-      socketInstance = io('http://localhost:5001', {
-        // Prefer polling first to avoid 'WebSocket is closed before the connection is established'
-        // in dev/proxy/CORS scenarios; socket.io will upgrade to websocket when available.
-        transports: ['polling', 'websocket'],
-        upgrade: true,
-        reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionAttempts: 3,
-        timeout: 5000
-      });
+    const socketInstance = io(url, {
+      transports: ['polling', 'websocket'],
+      upgrade: true,
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
+      timeout: 10000,
+      autoConnect: true, // Auto-connect on initialization
+    });
 
-      socketInstance.on('connect', () => {
-        console.log('✅ Socket connected:', socketInstance.id);
-        setIsConnected(true);
+    socketRef.current = socketInstance;
+    setSocket(socketInstance);
 
-        // Re-register user if they were registered before
-        if (currentUserId) {
-          socketInstance.emit('register', currentUserId);
-        }
-      });
+    socketInstance.on('connect', () => {
+      console.log('✅ Socket connected:', socketInstance.id);
+      setIsConnected(true);
 
-      socketInstance.on('disconnect', () => {
-        console.log('❌ Socket disconnected');
-        setIsConnected(false);
-      });
+      // Re-register if we already know the user
+      if (currentUserId) {
+        socketInstance.emit('register', currentUserId);
+        console.log(`🔄 Re-registered user ${currentUserId} after reconnect`);
+      }
+    });
 
-      socketInstance.on('connect_error', (error) => {
-        console.warn('⚠️ Socket connection failed (this is optional):', error.message);
-        setIsConnected(false);
-        // Don't throw error, just continue without socket
-      });
-
-      // Listen for new notifications
-      socketInstance.on('new-notification', (notification) => {
-        console.log('🔔 New notification received:', notification);
-
-        // Add notification to state
-        setNotifications((prev) => [notification, ...prev]);
-        setUnreadCount((prev) => prev + 1);
-
-        // Browser notifications are optional; guard for unsupported environments
-        if (typeof window !== 'undefined' && 'Notification' in window) {
-          if (Notification.permission === 'granted') {
-            showBrowserNotification(notification);
-          } else if (Notification.permission !== 'denied') {
-            Notification.requestPermission().then((permission) => {
-              if (permission === 'granted') {
-                showBrowserNotification(notification);
-              }
-            });
-          }
-        }
-      });
-
-      setSocket(socketInstance);
-    } catch (error) {
-      console.warn('⚠️ Socket initialization failed (continuing without real-time features):', error);
-      setSocket(null);
+    socketInstance.on('disconnect', (reason) => {
+      console.log('❌ Socket disconnected:', reason);
       setIsConnected(false);
-    }
+    });
+
+    socketInstance.on('connect_error', (err) => {
+      console.warn('⚠️ Socket connection error:', err.message);
+      setIsConnected(false);
+    });
+
+    // Real-time new notification
+    socketInstance.on('new-notification', (notification) => {
+      console.log('🔔 Real-time notification received:', notification);
+      setNotifications((prev) => [notification, ...prev]);
+      setUnreadCount((prev) => prev + 1);
+
+      // Browser notification (optional)
+      if ('Notification' in window && Notification.permission === 'granted') {
+        const icon = getNotificationIcon(notification.type);
+        new Notification(notification.title, {
+          body: notification.message,
+          icon: '/favicon.ico',
+          badge: '/favicon.ico',
+          tag: `notif-${notification.id}`,
+        });
+      }
+    });
 
     // Cleanup on unmount
     return () => {
-      if (socketInstance) {
-        socketInstance.disconnect();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
       }
     };
-  }, []);
+  }, []); // ← only once on mount
 
-  // Re-register user when currentUserId changes
+  // Register user when currentUserId changes (and socket is ready)
   useEffect(() => {
-    if (socket && isConnected && currentUserId) {
-      socket.emit('register', currentUserId);
-    }
-  }, [socket, isConnected, currentUserId]);
+    if (!currentUserId || !socket || !isConnected) return;
 
-  // Show browser notification
-  const showBrowserNotification = (notification) => {
-    try {
-      const { title, message, type } = notification;
-      const icon = getNotificationIcon(type);
+    console.log('👤 Registering user:', currentUserId);
+    socket.emit('register', currentUserId);
 
-      new Notification(title, {
-        body: message,
-        icon: '/favicon.ico', // You can customize this
-        badge: '/favicon.ico',
-        tag: `notification-${notification.id}`,
-        requireInteraction: false,
-        silent: false
-      });
-    } catch (error) {
-      console.error('❌ Error showing browser notification:', error);
-    }
-  };
+    // Fetch initial notifications
+    fetchUserNotifications(currentUserId);
+  }, [currentUserId, socket, isConnected]);
 
-  // Get icon for notification type
+  // ── Helper functions ─────────────────────────────────────────────
+
   const getNotificationIcon = (type) => {
     const icons = {
       success: '✅',
       warning: '⚠️',
       error: '❌',
-      info: 'ℹ️'
+      info: 'ℹ️',
     };
     return icons[type] || icons.info;
   };
 
-  // Register user with socket
   const registerUser = useCallback((userId) => {
-    console.log('👤 Registering user:', userId);
+    if (!userId) return;
     setCurrentUserId(userId);
+    // The actual emit happens in the useEffect above
+  }, []);
 
-    if (socket && isConnected) {
-      socket.emit('register', userId);
-    }
-
-    // Fetch existing notifications
-    fetchUserNotifications(userId);
-
-    // Request notification permission (optional)
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        Notification.requestPermission().then((permission) => {
-          console.log('🔔 Notification permission:', permission);
-        });
-      }
-    }
-  }, [socket, isConnected]);
-
-  // Fetch user notifications from API
   const fetchUserNotifications = async (userId) => {
     try {
-      const response = await axios.get(`http://localhost:5001/api/notifications/user/${userId}`);
-      if (response.data.success) {
-        setNotifications(response.data.data.notifications);
-        setUnreadCount(response.data.data.unreadCount);
-        console.log('📥 Loaded notifications:', response.data.data.notifications.length);
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5050/api';
+      const res = await axios.get(
+        `${apiUrl}/notifications/user/${userId}`
+      );
+      if (res.data.success) {
+        setNotifications(res.data.data.notifications || []);
+        setUnreadCount(res.data.data.unreadCount || 0);
+        console.log(`📥 Loaded ${res.data.data.notifications?.length || 0} notifications`);
       }
-    } catch (error) {
-      console.error('❌ Error fetching notifications:', error);
+    } catch (err) {
+      console.error('❌ Failed to fetch notifications:', err);
     }
   };
 
-  // Mark notification as read
   const markNotificationAsRead = async (notificationId) => {
     if (!currentUserId) return;
-
     try {
-      const response = await axios.patch(
-        `http://localhost:5001/api/notifications/${notificationId}/read`,
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5050/api';
+      const res = await axios.patch(
+        `${apiUrl}/notifications/${notificationId}/read`,
         { userId: currentUserId }
       );
-
-      if (response.data.success) {
-        // Update local state
+      if (res.data.success) {
         setNotifications((prev) =>
-          prev.map((notif) =>
-            notif.id === notificationId ? { ...notif, is_read: true } : notif
+          prev.map((n) =>
+            n.id === notificationId ? { ...n, isRead: true } : n
           )
         );
         setUnreadCount((prev) => Math.max(0, prev - 1));
-        console.log('✅ Notification marked as read:', notificationId);
+        console.log('✅ Marked as read:', notificationId);
       }
-    } catch (error) {
-      console.error('❌ Error marking notification as read:', error);
+    } catch (err) {
+      console.error('❌ Mark as read failed:', err);
     }
   };
 
-  // Mark all notifications as read
   const markAllAsRead = async () => {
     if (!currentUserId) return;
-
     try {
-      const response = await axios.patch(
-        `http://localhost:5001/api/notifications/user/${currentUserId}/read-all`
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5050/api';
+      const res = await axios.patch(
+        `${apiUrl}/notifications/user/${currentUserId}/read-all`
       );
-
-      if (response.data.success) {
-        // Update local state
-        setNotifications((prev) =>
-          prev.map((notif) => ({ ...notif, is_read: true }))
-        );
+      if (res.data.success) {
+        setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
         setUnreadCount(0);
         console.log('✅ All notifications marked as read');
       }
-    } catch (error) {
-      console.error('❌ Error marking all notifications as read:', error);
+    } catch (err) {
+      console.error('❌ Mark all failed:', err);
     }
   };
 
-  // Delete notification
   const deleteNotification = async (notificationId) => {
     if (!currentUserId) return;
-
     try {
-      const response = await axios.delete(
-        `http://localhost:5001/api/notifications/${notificationId}`,
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5050/api';
+      const res = await axios.delete(
+        `${apiUrl}/notifications/${notificationId}`,
         { data: { userId: currentUserId } }
       );
-
-      if (response.data.success) {
-        // Update local state
+      if (res.data.success) {
         setNotifications((prev) => {
-          const notification = prev.find((n) => n.id === notificationId);
-          if (notification && !notification.is_read) {
-            setUnreadCount((count) => Math.max(0, count - 1));
+          const removed = prev.find((n) => n.id === notificationId);
+          if (removed && !removed.isRead) {
+            setUnreadCount((c) => Math.max(0, c - 1));
           }
-          return prev.filter((notif) => notif.id !== notificationId);
+          return prev.filter((n) => n.id !== notificationId);
         });
-        console.log('✅ Notification deleted:', notificationId);
+        console.log('🗑️ Notification deleted:', notificationId);
       }
-    } catch (error) {
-      console.error('❌ Error deleting notification:', error);
+    } catch (err) {
+      console.error('❌ Delete failed:', err);
     }
   };
 
@@ -249,7 +208,7 @@ export const SocketProvider = ({ children }) => {
     markNotificationAsRead,
     markAllAsRead,
     deleteNotification,
-    currentUserId
+    currentUserId,
   };
 
   return (

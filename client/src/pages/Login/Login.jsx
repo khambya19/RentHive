@@ -24,29 +24,41 @@ const Login = () => {
     const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
+    
+    // Hardcoded super admin login
+    if (email === 'renthiveadmin@gmail.com' && password === 'Renthive@11') {
+      const user = {
+        id: 0,
+        name: 'Super Admin',
+        email: 'renthiveadmin@gmail.com',
+        role: 'super_admin',
+        active: true
+      };
+      const token = 'superadmintoken';
+      login(user, token);
+      navigate('/admin/dashboard');
+      return;
+    }
+    
     try {
-        console.log('Attempting login with:', email);
-        const response = await axios.post(`${API_BASE_URL}/auth/login`, { email, password });
-        console.log('Login response:', response.data);
-        const { token, user } = response.data;
-        
-        // Use AuthContext login
-        login(user, token);
-        
-          // Redirect based on user type
-          // owner/vendor → Owner Dashboard (manage properties/bikes)
-          // renter/lessor → User Dashboard (browse and rent)
-          if (user.type === 'owner' || user.type === 'vendor') {
-            navigate('/owner/dashboard');
-        } else if (user.type === 'renter' || user.type === 'lessor') {
-            navigate('/user/dashboard');
-        } else {
-            // Fallback
-            navigate('/user/dashboard');
-        }
+      console.log('Attempting login with:', email);
+      const response = await axios.post(`${API_BASE_URL}/auth/login`, { email, password });
+      console.log('Login response:', response.data);
+      const { token, user } = response.data;
+      // Use AuthContext login
+      login(user, token);
+      // Redirect based on user type
+      if (user.type === 'owner' || user.type === 'vendor') {
+        navigate('/owner/dashboard');
+      } else if (user.type === 'renter' || user.type === 'lessor') {
+        navigate('/user/dashboard');
+      } else {
+        // Fallback
+        navigate('/user/dashboard');
+      }
     } catch (err) {
-        console.error('Login error:', err);
-        setError(err.response?.data?.error || 'Login failed. Please check your credentials.');
+      console.error('Login error:', err);
+      setError(err.response?.data?.error || 'Login failed. Please check your credentials.');
     }
   };
   

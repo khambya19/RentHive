@@ -167,7 +167,7 @@ const UserDashboard = () => {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      const response = await fetch('http://localhost:5001/api/users/my-applications', {
+      const response = await fetch(`${API_BASE_URL}/users/my-applications`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -831,7 +831,7 @@ const UserDashboard = () => {
                 <div className="application-image">
                   {application.property?.images && application.property.images.length > 0 ? (
                     <img 
-                      src={`http://localhost:5001/uploads/properties/${application.property.images[0]}`} 
+                      src={`${SERVER_BASE_URL}/uploads/properties/${application.property.images[0]}`} 
                       alt={application.property.title}
                       onError={(e) => {
                         e.target.src = 'https://via.placeholder.com/150x150?text=No+Image';
@@ -977,7 +977,7 @@ const UserDashboard = () => {
                 <div className="rental-image">
                   {rental.property?.images && rental.property.images.length > 0 ? (
                     <img 
-                      src={`http://localhost:5001/uploads/properties/${rental.property.images[0]}`} 
+                      src={`${SERVER_BASE_URL}/uploads/properties/${rental.property.images[0]}`} 
                       alt={rental.property.title}
                       onError={(e) => {
                         e.target.src = 'https://via.placeholder.com/150x150?text=No+Image';

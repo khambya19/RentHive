@@ -215,7 +215,10 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
                 NPR {property.rentPrice ? Number(property.rentPrice).toLocaleString() : '0'}/month
               </div>
               <div className="property-actions">
-                <button className="btn-outline" onClick={() => {/* Edit logic */}}>Edit</button>
+                <button className="btn-outline" onClick={() => {
+                  setEditingProperty(property);
+                  setShowPropertyModal(true);
+                }}>Edit</button>
                 <button className="btn-danger" onClick={() => {/* Delete logic */}}>Delete</button>
               </div>
             </div>

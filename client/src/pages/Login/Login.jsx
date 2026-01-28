@@ -2,14 +2,15 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import './Login.css';
 import { useNavigate } from 'react-router-dom'; 
+import { useAuth } from '../../context/AuthContext';
+import API_BASE_URL from '../../config/api';
 
 import RenthiveLogo from '../../assets/Logo.png'; 
 import LoginIllustration from '../../assets/Login_page.png'; 
 
-const API_BASE_URL = 'http://localhost:3000/api/auth';
-
 const Login = () => {
   const navigate = useNavigate(); 
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -20,16 +21,31 @@ const Login = () => {
     setShowPassword(prevShowPassword => !prevShowPassword);
   };
 
-  const handleSubmit = async (e) => {
+    const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
     try {
-        const response = await axios.post(`${API_BASE_URL}/login`, { email, password });
-        localStorage.setItem('token', response.data.token);
+        console.log('Attempting login with:', email);
+        const response = await axios.post(`${API_BASE_URL}/auth/login`, { email, password });
+        console.log('Login response:', response.data);
+        const { token, user } = response.data;
         
-        // Redirect to home page after successful login
-        navigate('/');
+        // Use AuthContext login
+        login(user, token);
+        
+        // Redirect based on user type
+        // owner/vendor → Owner Dashboard (manage properties/bikes)
+        // renter/lessor → User Dashboard (browse and rent)
+        if (user.type === 'owner' || user.type === 'vendor') {
+            navigate('/owner/dashboard');
+        } else if (user.type === 'renter' || user.type === 'lessor') {
+            navigate('/user/dashboard');
+        } else {
+            // Fallback
+            navigate('/user/dashboard');
+        }
     } catch (err) {
+        console.error('Login error:', err);
         setError(err.response?.data?.error || 'Login failed. Please check your credentials.');
     }
   };

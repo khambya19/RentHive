@@ -4,8 +4,9 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import './ForgotPassword.css'; 
 import { useNavigate } from 'react-router-dom';
+import API_BASE_URL from '../../config/api';
 
-const API_BASE_URL = 'http://localhost:3000/api/auth';
+const API_AUTH_URL = `${API_BASE_URL}/auth`;
 
 const ForgotPassword = () => {
     const navigate = useNavigate(); 
@@ -29,7 +30,7 @@ const ForgotPassword = () => {
 
         setLoading(true);
         try {
-            const response = await axios.post(`${API_BASE_URL}/forgot-password`, { email });
+            const response = await axios.post(`${API_AUTH_URL}/forgot-password`, { email });
             setMessage(response.data.message || "OTP sent to your email.");
             setStep(2);
         } catch (err) {
@@ -72,7 +73,7 @@ const ForgotPassword = () => {
 
         setLoading(true);
         try {
-            const response = await axios.post(`${API_BASE_URL}/reset-password`, { 
+            const response = await axios.post(`${API_AUTH_URL}/reset-password`, { 
                 email, 
                 otp, 
                 newPassword 
@@ -89,7 +90,7 @@ const ForgotPassword = () => {
     const handleResendOtp = async () => {
         setLoading(true);
         try {
-            await axios.post(`${API_BASE_URL}/forgot-password`, { email });
+            await axios.post(`${API_AUTH_URL}/forgot-password`, { email });
             setMessage("OTP resent to your email.");
         } catch (err) {
             setError("Failed to resend OTP.");

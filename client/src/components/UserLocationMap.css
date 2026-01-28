@@ -1,0 +1,281 @@
+/* VendorLocationMap.css - Styles for the map component */
+
+.vendor-map-container {
+  position: relative;
+  width: 100%;
+}
+
+/* Search Container */
+.map-search-container {
+  position: relative;
+  margin-bottom: 1rem;
+  z-index: 1000;
+}
+
+.map-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.map-search-box svg {
+  position: absolute;
+  left: 1rem;
+  width: 20px;
+  height: 20px;
+  color: #9ca3af;
+  z-index: 1;
+}
+
+.map-search-box input {
+  width: 100%;
+  padding: 1rem 1rem 1rem 3rem;
+  border: none;
+  outline: none;
+  font-size: 0.95rem;
+  background: transparent;
+}
+
+.search-loading {
+  position: absolute;
+  right: 1rem;
+  color: #667eea;
+  font-size: 0.875rem;
+}
+
+/* Search Results */
+.map-search-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-top: 1px solid #e5e7eb;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1001;
+}
+
+.search-result-item {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f3f4f6;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.search-result-item:hover {
+  background: #f8fafc;
+}
+
+.search-result-item:last-child {
+  border-bottom: none;
+}
+
+.result-name {
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 0.25rem;
+}
+
+.result-address {
+  font-size: 0.875rem;
+  color: #6b7280;
+  line-height: 1.3;
+}
+
+/* Map Wrapper */
+.leaflet-map-wrapper {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  position: relative;
+}
+
+/* Map Instructions */
+.map-instructions {
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #f0f9ff;
+  border: 1px solid #0ea5e9;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.map-instructions p {
+  margin: 0;
+  color: #0369a1;
+  font-size: 0.875rem;
+}
+
+/* Custom Leaflet Popup Styles */
+.vendor-popup {
+  min-width: 250px;
+  font-family: 'Inter', sans-serif;
+}
+
+.popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.popup-header h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.3;
+}
+
+.vendor-type {
+  background: #667eea;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.popup-content {
+  margin-bottom: 1rem;
+}
+
+.popup-detail {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.popup-detail svg {
+  width: 16px;
+  height: 16px;
+  color: #667eea;
+  flex-shrink: 0;
+}
+
+.popup-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.popup-actions .btn-sm {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+  text-align: center;
+}
+
+.popup-actions .btn-primary {
+  background: #667eea;
+  color: white;
+}
+
+.popup-actions .btn-primary:hover {
+  background: #5a67d8;
+}
+
+.popup-actions .btn-outline {
+  background: transparent;
+  border: 1px solid #d1d5db;
+  color: #374151;
+}
+
+.popup-actions .btn-outline:hover {
+  background: #f3f4f6;
+}
+
+/* Map Popup Styles */
+.map-popup h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.map-popup p {
+  margin: 0.25rem 0;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.current-location-popup h4 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.current-location-popup p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+/* Leaflet Control Customization */
+.leaflet-container {
+  font-family: 'Inter', sans-serif;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.leaflet-popup-content {
+  margin: 1rem;
+  line-height: 1.5;
+}
+
+.leaflet-popup-tip {
+  background: white;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .vendor-popup {
+    min-width: 200px;
+  }
+  
+  .popup-actions {
+    flex-direction: column;
+  }
+  
+  .map-search-box input {
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+  
+  .search-result-item {
+    padding: 1rem;
+  }
+}
+
+/* Loading Animation */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.search-loading {
+  animation: pulse 1.5s ease-in-out infinite;
+}

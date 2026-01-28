@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import './RegisterVendor.css';
 import OtpModal from '../../components/otpModal';
+import API_BASE_URL from '../../config/api';
 
 const RegisterVendor = () => {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     fullName: '',
     email: '',
-    phoneNumber: '',
+    phone: '',
     password: '',
     confirmPassword: '',
     address: '',
-    businessName: '',
-    ownershipType: 'Individual',
+    citizenshipNumber: '',
     photo: null,
   });
   const [error, setError] = useState('');
@@ -42,22 +43,24 @@ const RegisterVendor = () => {
     }
 
     try {
-      const response = await fetch('http://localhost:3000/api/auth/register', {
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append('type', 'owner');
+      formData.append('fullName', form.fullName);
+      formData.append('email', form.email);
+      formData.append('phone', form.phone);
+      formData.append('password', form.password);
+      formData.append('confirmPassword', form.confirmPassword);
+      formData.append('address', form.address);
+      formData.append('idNumber', form.citizenshipNumber); // Server expects idNumber
+      
+      if (form.photo) {
+        formData.append('profileImage', form.photo); // Server expects profileImage
+      }
+
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          type: 'vendor',
-          fullName: form.fullName,
-          email: form.email,
-          phone: form.phoneNumber,
-          password: form.password,
-          confirmPassword: form.confirmPassword,
-          address: form.address,
-          businessName: form.businessName,
-          ownershipType: form.ownershipType,
-        }),
+        body: formData, // Send FormData instead of JSON
       });
 
       const data = await response.json();
@@ -93,7 +96,7 @@ const RegisterVendor = () => {
 
           {/* Right Panel */}
           <div style={{ flex: '1 1 62%', padding: '36px' }}>
-            <h2 style={{ fontSize: 28, textAlign: 'center', margin: 0, marginBottom: 24 }}>Sign up as Vendor</h2>
+            <h2 style={{ fontSize: 28, textAlign: 'center', margin: 0, marginBottom: 24 }}>Sign up as Owner</h2>
 
             {error && <div style={{ color: '#d32f2f', marginBottom: 15, padding: '12px 15px', background: '#ffebee', borderLeft: '4px solid #d32f2f', borderRadius: 6 }}>{error}</div>}
             {success && <div style={{ color: '#2e7d32', marginBottom: 15, padding: '12px 15px', background: '#e8f5e9', borderLeft: '4px solid #2e7d32', borderRadius: 6 }}>{success}</div>}
@@ -111,7 +114,7 @@ const RegisterVendor = () => {
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>Phone Number</label>
-                  <input type="tel" name="phoneNumber" placeholder="+977 9800000000" value={form.phoneNumber} onChange={handleChange} required style={formInputStyle} />
+                  <input type="tel" name="phone" placeholder="+977 9800000000" value={form.phone} onChange={handleChange} required style={formInputStyle} />
                 </div>
               </div>
 
@@ -187,18 +190,9 @@ const RegisterVendor = () => {
                 <input type="text" name="address" placeholder="Enter your full address" value={form.address} onChange={handleChange} required style={formInputStyle} />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>Business Name</label>
-                  <input type="text" name="businessName" placeholder="Enter your business name" value={form.businessName} onChange={handleChange} style={formInputStyle} />
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>Ownership Type</label>
-                  <select name="ownershipType" value={form.ownershipType} onChange={handleChange} style={formInputStyle}>
-                    <option value="Individual">Individual</option>
-                    <option value="Company">Company</option>
-                  </select>
-                </div>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>Citizenship Number</label>
+                <input type="text" name="citizenshipNumber" placeholder="Enter your citizenship number" value={form.citizenshipNumber} onChange={handleChange} required style={formInputStyle} />
               </div>
 
               <div style={{ marginBottom: 12 }}>

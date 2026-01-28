@@ -8,6 +8,8 @@ import PaymentManagement from '../../components/PaymentManagement';
 import './UserDashboard.css';
 import bikeFallback from '../../assets/bike3.jpg';
 import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
+import RatingPage from "../RatingPage/RatingPage";
+import Settings from '../Settings/Settings';
 
 const UserDashboard = () => {
   const navigate = useNavigate();
@@ -19,12 +21,12 @@ const UserDashboard = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   
-  // Browse data
+  
   const [properties, setProperties] = useState([]);
   const [bikes, setBikes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState('all'); // 'all', 'properties', 'bikes'
+  const [filterType, setFilterType] = useState('all'); 
   
   // Advanced filters
   const [filters, setFilters] = useState({
@@ -50,7 +52,7 @@ const UserDashboard = () => {
     sortOrder: 'DESC'
   });
   
-  // User's rental data
+  
   const [myApplications, setMyApplications] = useState([]);
   const [myRentals, setMyRentals] = useState([]);
   const [savedListings, setSavedListings] = useState([]);
@@ -167,7 +169,7 @@ const UserDashboard = () => {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      const response = await fetch('http://localhost:5001/api/users/my-applications', {
+      const response = await fetch('http://localhost:3001/api/users/my-applications', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -831,7 +833,7 @@ const UserDashboard = () => {
                 <div className="application-image">
                   {application.property?.images && application.property.images.length > 0 ? (
                     <img 
-                      src={`http://localhost:5001/uploads/properties/${application.property.images[0]}`} 
+                      src={`http://localhost:3001/uploads/properties/${application.property.images[0]}`} 
                       alt={application.property.title}
                       onError={(e) => {
                         e.target.src = 'https://via.placeholder.com/150x150?text=No+Image';
@@ -977,7 +979,7 @@ const UserDashboard = () => {
                 <div className="rental-image">
                   {rental.property?.images && rental.property.images.length > 0 ? (
                     <img 
-                      src={`http://localhost:5001/uploads/properties/${rental.property.images[0]}`} 
+                      src={`http://localhost:3001/uploads/properties/${rental.property.images[0]}`} 
                       alt={rental.property.title}
                       onError={(e) => {
                         e.target.src = 'https://via.placeholder.com/150x150?text=No+Image';
@@ -1112,9 +1114,12 @@ const UserDashboard = () => {
       case 'messages':
         return <div className="placeholder">Messages - Coming Soon</div>;
       case 'settings':
-        return <div className="placeholder">Settings - Coming Soon</div>;
+        return <Settings />;
       default:
         return renderOverview();
+      
+      case 'ratings':
+        return <RatingPage />;
     }
   };
 
@@ -1267,6 +1272,22 @@ const UserDashboard = () => {
             </svg>
             {!sidebarCollapsed && <span>Messages</span>}
           </button>
+          
+          
+          <button
+            className={`menu-item ${activeTab === 'ratings' ? 'active' : ''}`}
+            onClick={() => setActiveTab('ratings')}
+          >
+  
+            <svg className="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+            {!sidebarCollapsed && <span>Rating and Review</span>}
+          </button>
+
+          
+
+
         </nav>
 
         <div className="sidebar-footer">
@@ -1295,6 +1316,7 @@ const UserDashboard = () => {
               {activeTab === 'maintenance' && 'Maintenance Requests'}
               {activeTab === 'messages' && 'Messages'}
               {activeTab === 'settings' && 'Settings'}
+              {activeTab === 'ratings' && 'Ratings & Reviews'}
             </h1>
             <p className="header-subtitle">
               {activeTab === 'overview' && 'Welcome back! Find your perfect rental'}
@@ -1306,19 +1328,28 @@ const UserDashboard = () => {
               {activeTab === 'maintenance' && 'Submit and track maintenance requests'}
               {activeTab === 'messages' && 'Communicate with property owners'}
               {activeTab === 'settings' && 'Manage your account settings'}
+              {activeTab === 'ratings' && 'View your feedback and property ratings'}
             </p>
           </div>
           <div className="header-right">
             <NotificationBell userId={user?.id} />
             <button 
-              className="settings-btn"
-              onClick={() => setShowSettings(!showSettings)}
-              title="Settings"
+             className="settings-btn"
+             onClick={() => setActiveTab('settings')}
+             title="Settings"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M12 1v6m0 6v6m-5.66-15.66l4.24 4.24m0 8.48l-4.24 4.24M1 12h6m6 0h6m-15.66 5.66l4.24-4.24m8.48 0l4.24 4.24"/>
-              </svg>
+            <svg 
+             viewBox="0 0 24 24" 
+             fill="none" 
+             stroke="currentColor" 
+             strokeWidth="2" 
+             strokeLinecap="round" 
+             strokeLinejoin="round" 
+             style={{ width: '20px', height: '20px' }}
+            >
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
             </button>
           </div>
         </div>
@@ -1327,27 +1358,9 @@ const UserDashboard = () => {
           {renderContent()}
         </div>
 
-        {/* Settings Modal/Panel */}
-        {showSettings && (
-          <div className="settings-modal">
-            <div className="settings-content">
-              <div className="settings-header">
-                <h2>Settings</h2>
-                <button className="close-btn" onClick={() => setShowSettings(false)}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="18" y1="6" x2="6" y2="18"/>
-                    <line x1="6" y1="6" x2="18" y2="18"/>
-                  </svg>
-                </button>
-              </div>
-              <div className="settings-body">
-                <div className="placeholder">Settings - Coming Soon</div>
-              </div>
-            </div>
-          </div>
-        )}
+        
 
-        {/* Property Details & Booking Modal */}
+        
         {showPropertyModal && selectedProperty && (
           <div className="modal-backdrop" onClick={() => setShowPropertyModal(false)}>
             <div className="modal-dialog property-modal" onClick={(e) => e.stopPropagation()}>

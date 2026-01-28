@@ -3,15 +3,20 @@ const router = express.Router();
 const auth = require('../controller/authController');
 const { profileUpload } = require('../config/upload');
 
-// Updated register route to handle both JSON and multipart data
+// Updated register route with explicit error handling
 router.post('/register', (req, res, next) => {
-  // Check if the request is multipart/form-data
   const contentType = req.headers['content-type'];
+  
   if (contentType && contentType.includes('multipart/form-data')) {
-    // Use multer middleware for multipart data
-    profileUpload.single('profileImage')(req, res, next);
+    // We wrap multer in a function to catch errors (like wrong field names)
+    profileUpload.single('profileImage')(req, res, (err) => {
+      if (err) {
+        console.error("Multer Upload Error:", err);
+        return res.status(400).json({ error: "Image upload failed: " + err.message });
+      }
+      next();
+    });
   } else {
-    // Skip multer for JSON requests
     next();
   }
 }, auth.register);

@@ -1,0 +1,191 @@
+:root {
+    --primary-color: #4a55e1;
+    --secondary-color: #ffffff;
+    --light-bg: #f5f7fa;
+    --border-color: #e0e0e0;
+    --text-color: #333;
+    --secondary-text: #666;
+}
+
+body {
+    font-family: 'Arial', sans-serif;
+    background-color: var(--light-bg);
+}
+
+.profile-page-container {
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.profile-banner {
+    height: 150px;
+    background: linear-gradient(90deg, #e0f7fa, #fff3e0);
+    border-radius: 10px;
+    margin-bottom: -75px;
+}
+
+.profile-card-content {
+    background-color: var(--secondary-color);
+    padding: 40px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.profile-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-bottom: 30px;
+    margin-bottom: 30px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.profile-info-block {
+    display: flex;
+    align-items: center;
+    margin-top: -50px;
+}
+
+.profile-picture {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-right: 20px;
+    border: 5px solid var(--secondary-color);
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.user-name {
+    margin: 0 0 5px 0;
+    color: var(--text-color);
+}
+
+.user-email-header {
+    margin: 0;
+    color: var(--secondary-text);
+    font-size: 0.9em;
+}
+
+.profile-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* --- Form Grid --- */
+.profile-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px 40px;
+    margin-bottom: 40px;
+}
+
+.form-group label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: var(--secondary-text);
+    font-size: 0.9em;
+}
+
+.form-group input, .form-group select {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-sizing: border-box;
+    font-size: 1em;
+    background-color: var(--light-bg);
+}
+
+.form-group input:focus, .form-group select:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(74, 85, 225, 0.2);
+}
+
+/* --- Settings Grid (Email/Password) --- */
+.settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    padding-top: 40px;
+    border-top: 1px solid var(--border-color);
+}
+
+.email-settings h3, .password-settings h3 {
+    color: var(--text-color);
+    margin-top: 0;
+    margin-bottom: 20px;
+}
+
+.current-email-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.email-address {
+    font-weight: bold;
+    color: var(--text-color);
+    margin: 0;
+}
+
+.current-email-info small {
+    color: #999;
+}
+
+/* --- Buttons --- */
+.btn {
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+    text-decoration: none;
+}
+
+.btn-primary { 
+    background-color: var(--primary-color); 
+    color: white; 
+    border: 1px solid var(--primary-color);
+}
+
+.btn-primary:hover {
+    background-color: #3b45c2;
+    border-color: #3b45c2;
+}
+
+.btn-secondary {
+    background-color: transparent;
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
+}
+
+.btn-secondary:hover {
+    background-color: rgba(74, 85, 225, 0.1);
+}
+
+.btn-link {
+    background: none;
+    border: none;
+    color: var(--primary-color);
+    padding: 0;
+    font-weight: 600;
+    text-align: left;
+    margin-top: 10px;
+}
+
+/* Specific button placement adjustments */
+.password-settings form {
+    display: grid;
+    gap: 15px;
+}
+
+.update-password-btn {
+    grid-column: 2 / 3; /* Aligns button to the right in the second column */
+    justify-self: end;
+    margin-top: 10px;
+}

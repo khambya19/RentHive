@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import './RegisterOwner.css';
+import './RegisterVendor.css';
 import OtpModal from '../../components/otpModal';
 import API_BASE_URL from '../../config/api';
 
-const RegisterOwner = () => {
+const RegisterVendor = () => {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     fullName: '',
@@ -236,4 +236,4 @@ const formInputStyle = {
   background: '#f3f7ff'
 };
 
-export default RegisterOwner;
+export default RegisterVendor;

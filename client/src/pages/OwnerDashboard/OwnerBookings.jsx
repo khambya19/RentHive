@@ -16,15 +16,15 @@ const OwnerBookings = ({ showSuccess, showError }) => {
     fetchBookings();
   }, []);
 
-  // Listen for real-time booking updates
+  
   useEffect(() => {
     if (socket && socket.connected) {
       const handleBookingUpdate = (notification) => {
         if (notification.type === 'booking') {
-          // Refresh bookings when there's a booking-related notification
-          fetchBookings();
           
-          // Show notification for booking status updates
+          fetchBookings();
+
+          
           if (notification.title.includes('Approved') || 
               notification.title.includes('Confirmed') ||
               notification.title.includes('Active') ||

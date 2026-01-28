@@ -141,3 +141,5 @@ export function Body() {
     </main>
   );
 }
+
+export default Body;

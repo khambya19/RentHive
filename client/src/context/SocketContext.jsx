@@ -25,7 +25,7 @@ export const SocketProvider = ({ children }) => {
     let socketInstance = null;
 
     try {
-      socketInstance = io('http://localhost:5001', {
+      socketInstance = io('http://localhost:3001', {
         // Prefer polling first to avoid 'WebSocket is closed before the connection is established'
         // in dev/proxy/CORS scenarios; socket.io will upgrade to websocket when available.
         transports: ['polling', 'websocket'],
@@ -156,7 +156,7 @@ export const SocketProvider = ({ children }) => {
   // Fetch user notifications from API
   const fetchUserNotifications = async (userId) => {
     try {
-      const response = await axios.get(`http://localhost:5001/api/notifications/user/${userId}`);
+      const response = await axios.get(`http://localhost:3001/api/notifications/user/${userId}`);
       if (response.data.success) {
         setNotifications(response.data.data.notifications);
         setUnreadCount(response.data.data.unreadCount);
@@ -173,7 +173,7 @@ export const SocketProvider = ({ children }) => {
 
     try {
       const response = await axios.patch(
-        `http://localhost:5001/api/notifications/${notificationId}/read`,
+        `http://localhost:3001/api/notifications/${notificationId}/read`,
         { userId: currentUserId }
       );
 
@@ -198,7 +198,7 @@ export const SocketProvider = ({ children }) => {
 
     try {
       const response = await axios.patch(
-        `http://localhost:5001/api/notifications/user/${currentUserId}/read-all`
+        `http://localhost:3001/api/notifications/user/${currentUserId}/read-all`
       );
 
       if (response.data.success) {
@@ -220,7 +220,7 @@ export const SocketProvider = ({ children }) => {
 
     try {
       const response = await axios.delete(
-        `http://localhost:5001/api/notifications/${notificationId}`,
+        `http://localhost:3001/api/notifications/${notificationId}`,
         { data: { userId: currentUserId } }
       );
 

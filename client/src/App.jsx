@@ -1,22 +1,22 @@
 import React from "react";
 import "./App.css";
-import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from "./context/AuthContext";
-import { SocketProvider } from "./context/SocketContext";
-import NavBar from "./pages/LandingPage/NavBar.jsx"; 
-import { Body } from "./pages/LandingPage/Body.jsx"; 
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import NavBar from "./pages/LandingPage/NavBar.jsx";
+import Body from './pages/LandingPage/Body'; // Removed curly braces to match default export
 import Footer from "./pages/LandingPage/Footer.jsx";
-import LoginPage from "./pages/Login/Login.jsx";
+import Login from "./pages/Login/Login.jsx";
 import Register from "./pages/Register/Register.jsx";
-import RegisterUser from "./pages/RegisterUser/RegisterUser.jsx";
-import RegisterOwner from "./pages/RegisterOwner/RegisterOwner.jsx";
+import RegisterVendor from "./pages/RegisterVendor/RegisterVendor.jsx";
+import RegisterLessor from "./pages/RegisterLessor/RegisterLessor.jsx";
 import ForgotPassword from "./pages/ForgotPassword/ForgotPassword.jsx";
 import UserDashboard from "./pages/UserDashboard/UserDashboard.jsx";
 import OwnerDashboard from "./pages/OwnerDashboard/OwnerDashboard.jsx";
+import { AuthProvider, useAuth } from './context/AuthContext.jsx'; 
+import { SocketProvider } from './context/SocketContext.jsx';
+import RatingPage from "./pages/RatingPage/RatingPage.jsx";
 
-// Protected Route Component - Handles authentication & role-based access
 const ProtectedRoute = ({ children, allowedTypes }) => {
-    const { user, loading } = useAuth();
+    const { user, loading } = useAuth(); // Now this will work because it's inside AuthProvider
     
     if (loading) return <div>Loading...</div>;
     
@@ -25,8 +25,7 @@ const ProtectedRoute = ({ children, allowedTypes }) => {
     }
     
     if (allowedTypes && !allowedTypes.includes(user.type)) {
-        // Redirect based on user type
-        if (user.type === 'renter' || user.type === 'lessor') {
+        if (user.type === 'lessor') {
             return <Navigate to="/user/dashboard" replace />;
         } else if (user.type === 'owner' || user.type === 'vendor') {
             return <Navigate to="/owner/dashboard" replace />;
@@ -40,62 +39,44 @@ const ProtectedRoute = ({ children, allowedTypes }) => {
 
 function AppContent() {
     const location = useLocation();
-
-    // Hide navbar and footer on dashboard pages
-    const isDashboard = location.pathname.startsWith('/user') || 
-                       location.pathname.startsWith('/owner') ||
-                       location.pathname.startsWith('/tenant');
     
     const showFooter = location.pathname !== '/login' && 
                        location.pathname !== '/register' &&
-                       location.pathname !== '/register-user' && 
-                       location.pathname !== '/register-owner' &&
-                       location.pathname !== '/forgot-password' &&
-                       !isDashboard;
-
-    const showNavBar = !isDashboard;
+                       location.pathname !== '/register-vendor' && 
+                       location.pathname !== '/register-lessor' &&
+                       location.pathname !== '/forgot-password';
 
     return (
         <div className="App">
-            {showNavBar && <NavBar />}
-            
+            <NavBar /> 
             <Routes> 
                 <Route path="/" element={<Body />} /> 
-                <Route path="/login" element={<LoginPage />} /> 
+                <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
-                <Route path="/register-user" element={<RegisterUser />} />
-                <Route path="/register-owner" element={<RegisterOwner />} />
-                {/* Backward/alternate route used elsewhere in the app */}
-                <Route path="/register-vendor" element={<RegisterOwner />} />
+                <Route path="/register-vendor" element={<RegisterVendor />} />
+                <Route path="/register-lessor" element={<RegisterLessor />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 
-                {/* Protected Dashboard Routes */}
-                
-                {/* User/Tenant Dashboard - Browse and Rent Properties/Bikes */}
                 <Route path="/user/dashboard" element={
-                    <ProtectedRoute allowedTypes={['renter', 'lessor']}>
+                    <ProtectedRoute allowedTypes={['lessor']}>
                         <UserDashboard />
                     </ProtectedRoute>
                 } />
                 
-                {/* Alias route for tenant dashboard */}
-                <Route path="/tenant/dashboard" element={
-                    <ProtectedRoute allowedTypes={['renter', 'lessor']}>
-                        <UserDashboard />
-                    </ProtectedRoute>
-                } />
-                
-                {/* Owner Dashboard - List and Manage Properties/Bikes */}
                 <Route path="/owner/dashboard" element={
-                    <ProtectedRoute allowedTypes={['owner', 'vendor']}>
+                    <ProtectedRoute allowedTypes={['owner']}>
                         <OwnerDashboard />
                     </ProtectedRoute>
                 } />
 
-                {/* Fallback for unknown routes */}
+                <Route path="/user/ratings" element={
+                    <ProtectedRoute allowedTypes={['lessor', 'renter']}>
+                        <RatingPage />
+                    </ProtectedRoute>
+} />
+
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-            
             {showFooter && <Footer />}
         </div>
     );
@@ -112,5 +93,5 @@ function App() {
       </AuthProvider>
     );
 }
-  
+
 export default App;

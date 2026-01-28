@@ -48,13 +48,14 @@ const RegisterLessor = () => {
     formData.append('fullName', form.fullName);
     formData.append('email', form.email);
     formData.append('password', form.password);
-    formData.append('phoneNumber', form.phoneNumber);
+    formData.append('confirmPassword', form.confirmPassword);
+    formData.append('phone', form.phoneNumber);
     formData.append('address', form.address);
     formData.append('businessName', form.businessName);
     formData.append('ownershipType', form.ownershipType);
 
     if (form.photo) {
-      formData.append('profilePhoto', form.photo);
+      formData.append('profileImage', form.photo);
     }
 
     try {

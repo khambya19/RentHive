@@ -8,7 +8,7 @@ const RatingPage = () => {
   
   const fetchReviews = async () => {
     try {
-      const res = await fetch('http://localhost:5001/api/reviews');
+      const res = await fetch('http://localhost:3001/api/reviews');
       const data = await res.json();
       setReviews(data);
     } catch (err) {
@@ -22,7 +22,7 @@ const RatingPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('http://localhost:5001/api/reviews/add', {
+      const res = await fetch('http://localhost:3001/api/reviews/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),

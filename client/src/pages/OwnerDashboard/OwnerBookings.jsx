@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../../context/SocketContext';
 import './OwnerBookings.css';
+import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
 
 const OwnerBookings = ({ showSuccess, showError }) => {
   const socket = useSocket();
@@ -15,15 +16,15 @@ const OwnerBookings = ({ showSuccess, showError }) => {
     fetchBookings();
   }, []);
 
-  // Listen for real-time booking updates
+  
   useEffect(() => {
     if (socket && socket.connected) {
       const handleBookingUpdate = (notification) => {
         if (notification.type === 'booking') {
-          // Refresh bookings when there's a booking-related notification
-          fetchBookings();
           
-          // Show notification for booking status updates
+          fetchBookings();
+
+          
           if (notification.title.includes('Approved') || 
               notification.title.includes('Confirmed') ||
               notification.title.includes('Active') ||
@@ -55,7 +56,7 @@ const OwnerBookings = ({ showSuccess, showError }) => {
       }
 
       console.log('Fetching bookings from /api/owners/all-bookings');
-      const response = await fetch('http://localhost:3001/api/owners/all-bookings', {
+      const response = await fetch(`${API_BASE_URL}/owners/all-bookings`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -85,8 +86,8 @@ const OwnerBookings = ({ showSuccess, showError }) => {
     try {
       const token = localStorage.getItem('token');
       const endpoint = bookingType === 'property' 
-        ? `http://localhost:3001/api/properties/bookings/${bookingId}/status`
-        : `http://localhost:3001/api/bikes/bookings/${bookingId}/status`;
+        ? `http://localhost:5001/api/properties/bookings/${bookingId}/status`
+        : `http://localhost:5001/api/bikes/bookings/${bookingId}/status`;
 
       const status = action === 'accept' ? 'Approved' : 'Rejected';
 
@@ -121,6 +122,66 @@ const OwnerBookings = ({ showSuccess, showError }) => {
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  const handleApproveBooking = async (bookingId, type) => {
+    try {
+      const token = localStorage.getItem('token');
+      const endpoint = type === 'property' 
+        ? `${API_BASE_URL}/owners/bookings/${bookingId}/approve`
+        : `${API_BASE_URL}/bikes/bookings/${bookingId}/approve`;
+
+      const response = await fetch(endpoint, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        showSuccess('Booking Approved', 'Payment reminders will be sent automatically');
+        fetchBookings();
+      } else {
+        const error = await response.json();
+        showError('Failed to approve', error.message || 'Something went wrong');
+      }
+    } catch (error) {
+      console.error('Error approving booking:', error);
+      showError('Error', 'Failed to approve booking');
+    }
+  };
+
+  const handleRejectBooking = async (bookingId, type) => {
+    if (!confirm('Are you sure you want to reject this booking?')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const endpoint = type === 'property'
+        ? `${API_BASE_URL}/owners/bookings/${bookingId}/reject`
+        : `${API_BASE_URL}/bikes/bookings/${bookingId}/reject`;
+
+      const response = await fetch(endpoint, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        showSuccess('Booking Rejected', 'The booking has been rejected');
+        fetchBookings();
+      } else {
+        const error = await response.json();
+        showError('Failed to reject', error.message || 'Something went wrong');
+      }
+    } catch (error) {
+      console.error('Error rejecting booking:', error);
+      showError('Error', 'Failed to reject booking');
+    }
   };
 
   const getStatusClass = (status) => {
@@ -162,7 +223,7 @@ const OwnerBookings = ({ showSuccess, showError }) => {
           <div className="booking-image">
             {booking.property?.images?.[0] ? (
               <img 
-                src={`http://localhost:3001/uploads/properties/${booking.property.images[0]}`} 
+                src={`${SERVER_BASE_URL}/uploads/properties/${booking.property.images[0]}`} 
                 alt={booking.property.title}
               />
             ) : (
@@ -249,7 +310,7 @@ const OwnerBookings = ({ showSuccess, showError }) => {
           <div className="booking-image">
             {booking.bike?.images?.[0] ? (
               <img 
-                src={`http://localhost:3001/uploads/bikes/${booking.bike.images[0]}`} 
+                src={`${SERVER_BASE_URL}/uploads/bikes/${booking.bike.images[0]}`} 
                 alt={`${booking.bike.brand} ${booking.bike.model}`}
               />
             ) : (

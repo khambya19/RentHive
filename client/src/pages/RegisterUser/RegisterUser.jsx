@@ -1,19 +1,19 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import './RegisterVendor.css';
 import OtpModal from '../../components/otpModal';
 import API_BASE_URL from '../../config/api';
 
-const RegisterVendor = () => {
+const RegisterUser = () => {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     fullName: '',
     email: '',
-    phone: '',
+    phoneNumber: '',
     password: '',
     confirmPassword: '',
     address: '',
-    citizenshipNumber: '',
+    businessName: '',
+    ownershipType: 'Individual',
     photo: null,
   });
   const [error, setError] = useState('');
@@ -43,38 +43,84 @@ const RegisterVendor = () => {
     }
 
     try {
-      // Create FormData for file upload
-      const formData = new FormData();
-      formData.append('type', 'owner');
-      formData.append('fullName', form.fullName);
-      formData.append('email', form.email);
-      formData.append('phone', form.phone);
-      formData.append('password', form.password);
-      formData.append('confirmPassword', form.confirmPassword);
-      formData.append('address', form.address);
-      formData.append('idNumber', form.citizenshipNumber); // Server expects idNumber
+      console.log('Form data before processing:', form);
       
-      if (form.photo) {
-        formData.append('profileImage', form.photo); // Server expects profileImage
-      }
+      let body;
+      let headers = {
+        'Accept': 'application/json',
+      };
+
+      // Always use JSON for now to debug the issue
+      const requestBody = {
+        type: 'renter',
+        fullName: form.fullName,
+        email: form.email,
+        phone: form.phoneNumber,
+        password: form.password,
+        confirmPassword: form.confirmPassword,
+        address: form.address,
+        businessName: form.businessName,
+        ownershipType: form.ownershipType,
+      };
+      
+      console.log('Request body being sent:', requestBody);
+      
+      body = JSON.stringify(requestBody);
+      headers['Content-Type'] = 'application/json';
+      
+      console.log('Headers:', headers);
+      console.log('Body string:', body);
 
       const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
-        body: formData, // Send FormData instead of JSON
+        headers,
+        mode: 'cors',
+        body,
       });
 
-      const data = await response.json();
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
-      if (response.ok) {
-        setSuccess('Registration successful! Please verify your email.');
-        setRegisteredEmail(form.email);
-        setShowOtpModal(true);
-      } else {
-        setError(data.error || data.message || 'Registration failed');
+      // Read the response text only once
+      const responseText = await response.text();
+      console.log('Raw response text:', responseText);
+
+      if (!response.ok) {
+        console.error('Response not ok:', response.status, response.statusText);
+        try {
+          const errorData = JSON.parse(responseText);
+          setError(errorData.error || errorData.message || `Server error: ${response.status}`);
+        } catch {
+          setError(`Server error: ${response.status} - ${responseText}`);
+        }
+        return;
       }
+
+      // Parse the response text as JSON
+      let data;
+      try {
+        data = JSON.parse(responseText);
+        console.log('Response data:', data);
+      } catch (parseError) {
+        console.error('Failed to parse response as JSON:', parseError);
+        setError('Server returned invalid response format');
+        return;
+      }
+
+      setSuccess('Registration successful! Please verify your email.');
+      setRegisteredEmail(form.email);
+      setShowOtpModal(true);
+      
     } catch (error) {
-      setError('Unable to connect to server. Please try again.');
-      console.error('Registration error:', error);
+      console.error('Registration error details:', error);
+      
+      if (error.name === 'SyntaxError' && error.message.includes('JSON')) {
+        setError('Server returned invalid response. Please try again.');
+      } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        setError('Unable to connect to server. Please check your connection.');
+      } else {
+        setError(`Registration failed: ${error.message}`);
+      }
     }
   };
 
@@ -96,7 +142,7 @@ const RegisterVendor = () => {
 
           {/* Right Panel */}
           <div style={{ flex: '1 1 62%', padding: '36px' }}>
-            <h2 style={{ fontSize: 28, textAlign: 'center', margin: 0, marginBottom: 24 }}>Sign up as Owner</h2>
+            <h2 style={{ fontSize: 28, textAlign: 'center', margin: 0, marginBottom: 24 }}>Sign up as User</h2>
 
             {error && <div style={{ color: '#d32f2f', marginBottom: 15, padding: '12px 15px', background: '#ffebee', borderLeft: '4px solid #d32f2f', borderRadius: 6 }}>{error}</div>}
             {success && <div style={{ color: '#2e7d32', marginBottom: 15, padding: '12px 15px', background: '#e8f5e9', borderLeft: '4px solid #2e7d32', borderRadius: 6 }}>{success}</div>}
@@ -114,7 +160,7 @@ const RegisterVendor = () => {
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>Phone Number</label>
-                  <input type="tel" name="phone" placeholder="+977 9800000000" value={form.phone} onChange={handleChange} required style={formInputStyle} />
+                  <input type="tel" name="phoneNumber" placeholder="+977 9800000000" value={form.phoneNumber} onChange={handleChange} required style={formInputStyle} />
                 </div>
               </div>
 
@@ -190,9 +236,18 @@ const RegisterVendor = () => {
                 <input type="text" name="address" placeholder="Enter your full address" value={form.address} onChange={handleChange} required style={formInputStyle} />
               </div>
 
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>Citizenship Number</label>
-                <input type="text" name="citizenshipNumber" placeholder="Enter your citizenship number" value={form.citizenshipNumber} onChange={handleChange} required style={formInputStyle} />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>Business Name</label>
+                  <input type="text" name="businessName" placeholder="Enter your business name" value={form.businessName} onChange={handleChange} style={formInputStyle} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>Ownership Type</label>
+                  <select name="ownershipType" value={form.ownershipType} onChange={handleChange} style={formInputStyle}>
+                    <option value="Individual">Individual</option>
+                    <option value="Company">Company</option>
+                  </select>
+                </div>
               </div>
 
               <div style={{ marginBottom: 12 }}>
@@ -236,4 +291,4 @@ const formInputStyle = {
   background: '#f3f7ff'
 };
 
-export default RegisterVendor;
+export default RegisterUser;

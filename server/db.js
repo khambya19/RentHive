@@ -6,7 +6,7 @@ const pool = new Pool({
   host: 'localhost',          // Your computer
   database: 'renthive_db',       // The name of the DB you will create
   password: '',  
-  port: 5432,                 // Default port
+  port:3001,                 // Default port
 });
 
 module.exports = pool;

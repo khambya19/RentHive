@@ -21,6 +21,10 @@ router.delete('/vendor/:id', bikeController.deleteBike); // Delete bike
 router.get('/vendor/bookings', bikeController.getVendorBookings); // Get vendor's bookings
 router.put('/vendor/bookings/:id/status', bikeController.updateBookingStatus); // Update booking status
 
+// Approve/Reject bike bookings
+router.patch('/bookings/:bookingId/approve', bikeController.approveBooking);
+router.patch('/bookings/:bookingId/reject', bikeController.rejectBooking);
+
 // NEW: Dashboard-specific routes for BikeVendorDashboard
 router.get('/stats', bikeController.getVendorStats); // Get vendor stats for dashboard
 router.get('/customers', bikeController.getVendorCustomers); // Get vendor customers

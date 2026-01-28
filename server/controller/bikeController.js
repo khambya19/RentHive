@@ -1,35 +1,92 @@
 const Bike = require('../models/Bike');
 const BikeBooking = require('../models/BikeBooking');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
 const { Op } = require('sequelize');
 
 // Get all available bikes for lessors to rent
 exports.getAvailableBikes = async (req, res) => {
   try {
-    const { search, type, location, minPrice, maxPrice } = req.query;
+    const { 
+      search, 
+      type, 
+      location, 
+      minPrice, 
+      maxPrice, 
+      fuelType,
+      minEngine,
+      maxEngine,
+      minYear,
+      maxYear,
+      features,
+      sortBy = 'createdAt',
+      sortOrder = 'DESC'
+    } = req.query;
     
     let whereClause = { status: 'Available' };
     
-    // Apply filters
+    // Search by brand or model
     if (search) {
       whereClause[Op.or] = [
-        { brand: { [Op.like]: `%${search}%` } },
-        { model: { [Op.like]: `%${search}%` } }
+        { brand: { [Op.iLike || Op.like]: `%${search}%` } },
+        { model: { [Op.iLike || Op.like]: `%${search}%` } },
+        { description: { [Op.iLike || Op.like]: `%${search}%` } }
       ];
     }
     
+    // Bike type filter
     if (type && type !== 'all') {
       whereClause.type = type;
     }
     
+    // Location filter
     if (location) {
-      whereClause.location = { [Op.like]: `%${location}%` };
+      whereClause.location = { [Op.iLike || Op.like]: `%${location}%` };
     }
     
+    // Price range filter (daily rate)
     if (minPrice || maxPrice) {
       whereClause.dailyRate = {};
       if (minPrice) whereClause.dailyRate[Op.gte] = parseFloat(minPrice);
       if (maxPrice) whereClause.dailyRate[Op.lte] = parseFloat(maxPrice);
+    }
+
+    // Fuel type filter
+    if (fuelType && fuelType !== 'all') {
+      whereClause.fuelType = fuelType;
+    }
+
+    // Engine capacity range filter
+    if (minEngine || maxEngine) {
+      whereClause.engineCapacity = {};
+      if (minEngine) whereClause.engineCapacity[Op.gte] = parseFloat(minEngine);
+      if (maxEngine) whereClause.engineCapacity[Op.lte] = parseFloat(maxEngine);
+    }
+
+    // Year range filter
+    if (minYear || maxYear) {
+      whereClause.year = {};
+      if (minYear) whereClause.year[Op.gte] = parseInt(minYear);
+      if (maxYear) whereClause.year[Op.lte] = parseInt(maxYear);
+    }
+
+    // Features filter (check if bike has all selected features)
+    if (features) {
+      const featuresList = features.split(',').map(f => f.trim());
+      whereClause.features = {
+        [Op.contains]: featuresList
+      };
+    }
+
+    // Determine sort order
+    let orderClause = [];
+    const validSortFields = ['createdAt', 'dailyRate', 'weeklyRate', 'monthlyRate', 'year', 'engineCapacity', 'rating'];
+    const validSortOrders = ['ASC', 'DESC'];
+    
+    if (validSortFields.includes(sortBy) && validSortOrders.includes(sortOrder.toUpperCase())) {
+      orderClause.push([sortBy, sortOrder.toUpperCase()]);
+    } else {
+      orderClause.push(['createdAt', 'DESC']);
     }
 
     const bikes = await Bike.findAll({
@@ -41,7 +98,7 @@ exports.getAvailableBikes = async (req, res) => {
           attributes: ['id', 'businessName', 'fullName', 'phone']
         }
       ],
-      order: [['createdAt', 'DESC']]
+      order: orderClause
     });
 
     return res.json(bikes.map(bike => ({
@@ -115,6 +172,11 @@ exports.bookBike = async (req, res) => {
       attributes: ['id', 'fullName', 'email', 'phone']
     });
 
+    // Prevent self-booking
+    if (bike.vendorId === lessorId) {
+      return res.status(400).json({ error: 'You cannot book your own bike' });
+    }
+
     // Check for conflicting bookings
     const conflictingBooking = await BikeBooking.findOne({
       where: {
@@ -172,24 +234,39 @@ exports.bookBike = async (req, res) => {
 
     // Send notification to vendor
     try {
-      const { createUserNotification } = require('./notificationController');
+      const { io, connectedUsers } = require('../server');
       
-      const notificationTitle = `🏍️ New Bike Rental Request`;
+      const notificationTitle = '🏍️ New Bike Rental Request';
       const notificationMessage = `${lessor.fullName} wants to rent your ${bike.brand} ${bike.model} from ${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}. Total: NPR ${totalAmount.toLocaleString()}`;
       
-      await createUserNotification({
-        body: {
-          userId: vendorId,
-          title: notificationTitle,
-          message: notificationMessage,
-          type: 'booking',
-          link: `/vendor/bookings/${booking.id}`
-        }
-      }, {
-        status: (code) => ({
-          json: (data) => console.log('Notification created:', data)
-        })
+      const notification = await Notification.create({
+        userId: vendorId,
+        title: notificationTitle,
+        message: notificationMessage,
+        type: 'info',
+        isBroadcast: false,
+        link: `/owner/dashboard?tab=bookings`
       });
+
+      console.log('✅ Bike booking notification created:', notification.id);
+      console.log(`📧 Sending bike booking notification to vendor ${vendorId}`);
+
+      if (io && connectedUsers) {
+        const socketId = connectedUsers.get(vendorId.toString());
+        if (socketId) {
+          io.to(socketId).emit('new-notification', {
+            id: notification.id,
+            title: notification.title,
+            message: notification.message,
+            type: notification.type,
+            link: notification.link,
+            is_read: false,
+            created_at: notification.created_at,
+            is_broadcast: false
+          });
+          console.log(`✅ Bike booking request notification sent to vendor ${vendorId}`);
+        }
+      }
     } catch (notificationError) {
       console.error('Error sending notification:', notificationError);
       // Don't fail the booking if notification fails
@@ -247,6 +324,11 @@ exports.bookBikeDirect = async (req, res) => {
 
     if (!lessor) {
       return res.status(404).json({ error: 'Lessor not found' });
+    }
+
+    // Prevent self-booking
+    if (bike.vendorId === lessorId) {
+      return res.status(400).json({ error: 'You cannot book your own bike' });
     }
 
     // Check for conflicting bookings
@@ -313,24 +395,37 @@ exports.bookBikeDirect = async (req, res) => {
 
     // Send notification to vendor about the confirmed booking
     try {
-      const { createUserNotification } = require('./notificationController');
+      const { io, connectedUsers } = require('../server');
       
-      const notificationTitle = `🏍️ New Bike Rental Confirmed`;
+      const notificationTitle = '🏍️ New Bike Rental Confirmed';
       const notificationMessage = `${lessor.fullName} has booked your ${bike.brand} ${bike.model} from ${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}. Total: NPR ${totalAmount.toLocaleString()}. Booking ID: #${booking.id}`;
       
-      await createUserNotification({
-        body: {
-          userId: vendorId,
-          title: notificationTitle,
-          message: notificationMessage,
-          type: 'booking',
-          link: `/vendor/bookings/${booking.id}`
-        }
-      }, {
-        status: (code) => ({
-          json: (data) => console.log('Notification created:', data)
-        })
+      const notification = await Notification.create({
+        userId: vendorId,
+        title: notificationTitle,
+        message: notificationMessage,
+        type: 'info',
+        isBroadcast: false,
+        link: `/owner/dashboard?tab=bookings`
       });
+
+      console.log('✅ Bike direct booking notification created:', notification.id);
+
+      if (io && connectedUsers) {
+        const socketId = connectedUsers.get(vendorId.toString());
+        if (socketId) {
+          io.to(socketId).emit('new-notification', {
+            id: notification.id,
+            title: notification.title,
+            message: notification.message,
+            type: notification.type,
+            link: notification.link,
+            is_read: false,
+            created_at: notification.created_at,
+            is_broadcast: false
+          });
+        }
+      }
     } catch (notificationError) {
       console.error('Error sending notification:', notificationError);
       // Don't fail the booking if notification fails
@@ -643,7 +738,7 @@ exports.updateBookingStatus = async (req, res) => {
 
     // Send notification to lessor based on status change
     try {
-      const { createUserNotification } = require('./notificationController');
+      const { io, connectedUsers } = require('../server');
       
       let notificationTitle = '';
       let notificationMessage = '';
@@ -672,19 +767,33 @@ exports.updateBookingStatus = async (req, res) => {
       }
       
       if (notificationTitle && notificationMessage) {
-        await createUserNotification({
-          body: {
-            userId: booking.lessorId,
-            title: notificationTitle,
-            message: notificationMessage,
-            type: 'booking',
-            link: `/lessor/bookings/${booking.id}`
-          }
-        }, {
-          status: (code) => ({
-            json: (data) => console.log('Notification sent to lessor:', data)
-          })
+        const notification = await Notification.create({
+          userId: booking.lessorId,
+          title: notificationTitle,
+          message: notificationMessage,
+          type: 'info',
+          isBroadcast: false,
+          link: `/tenant/dashboard?tab=applications`
         });
+
+        console.log(`📧 Sending bike status update to lessor ${booking.lessorId}`);
+
+        if (io && connectedUsers) {
+          const socketId = connectedUsers.get(booking.lessorId.toString());
+          if (socketId) {
+            io.to(socketId).emit('new-notification', {
+              id: notification.id,
+              title: notification.title,
+              message: notification.message,
+              type: notification.type,
+              link: notification.link,
+              is_read: false,
+              created_at: notification.created_at,
+              is_broadcast: false
+            });
+            console.log(`✅ Bike booking status notification sent to lessor ${booking.lessorId}`);
+          }
+        }
       }
     } catch (notificationError) {
       console.error('Error sending notification to lessor:', notificationError);
@@ -851,6 +960,56 @@ exports.getVendorCustomers = async (req, res) => {
   } catch (error) {
     console.error('Error fetching vendor customers:', error);
     return res.status(500).json({ error: 'Failed to fetch customers' });
+  }
+};
+
+// Approve bike booking
+exports.approveBooking = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const vendorId = req.user.id;
+
+    const booking = await BikeBooking.findOne({
+      where: { id: bookingId, vendorId }
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found or unauthorized' });
+    }
+
+    booking.status = 'Active';
+    await booking.save();
+
+    console.log(`✅ Bike booking ${bookingId} approved and set to Active`);
+    return res.json({ message: 'Booking approved successfully', booking });
+  } catch (error) {
+    console.error('❌ Error approving bike booking:', error);
+    return res.status(500).json({ error: 'Failed to approve booking', details: error.message });
+  }
+};
+
+// Reject bike booking
+exports.rejectBooking = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const vendorId = req.user.id;
+
+    const booking = await BikeBooking.findOne({
+      where: { id: bookingId, vendorId }
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found or unauthorized' });
+    }
+
+    booking.status = 'Rejected';
+    await booking.save();
+
+    console.log(`✅ Bike booking ${bookingId} rejected`);
+    return res.json({ message: 'Booking rejected successfully', booking });
+  } catch (error) {
+    console.error('❌ Error rejecting bike booking:', error);
+    return res.status(500).json({ error: 'Failed to reject booking', details: error.message });
   }
 };
 

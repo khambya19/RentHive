@@ -1,26 +1,56 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../hooks/useNotifications';
 import DashboardNotifications from '../../components/DashboardNotifications';
 import NotificationBell from '../../components/NotificationBell';
+import PaymentManagement from '../../components/PaymentManagement';
 import './UserDashboard.css';
 import bikeFallback from '../../assets/bike3.jpg';
+import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
+import RatingPage from "../RatingPage/RatingPage";
+import Settings from '../Settings/Settings';
 
 const UserDashboard = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, logout } = useAuth();
   const { notifications, removeNotification, showSuccess, showError } = useNotifications();
   const [activeTab, setActiveTab] = useState('overview');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   
   
   const [properties, setProperties] = useState([]);
   const [bikes, setBikes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState('all'); // 'all', 'properties', 'bikes'
+  const [filterType, setFilterType] = useState('all'); 
+  
+  // Advanced filters
+  const [filters, setFilters] = useState({
+    // Property filters
+    propertyType: 'all',
+    city: '',
+    minPrice: '',
+    maxPrice: '',
+    bedrooms: '',
+    bathrooms: '',
+    amenities: [],
+    
+    // Bike filters
+    bikeType: 'all',
+    location: '',
+    fuelType: 'all',
+    minEngine: '',
+    maxEngine: '',
+    features: [],
+    
+    // Common filters
+    sortBy: 'createdAt',
+    sortOrder: 'DESC'
+  });
   
   
   const [myApplications, setMyApplications] = useState([]);
@@ -38,10 +68,18 @@ const UserDashboard = () => {
   });
   const [bookingLoading, setBookingLoading] = useState(false);
 
+  // Handle tab from URL query parameter
+  useEffect(() => {
+    const tabFromUrl = searchParams.get('tab');
+    if (tabFromUrl) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [searchParams]);
+
   useEffect(() => {
     fetchData();
     fetchMyApplications();
-  }, []);
+  }, [filters, searchQuery]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -55,12 +93,39 @@ const UserDashboard = () => {
 
       const headers = { 'Authorization': `Bearer ${token}` };
 
+      // Build query parameters for properties
+      const propertyParams = new URLSearchParams();
+      if (searchQuery) propertyParams.append('search', searchQuery);
+      if (filters.propertyType !== 'all') propertyParams.append('type', filters.propertyType);
+      if (filters.city) propertyParams.append('city', filters.city);
+      if (filters.minPrice) propertyParams.append('minPrice', filters.minPrice);
+      if (filters.maxPrice) propertyParams.append('maxPrice', filters.maxPrice);
+      if (filters.bedrooms) propertyParams.append('bedrooms', filters.bedrooms);
+      if (filters.bathrooms) propertyParams.append('bathrooms', filters.bathrooms);
+      if (filters.amenities.length > 0) propertyParams.append('amenities', filters.amenities.join(','));
+      propertyParams.append('sortBy', filters.sortBy);
+      propertyParams.append('sortOrder', filters.sortOrder);
+
+      // Build query parameters for bikes
+      const bikeParams = new URLSearchParams();
+      if (searchQuery) bikeParams.append('search', searchQuery);
+      if (filters.bikeType !== 'all') bikeParams.append('type', filters.bikeType);
+      if (filters.location) bikeParams.append('location', filters.location);
+      if (filters.fuelType !== 'all') bikeParams.append('fuelType', filters.fuelType);
+      if (filters.minPrice) bikeParams.append('minPrice', filters.minPrice);
+      if (filters.maxPrice) bikeParams.append('maxPrice', filters.maxPrice);
+      if (filters.minEngine) bikeParams.append('minEngine', filters.minEngine);
+      if (filters.maxEngine) bikeParams.append('maxEngine', filters.maxEngine);
+      if (filters.features.length > 0) bikeParams.append('features', filters.features.join(','));
+      bikeParams.append('sortBy', filters.sortBy);
+      bikeParams.append('sortOrder', filters.sortOrder);
+
       // Tenant/Lessor browsing endpoints (NOT vendor-owned routes)
       const [propertiesRes, bikesRes] = await Promise.all([
         // Properties available to rent
-        fetch('http://localhost:3001/api/properties/available', { headers }),
+        fetch(`${API_BASE_URL}/properties/available?${propertyParams}`, { headers }),
         // Bikes available to rent
-        fetch('http://localhost:3001/api/bikes/available', { headers }),
+        fetch(`${API_BASE_URL}/bikes/available?${bikeParams}`, { headers }),
       ]);
 
       // If backend rejects the token, force re-auth.
@@ -154,7 +219,7 @@ const UserDashboard = () => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3001/api/properties/book', {
+      const response = await fetch(`${API_BASE_URL}/properties/book`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -314,6 +379,222 @@ const UserDashboard = () => {
         </div>
       </div>
 
+      {/* Filter Toggle Button */}
+      <button 
+        className="btn-toggle-filters" 
+        onClick={() => setShowFilters(!showFilters)}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <line x1="4" y1="6" x2="20" y2="6"/>
+          <line x1="4" y1="12" x2="20" y2="12"/>
+          <line x1="4" y1="18" x2="20" y2="18"/>
+          <circle cx="9" cy="6" r="2" fill="currentColor"/>
+          <circle cx="15" cy="12" r="2" fill="currentColor"/>
+          <circle cx="12" cy="18" r="2" fill="currentColor"/>
+        </svg>
+        {showFilters ? 'Hide Filters' : 'Show Filters'}
+        <svg 
+          viewBox="0 0 24 24" 
+          fill="none" 
+          stroke="currentColor" 
+          strokeWidth="2"
+          style={{ transform: showFilters ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s' }}
+        >
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+
+      {/* Advanced Filters */}
+      {showFilters && (
+      <div className="advanced-filters">
+        <div className="filters-row">
+          {/* Price Range */}
+          <div className="filter-group">
+            <label>Price Range (NPR)</label>
+            <div className="price-range">
+              <input
+                type="number"
+                placeholder="Min"
+                value={filters.minPrice}
+                onChange={(e) => setFilters({...filters, minPrice: e.target.value})}
+                className="filter-input small"
+              />
+              <span>-</span>
+              <input
+                type="number"
+                placeholder="Max"
+                value={filters.maxPrice}
+                onChange={(e) => setFilters({...filters, maxPrice: e.target.value})}
+                className="filter-input small"
+              />
+            </div>
+          </div>
+
+          {/* Property Type (when showing properties) */}
+          {filterType !== 'bikes' && (
+            <>
+              <div className="filter-group">
+                <label>Property Type</label>
+                <select
+                  value={filters.propertyType}
+                  onChange={(e) => setFilters({...filters, propertyType: e.target.value})}
+                  className="filter-select"
+                >
+                  <option value="all">All Types</option>
+                  <option value="Apartment">Apartment</option>
+                  <option value="House">House</option>
+                  <option value="Villa">Villa</option>
+                  <option value="Studio">Studio</option>
+                  <option value="Condo">Condo</option>
+                </select>
+              </div>
+
+              <div className="filter-group">
+                <label>Bedrooms</label>
+                <select
+                  value={filters.bedrooms}
+                  onChange={(e) => setFilters({...filters, bedrooms: e.target.value})}
+                  className="filter-select"
+                >
+                  <option value="">Any</option>
+                  <option value="1">1 BR</option>
+                  <option value="2">2 BR</option>
+                  <option value="3">3 BR</option>
+                  <option value="4">4+ BR</option>
+                </select>
+              </div>
+
+              <div className="filter-group">
+                <label>City/Location</label>
+                <input
+                  type="text"
+                  placeholder="e.g., Parbat"
+                  value={filters.city}
+                  onChange={(e) => setFilters({...filters, city: e.target.value})}
+                  className="filter-input"
+                />
+              </div>
+            </>
+          )}
+
+          {/* Bike Type (when showing bikes) */}
+          {filterType !== 'properties' && (
+            <>
+              <div className="filter-group">
+                <label>Bike Type</label>
+                <select
+                  value={filters.bikeType}
+                  onChange={(e) => setFilters({...filters, bikeType: e.target.value})}
+                  className="filter-select"
+                >
+                  <option value="all">All Types</option>
+                  <option value="Motorcycle">Motorcycle</option>
+                  <option value="Scooter">Scooter</option>
+                  <option value="Sports Bike">Sports Bike</option>
+                  <option value="Cruiser">Cruiser</option>
+                  <option value="Electric">Electric</option>
+                </select>
+              </div>
+
+              <div className="filter-group">
+                <label>Fuel Type</label>
+                <select
+                  value={filters.fuelType}
+                  onChange={(e) => setFilters({...filters, fuelType: e.target.value})}
+                  className="filter-select"
+                >
+                  <option value="all">All</option>
+                  <option value="Petrol">Petrol</option>
+                  <option value="Electric">Electric</option>
+                  <option value="Diesel">Diesel</option>
+                </select>
+              </div>
+
+              <div className="filter-group">
+                <label>Location</label>
+                <input
+                  type="text"
+                  placeholder="e.g., Pokhara"
+                  value={filters.location}
+                  onChange={(e) => setFilters({...filters, location: e.target.value})}
+                  className="filter-input"
+                />
+              </div>
+            </>
+          )}
+
+          {/* Sort By - Common for both */}
+          <div className="filter-group">
+            <label>Sort By</label>
+            <select
+              value={filters.sortBy}
+              onChange={(e) => setFilters({...filters, sortBy: e.target.value})}
+              className="filter-select"
+            >
+              <option value="createdAt">Latest First</option>
+              <option value={filterType === 'bikes' ? 'dailyRate' : 'rentPrice'}>Price</option>
+              {filterType !== 'bikes' && <option value="area">Area</option>}
+              {filterType !== 'bikes' && <option value="bedrooms">Bedrooms</option>}
+              {filterType === 'bikes' && <option value="year">Year</option>}
+              {filterType === 'bikes' && <option value="rating">Rating</option>}
+            </select>
+          </div>
+
+          {/* Sort Order */}
+          <div className="filter-group">
+            <label>Order</label>
+            <select
+              value={filters.sortOrder}
+              onChange={(e) => setFilters({...filters, sortOrder: e.target.value})}
+              className="filter-select"
+            >
+              <option value="DESC">High to Low</option>
+              <option value="ASC">Low to High</option>
+            </select>
+          </div>
+
+          {/* Reset Button */}
+          <div className="filter-group">
+            <label>&nbsp;</label>
+            <button
+              onClick={() => {
+                setFilters({
+                  propertyType: 'all',
+                  city: '',
+                  minPrice: '',
+                  maxPrice: '',
+                  bedrooms: '',
+                  bathrooms: '',
+                  amenities: [],
+                  bikeType: 'all',
+                  location: '',
+                  fuelType: 'all',
+                  minEngine: '',
+                  maxEngine: '',
+                  features: [],
+                  sortBy: 'createdAt',
+                  sortOrder: 'DESC'
+                });
+                setSearchQuery('');
+              }}
+              className="btn-reset"
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#f5f5f5',
+                border: '1px solid #ddd',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              🔄 Reset Filters
+            </button>
+          </div>
+        </div>
+      </div>
+      )}
+
       {/* Properties */}
       {(filterType === 'all' || filterType === 'properties') && (
         <div className="listings-section">
@@ -344,7 +625,7 @@ const UserDashboard = () => {
                     <div className="listing-image">
                       {property.images && property.images.length > 0 ? (
                         <img 
-                          src={`http://localhost:3001/uploads/properties/${property.images[0]}`} 
+                          src={`${SERVER_BASE_URL}/uploads/properties/${property.images[0]}`} 
                           alt={property.title}
                           onError={(e) => {
                             e.target.src = 'https://via.placeholder.com/400x300?text=No+Image';
@@ -448,7 +729,7 @@ const UserDashboard = () => {
                   <div key={bike.id} className="listing-card">
                     <div className="listing-image">
                       {bike.images && bike.images.length > 0 ? (
-                        <img src={`http://localhost:3001${bike.images[0]}`} alt={bike.name} />
+                        <img src={`${SERVER_BASE_URL}${bike.images[0]}`} alt={bike.name} />
                       ) : (
                         <img src={bikeFallback} alt={bike.name} />
                       )}
@@ -827,15 +1108,18 @@ const UserDashboard = () => {
       case 'rentals':
         return renderRentals();
       case 'payments':
-        return <div className="placeholder">Payments - Coming Soon</div>;
+        return <PaymentManagement />;
       case 'maintenance':
         return <div className="placeholder">Maintenance Requests - Coming Soon</div>;
       case 'messages':
         return <div className="placeholder">Messages - Coming Soon</div>;
       case 'settings':
-        return <div className="placeholder">Settings - Coming Soon</div>;
+        return <Settings />;
       default:
         return renderOverview();
+      
+      case 'ratings':
+        return <RatingPage />;
     }
   };
 
@@ -886,7 +1170,7 @@ const UserDashboard = () => {
           <div className="user-avatar">
             {user?.profilePicture ? (
               <img 
-                src={`http://localhost:3001${user.profilePicture}`} 
+                src={`${SERVER_BASE_URL}${user.profilePicture}`} 
                 alt={user.fullName} 
               />
             ) : (
@@ -988,6 +1272,22 @@ const UserDashboard = () => {
             </svg>
             {!sidebarCollapsed && <span>Messages</span>}
           </button>
+          
+          
+          <button
+            className={`menu-item ${activeTab === 'ratings' ? 'active' : ''}`}
+            onClick={() => setActiveTab('ratings')}
+          >
+  
+            <svg className="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+            {!sidebarCollapsed && <span>Rating and Review</span>}
+          </button>
+
+          
+
+
         </nav>
 
         <div className="sidebar-footer">
@@ -1016,6 +1316,7 @@ const UserDashboard = () => {
               {activeTab === 'maintenance' && 'Maintenance Requests'}
               {activeTab === 'messages' && 'Messages'}
               {activeTab === 'settings' && 'Settings'}
+              {activeTab === 'ratings' && 'Ratings & Reviews'}
             </h1>
             <p className="header-subtitle">
               {activeTab === 'overview' && 'Welcome back! Find your perfect rental'}
@@ -1027,19 +1328,28 @@ const UserDashboard = () => {
               {activeTab === 'maintenance' && 'Submit and track maintenance requests'}
               {activeTab === 'messages' && 'Communicate with property owners'}
               {activeTab === 'settings' && 'Manage your account settings'}
+              {activeTab === 'ratings' && 'View your feedback and property ratings'}
             </p>
           </div>
           <div className="header-right">
             <NotificationBell userId={user?.id} />
             <button 
-              className="settings-btn"
-              onClick={() => setShowSettings(!showSettings)}
-              title="Settings"
+             className="settings-btn"
+             onClick={() => setActiveTab('settings')}
+             title="Settings"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M12 1v6m0 6v6m-5.66-15.66l4.24 4.24m0 8.48l-4.24 4.24M1 12h6m6 0h6m-15.66 5.66l4.24-4.24m8.48 0l4.24 4.24"/>
-              </svg>
+            <svg 
+             viewBox="0 0 24 24" 
+             fill="none" 
+             stroke="currentColor" 
+             strokeWidth="2" 
+             strokeLinecap="round" 
+             strokeLinejoin="round" 
+             style={{ width: '20px', height: '20px' }}
+            >
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
             </button>
           </div>
         </div>
@@ -1048,27 +1358,9 @@ const UserDashboard = () => {
           {renderContent()}
         </div>
 
-        {/* Settings Modal/Panel */}
-        {showSettings && (
-          <div className="settings-modal">
-            <div className="settings-content">
-              <div className="settings-header">
-                <h2>Settings</h2>
-                <button className="close-btn" onClick={() => setShowSettings(false)}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="18" y1="6" x2="6" y2="18"/>
-                    <line x1="6" y1="6" x2="18" y2="18"/>
-                  </svg>
-                </button>
-              </div>
-              <div className="settings-body">
-                <div className="placeholder">Settings - Coming Soon</div>
-              </div>
-            </div>
-          </div>
-        )}
+        
 
-        {/* Property Details & Booking Modal */}
+        
         {showPropertyModal && selectedProperty && (
           <div className="modal-backdrop" onClick={() => setShowPropertyModal(false)}>
             <div className="modal-dialog property-modal" onClick={(e) => e.stopPropagation()}>
@@ -1082,7 +1374,7 @@ const UserDashboard = () => {
                 {selectedProperty.images && selectedProperty.images.length > 0 && (
                   <div className="property-images">
                     <img 
-                      src={`http://localhost:3001/uploads/properties/${selectedProperty.images[0]}`} 
+                      src={`${SERVER_BASE_URL}${selectedProperty.images[0]}`} 
                       alt={selectedProperty.title}
                       onError={(e) => {
                         e.target.src = 'https://via.placeholder.com/400x300?text=No+Image';

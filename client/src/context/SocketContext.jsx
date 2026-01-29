@@ -31,7 +31,7 @@ export const SocketProvider = ({ children }) => {
   // Initialize socket once
 
   useEffect(() => {
-    const url = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5050';
+    const url = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
     const socketInstance = io(url, {
       transports: ['polling', 'websocket'],
       upgrade: true,

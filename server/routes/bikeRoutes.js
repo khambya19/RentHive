@@ -14,8 +14,8 @@ router.post('/book-direct', bikeController.bookBikeDirect); // Book a bike direc
 
 // Routes for vendors (bike rental shops)
 router.get('/vendor', bikeController.getVendorBikes); // Get vendor's bikes
-router.post('/vendor', bikeController.createBike); // Create new bike
-router.put('/vendor/:id', bikeController.updateBike); // Update bike
+router.post('/vendor', bikeUpload.array('images', 10), bikeController.createBike); // Create new bike
+router.put('/vendor/:id', bikeUpload.array('images', 10), bikeController.updateBike); // Update bike
 router.delete('/vendor/:id', bikeController.deleteBike); // Delete bike
 
 router.get('/vendor/bookings', bikeController.getVendorBookings); // Get vendor's bookings

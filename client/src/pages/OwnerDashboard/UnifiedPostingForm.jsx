@@ -30,16 +30,11 @@ const UnifiedPostingForm = ({ showSuccess, showError }) => {
     year: new Date().getFullYear(),
     color: '',
     registrationNumber: '',
-    engineCapacity: '',
-    fuelType: 'Petrol',
     dailyRate: '',
     weeklyRate: '',
     monthlyRate: '',
     securityDeposit: '',
     location: '',
-    pickupLocation: '',
-    licenseRequired: true,
-    minimumAge: 18,
     description: '',
     features: [],
     images: [],
@@ -399,34 +394,6 @@ const UnifiedPostingForm = ({ showSuccess, showError }) => {
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="block font-semibold text-gray-700">Engine Capacity (CC)</label>
-                      <input
-                        type="number"
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none"
-                        value={bikeForm.engineCapacity}
-                        onChange={(e) => setBikeForm({ ...bikeForm, engineCapacity: e.target.value })}
-                        placeholder="e.g., 150"
-                        min="0"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="block font-semibold text-gray-700">Fuel Type <span className="text-red-500">*</span></label>
-                      <select
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none bg-white"
-                        value={bikeForm.fuelType}
-                        onChange={(e) => setBikeForm({ ...bikeForm, fuelType: e.target.value })}
-                        required
-                      >
-                        <option value="Petrol">Petrol</option>
-                        <option value="Electric">Electric</option>
-                        <option value="Hybrid">Hybrid</option>
-                        <option value="None">None (Bicycle)</option>
-                      </select>
-                    </div>
-                  </div>
                 </>
               )}
 
@@ -489,6 +456,32 @@ const UnifiedPostingForm = ({ showSuccess, showError }) => {
                         min="0"
                         required
                       />
+                    </div>
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-field">
+                      <label>Location/City <span className="required">*</span></label>
+                      <input
+                        type="text"
+                        value={bikeForm.location}
+                        onChange={(e) => setBikeForm({ ...bikeForm, location: e.target.value })}
+                        placeholder="e.g., Pokhara, Kathmandu, Chitwan"
+                        required
+                      />
+                    </div>
+
+                    <div className="form-field">
+                      <label>Pickup Location</label>
+                      <input
+                        type="text"
+                        value={bikeForm.pickupLocation}
+                        onChange={(e) => setBikeForm({ ...bikeForm, pickupLocation: e.target.value })}
+                        placeholder="e.g., Lake Side, Thamel"
+                      />
+                      <small style={{ fontSize: '0.85rem', color: '#6b7280', marginTop: '0.25rem', display: 'block' }}>
+                        Specific area or landmark for pickup
+                      </small>
                     </div>
                   </div>
 

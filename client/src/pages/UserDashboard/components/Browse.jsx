@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import ListingCard from './ListingCard';
+import ReportModal from './ReportModal';
 import { useAuth } from '../../../context/AuthContext';
 
 const Browse = ({ onViewProperty }) => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all'); // 'all', 'property', 'bike'
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [selectedItemToReport, setSelectedItemToReport] = useState(null);
+  const [notification, setNotification] = useState(null);
   const { logout } = useAuth();
 
   const fetchItems = useCallback(async () => {
@@ -54,6 +58,16 @@ const Browse = ({ onViewProperty }) => {
     fetchItems();
   }, [fetchItems]);
 
+  const handleReport = (item) => {
+    setSelectedItemToReport(item);
+    setReportModalOpen(true);
+  };
+
+  const handleReportSuccess = (message) => {
+    setNotification({ type: 'success', message });
+    setTimeout(() => setNotification(null), 5000);
+  };
+
   const filteredItems = items.filter(item => {
     if (filter === 'all') return true;
     return item.type === filter;
@@ -69,6 +83,15 @@ const Browse = ({ onViewProperty }) => {
 
   return (
     <div className="w-full min-h-[70vh] flex flex-col items-center justify-start py-4 px-0 sm:px-0">
+      {/* Success Notification */}
+      {notification && (
+        <div className={`fixed top-4 right-4 z-50 px-6 py-4 rounded-xl shadow-lg backdrop-blur-md ${
+          notification.type === 'success' ? 'bg-green-500/90 text-white' : 'bg-red-500/90 text-white'
+        }`}>
+          <p className="font-semibold">{notification.message}</p>
+        </div>
+      )}
+
       <div className="flex flex-col items-center w-full max-w-2xl px-0 sm:px-0">
         <h2 className="text-2xl font-bold text-gray-800 text-center mb-4">Browse Listings</h2>
         <div className="flex gap-2 flex-wrap justify-center mb-8">
@@ -96,7 +119,8 @@ const Browse = ({ onViewProperty }) => {
             <ListingCard 
               key={`${item.type}-${item.id}`} 
               item={item} 
-              onClick={onViewProperty} 
+              onClick={onViewProperty}
+              onReport={handleReport}
               beautified
             />
           ))}
@@ -107,6 +131,14 @@ const Browse = ({ onViewProperty }) => {
           </div>
         )}
       </div>
+
+      {/* Report Modal */}
+      <ReportModal
+        isOpen={reportModalOpen}
+        onClose={() => setReportModalOpen(false)}
+        item={selectedItemToReport}
+        onReportSuccess={handleReportSuccess}
+      />
     </div>
   );
 };

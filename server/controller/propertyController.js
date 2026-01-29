@@ -80,7 +80,7 @@ exports.getAvailableProperties = async (req, res) => {
 
     // Determine sort order
     let orderClause = [];
-    const validSortFields = ['createdAt', 'rentPrice', 'area', 'bedrooms', 'bathrooms'];
+    const validSortFields = ['createdAt', 'rentPrice', 'area', 'bedrooms', 'bathrooms', 'title'];
     const validSortOrders = ['ASC', 'DESC'];
     
     if (validSortFields.includes(sortBy) && validSortOrders.includes(sortOrder.toUpperCase())) {
@@ -248,10 +248,15 @@ exports.createProperty = async (req, res) => {
       securityDeposit,
       amenities,
       description,
-      images,
       latitude,
       longitude
     } = req.body;
+
+    // Process uploaded image files
+    const imagePaths = req.files ? req.files.map(file => file.filename) : [];
+
+    // Parse amenities if it's a JSON string
+    const parsedAmenities = typeof amenities === 'string' ? JSON.parse(amenities) : (amenities || []);
 
     const property = await Property.create({
       vendorId,
@@ -264,9 +269,9 @@ exports.createProperty = async (req, res) => {
       area,
       rentPrice: parseFloat(rentPrice),
       securityDeposit: securityDeposit ? parseFloat(securityDeposit) : null,
-      amenities: amenities || [],
+      amenities: parsedAmenities,
       description,
-      images: images || [],
+      images: imagePaths,
       status: 'Available',
       latitude: latitude ? parseFloat(latitude) : null,
       longitude: longitude ? parseFloat(longitude) : null
@@ -322,11 +327,19 @@ exports.updateProperty = async (req, res) => {
       securityDeposit,
       amenities,
       description,
-      images,
       status,
       latitude,
       longitude
     } = req.body;
+
+    // Process uploaded image files if any
+    let imagePaths = property.images;
+    if (req.files && req.files.length > 0) {
+      imagePaths = req.files.map(file => file.filename);
+    }
+
+    // Parse amenities if it's a JSON string
+    const parsedAmenities = amenities && typeof amenities === 'string' ? JSON.parse(amenities) : (amenities || property.amenities);
 
     await property.update({
       title: title || property.title,
@@ -338,9 +351,9 @@ exports.updateProperty = async (req, res) => {
       area: area || property.area,
       rentPrice: rentPrice ? parseFloat(rentPrice) : property.rentPrice,
       securityDeposit: securityDeposit ? parseFloat(securityDeposit) : property.securityDeposit,
-      amenities: amenities || property.amenities,
+      amenities: parsedAmenities,
       description: description !== undefined ? description : property.description,
-      images: images || property.images,
+      images: imagePaths,
       status: status || property.status,
       latitude: latitude !== undefined ? (latitude ? parseFloat(latitude) : null) : property.latitude,
       longitude: longitude !== undefined ? (longitude ? parseFloat(longitude) : null) : property.longitude

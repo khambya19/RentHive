@@ -81,7 +81,7 @@ exports.getAvailableBikes = async (req, res) => {
 
     // Determine sort order
     let orderClause = [];
-    const validSortFields = ['createdAt', 'dailyRate', 'weeklyRate', 'monthlyRate', 'year', 'engineCapacity', 'rating'];
+    const validSortFields = ['createdAt', 'dailyRate', 'weeklyRate', 'monthlyRate', 'year', 'engineCapacity', 'rating', 'name'];
     const validSortOrders = ['ASC', 'DESC'];
     
     if (validSortFields.includes(sortBy) && validSortOrders.includes(sortOrder.toUpperCase())) {
@@ -104,7 +104,6 @@ exports.getAvailableBikes = async (req, res) => {
 
     return res.json(bikes.map(bike => ({
       id: bike.id,
-      name: bike.name || `${bike.brand} ${bike.model}`,
       brand: bike.brand,
       model: bike.model,
       type: bike.type,
@@ -483,9 +482,15 @@ exports.createBike = async (req, res) => {
     const {
       name, brand, model, type, year, engineCapacity, fuelType,
       dailyRate, weeklyRate, monthlyRate, securityDeposit,
-      features, description, images, location, pickupLocation,
-      licenseRequired, minimumAge, status
+      features, description, location, pickupLocation,
+      licenseRequired, minimumAge, status, latitude, longitude
     } = req.body;
+
+    // Process uploaded image files
+    const imagePaths = req.files ? req.files.map(file => `/uploads/bikes/${file.filename}`) : [];
+
+    // Parse features if it's a JSON string
+    const parsedFeatures = typeof features === 'string' ? JSON.parse(features) : (features || []);
 
     // Map frontend bike types to database enum values
     const typeMapping = {
@@ -501,6 +506,9 @@ exports.createBike = async (req, res) => {
 
     const mappedType = typeMapping[type] || 'Bicycle';
 
+    // Calculate weekly rate if not provided (6 days worth of daily rate)
+    const calculatedWeeklyRate = weeklyRate && weeklyRate !== '' ? parseFloat(weeklyRate) : parseFloat(dailyRate) * 6;
+
     const bike = await Bike.create({
       vendorId,
       name: name || `${brand} ${model}`, // Use provided name or create from brand/model
@@ -509,16 +517,18 @@ exports.createBike = async (req, res) => {
       type: mappedType,
       year: parseInt(year),
       engineCapacity: engineCapacity ? parseInt(engineCapacity) : null,
-      fuelType,
+      fuelType: fuelType || 'Petrol',
       dailyRate: parseFloat(dailyRate),
-      weeklyRate: parseFloat(weeklyRate),
+      weeklyRate: calculatedWeeklyRate,
       monthlyRate: monthlyRate ? parseFloat(monthlyRate) : null,
       securityDeposit: parseFloat(securityDeposit),
-      features: features || [],
+      features: parsedFeatures,
       description,
-      images: images || [],
+      images: imagePaths,
       location,
       pickupLocation,
+      latitude: latitude ? parseFloat(latitude) : null,
+      longitude: longitude ? parseFloat(longitude) : null,
       licenseRequired: licenseRequired !== false,
       minimumAge: minimumAge ? parseInt(minimumAge) : 18,
       status: status || 'Available'
@@ -572,6 +582,18 @@ exports.updateBike = async (req, res) => {
     }
 
     const updateData = { ...req.body };
+    
+    // Process uploaded image files if any
+    if (req.files && req.files.length > 0) {
+      const imagePaths = req.files.map(file => `/uploads/bikes/${file.filename}`);
+      updateData.images = imagePaths;
+    }
+    
+    // Parse features if it's a JSON string
+    if (updateData.features && typeof updateData.features === 'string') {
+      updateData.features = JSON.parse(updateData.features);
+    }
+    
     if (updateData.year) updateData.year = parseInt(updateData.year);
     if (updateData.engineCapacity) updateData.engineCapacity = parseInt(updateData.engineCapacity);
     if (updateData.dailyRate) updateData.dailyRate = parseFloat(updateData.dailyRate);
@@ -579,6 +601,8 @@ exports.updateBike = async (req, res) => {
     if (updateData.monthlyRate) updateData.monthlyRate = parseFloat(updateData.monthlyRate);
     if (updateData.securityDeposit) updateData.securityDeposit = parseFloat(updateData.securityDeposit);
     if (updateData.minimumAge) updateData.minimumAge = parseInt(updateData.minimumAge);
+    if (updateData.latitude) updateData.latitude = parseFloat(updateData.latitude);
+    if (updateData.longitude) updateData.longitude = parseFloat(updateData.longitude);
 
     await bike.update(updateData);
 

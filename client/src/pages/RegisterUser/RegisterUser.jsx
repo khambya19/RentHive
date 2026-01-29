@@ -1,264 +1,326 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import OtpModal from '../../components/otpModal';
 import API_BASE_URL from '../../config/api';
+import { UserCircle, User, Mail, Phone, Lock, MapPin, Upload, Eye, EyeOff, ArrowRight, AlertCircle, CheckCircle, Check, X } from 'lucide-react';
+import RenthiveLogo from '../../assets/Logo.png';
+import { z } from 'zod';
+
+// Zod validation schema
+const registerUserSchema = z.object({
+  fullName: z.string().min(1, 'Full name is required').min(2, 'Name must be at least 2 characters'),
+  email: z.string().min(1, 'Email is required').email('Please enter a valid email'),
+  phoneNumber: z.string().min(1, 'Phone is required').regex(/^9\d{9}$/, 'Enter a valid Nepali number (10 digits, starts with 9)'),
+  password: z.string()
+    .min(1, 'Password is required')
+    .min(8, 'Min 8 characters')
+    .regex(/[A-Z]/, 'Need uppercase')
+    .regex(/[a-z]/, 'Need lowercase')
+    .regex(/[0-9]/, 'Need number')
+    .regex(/[!@#$%^&*(),.?":{}|<>]/, 'Need special char'),
+  confirmPassword: z.string().min(1, 'Confirm password'),
+  address: z.string().min(1, 'Address is required').min(5, 'Min 5 characters'),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
+
+const checkPasswordRequirements = (password) => ({
+  length: password.length >= 8,
+  uppercase: /[A-Z]/.test(password),
+  lowercase: /[a-z]/.test(password),
+  number: /[0-9]/.test(password),
+  special: /[!@#$%^&*(),.?":{}|<>]/.test(password),
+});
 
 const RegisterUser = () => {
   const navigate = useNavigate();
   const [form, setForm] = useState({
-    fullName: '',
-    email: '',
-    phoneNumber: '',
-    password: '',
-    confirmPassword: '',
-    address: '',
-    businessName: '',
-    ownershipType: 'Individual',
-    photo: null,
+    fullName: '', email: '', phoneNumber: '', password: '', confirmPassword: '', address: '', photo: null,
   });
-  const [error, setError] = useState('');
+  
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
+  const [valid, setValid] = useState({});
+  const [serverError, setServerError] = useState('');
   const [success, setSuccess] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [passwordReqs, setPasswordReqs] = useState(checkPasswordRequirements(''));
+
+  useEffect(() => {
+    if (form.password) setPasswordReqs(checkPasswordRequirements(form.password));
+  }, [form.password]);
+
+  const validateField = (name, value) => {
+    try {
+      if (name === 'fullName') z.string().min(2).parse(value);
+      else if (name === 'email') z.string().email().parse(value);
+      else if (name === 'phoneNumber') {
+        // Custom error for Nepali phone
+        if (!/^9\d{9}$/.test(value)) {
+          setValid(prev => ({ ...prev, [name]: false }));
+          setErrors(prev => ({ ...prev, [name]: 'Enter a valid Nepali number (10 digits, starts with 9, e.g. 98XXXXXXXX)' }));
+          return;
+        }
+      }
+      else if (name === 'password') z.string().min(8).regex(/[A-Z]/).regex(/[a-z]/).regex(/[0-9]/).regex(/[!@#$%^&*(),.?":{}|<>]/).parse(value);
+      else if (name === 'confirmPassword') { if (value !== form.password) throw new Error("Passwords don't match"); }
+      else if (name === 'address') z.string().min(5).parse(value);
+      setValid(prev => ({ ...prev, [name]: true }));
+      setErrors(prev => ({ ...prev, [name]: null }));
+    } catch (err) {
+      setValid(prev => ({ ...prev, [name]: false }));
+      const errorMsg = err instanceof z.ZodError && err.errors && err.errors.length > 0 
+        ? err.errors[0].message 
+        : (err.message || 'Invalid input');
+      setErrors(prev => ({ ...prev, [name]: errorMsg }));
+    }
+  };
 
   const handleChange = (e) => {
     const { name, type, value, files } = e.target;
-    if (type === 'file') {
-      setForm((s) => ({ ...s, [name]: files[0] }));
-    } else {
-      setForm((s) => ({ ...s, [name]: value }));
+    if (type === 'file') setForm(s => ({ ...s, [name]: files[0] }));
+    else setForm(s => ({ ...s, [name]: value }));
+  };
+
+  const handleBlur = (name) => {
+    setTouched(prev => ({ ...prev, [name]: true }));
+    validateField(name, form[name]);
+  };
+
+  const getBorderClass = (name) => {
+    if (!touched[name]) return 'border-gray-200';
+    if (errors[name]) return 'border-red-400';
+    if (valid[name]) return 'border-green-500';
+    return 'border-gray-200';
+  };
+
+  const validateForm = () => {
+    try {
+      registerUserSchema.parse(form);
+      return true;
+    } catch (err) {
+      if (err instanceof z.ZodError && err.errors && Array.isArray(err.errors)) {
+        const newErrors = {};
+        err.errors.forEach((e) => { 
+          if (e.path && e.path[0]) newErrors[e.path[0]] = e.message; 
+        });
+        setErrors(newErrors);
+        setTouched({ fullName: true, email: true, phoneNumber: true, password: true, confirmPassword: true, address: true });
+      }
+      return false;
+    }
+  };
+
+  // Check if email already exists
+  const checkEmailAvailability = async (email) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/check-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await response.json();
+      if (data.exists) {
+        setErrors(prev => ({ ...prev, email: 'This email is already registered' }));
+        setValid(prev => ({ ...prev, email: false }));
+        return false;
+      }
+      return true;
+    } catch (err) {
+      return true;
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
+    setServerError('');
+    if (!validateForm()) return;
 
-    if (form.password !== form.confirmPassword) {
-      setError('Passwords do not match');
+    setIsLoading(true);
+    
+    // Check if email already exists
+    const emailAvailable = await checkEmailAvailability(form.email);
+    if (!emailAvailable) {
+      setIsLoading(false);
       return;
     }
-
+    
     try {
-      let body;
-      let headers = {
-        'Accept': 'application/json',
-      };
-      const requestBody = {
-        type: 'renter',
-        fullName: form.fullName,
-        email: form.email,
-        phone: form.phoneNumber,
-        password: form.password,
-        confirmPassword: form.confirmPassword,
-        address: form.address,
-        businessName: form.businessName,
-        ownershipType: form.ownershipType,
-      };
-      console.log('Request body being sent:', requestBody);
-      body = JSON.stringify(requestBody);
-      headers['Content-Type'] = 'application/json';
-      console.log('Headers:', headers);
-      console.log('Body string:', body);
       const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
-        headers,
-        mode: 'cors',
-        body,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'renter', fullName: form.fullName, email: form.email, phone: form.phoneNumber,
+          password: form.password, confirmPassword: form.confirmPassword, address: form.address,
+        }),
       });
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-      // Read the response text only once
-      const responseText = await response.text();
-      console.log('Raw response text:', responseText);
-      if (!response.ok) {
-        console.error('Response not ok:', response.status, response.statusText);
-        try {
-          const errorData = JSON.parse(responseText);
-          setError(errorData.error || errorData.message || `Server error: ${response.status}`);
-        } catch {
-          setError(`Server error: ${response.status} - ${responseText}`);
-        }
-        return;
-      }
-      // Parse the response text as JSON
-      let data;
-      try {
-        data = JSON.parse(responseText);
-        console.log('Response data:', data);
-      } catch (parseError) {
-        console.error('Failed to parse response as JSON:', parseError);
-        setError('Server returned invalid response format');
-        return;
-      }
-      setSuccess('Registration successful! Please verify your email.');
+      const data = await response.json();
+      if (!response.ok) { setServerError(data.error || data.message || 'Registration failed'); return; }
+      setSuccess('Registration successful! Verify your email.');
       setRegisteredEmail(form.email);
       setShowOtpModal(true);
-    } catch (error) {
-      console.error('Registration error details:', error);
-      if (error.name === 'SyntaxError' && error.message.includes('JSON')) {
-        setError('Server returned invalid response. Please try again.');
-      } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
-        setError('Unable to connect to server. Please check your connection.');
-      } else {
-        setError(`Registration failed: ${error.message}`);
-      }
+    } catch (err) {
+      setServerError('Unable to connect to server.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <>
-      <div className="register-user-container" style={{ display: 'flex', flexDirection: 'row', width: '100%' }}>
-        <div className="register-vendor-card">
-          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <img src="/src/assets/rentHivelogo.png" alt="RentHive" style={{ height: 60 }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-            <span style={{ fontSize: 18, fontWeight: 700, color: '#333' }}>RentHive</span>
-          </div>
-          <div style={{ width: '100%', height: 280, borderRadius: 8, background: '#e9e9e9', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', marginTop: 'auto' }}>
-            <img src="/src/assets/Login_page.png" alt="hero" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-          </div>
-        </div>
-        {/* Right Panel */}
-        <div style={{ flex: '1 1 62%', minWidth: '400px', padding: '36px', maxHeight: '90vh', overflowY: 'auto' }}>
-          <h2 style={{ fontSize: 28, textAlign: 'center', margin: 0, marginBottom: 24, color: '#333' }}>Sign up as User</h2>
-          {error && <div style={{ color: '#d32f2f', marginBottom: 15, padding: '12px 15px', background: '#ffebee', borderLeft: '4px solid #d32f2f', borderRadius: 6 }}>{error}</div>}
-          {success && <div style={{ color: '#2e7d32', marginBottom: 15, padding: '12px 15px', background: '#e8f5e9', borderLeft: '4px solid #2e7d32', borderRadius: 6 }}>{success}</div>}
-          <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>Full Name</label>
-              <input type="text" name="fullName" placeholder="Enter your full name" value={form.fullName} onChange={handleChange} required style={formInputStyle} />
+      <div className="min-h-screen bg-linear-to-br from-blue-200 via-cyan-100 to-purple-200 flex items-center justify-center px-3 py-6 sm:p-4">
+        <div className="w-full max-w-100 sm:max-w-md lg:max-w-4xl bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col lg:flex-row border border-gray-100">
+          
+          {/* Left Panel */}
+          <div className="hidden lg:flex lg:w-2/5 p-8 bg-linear-to-br from-blue-600 to-indigo-700 flex-col justify-center text-white">
+            <div className="flex items-center gap-2 mb-6">
+              <UserCircle size={28} />
+              <span className="text-xl font-bold">RentHive</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>Email</label>
-                <input type="email" name="email" placeholder="your.email@example.com" value={form.email} onChange={handleChange} required style={formInputStyle} />
-              </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>Phone Number</label>
-                <input type="tel" name="phoneNumber" placeholder="+977 9800000000" value={form.phoneNumber} onChange={handleChange} required style={formInputStyle} />
-              </div>
+            <h3 className="text-2xl font-bold mb-3">Join as a Renter</h3>
+            <p className="text-blue-100 text-sm">Find your perfect home or ride.</p>
+            <div className="mt-6 space-y-2">
+              <div className="flex items-center gap-2 text-blue-100 text-sm"><CheckCircle size={14} /> Browse listings</div>
+              <div className="flex items-center gap-2 text-blue-100 text-sm"><CheckCircle size={14} /> Book easily</div>
+              <div className="flex items-center gap-2 text-blue-100 text-sm"><CheckCircle size={14} /> Secure payments</div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>Password</label>
-                <div style={{ position: 'relative' }}>
-                  <input 
-                    type={showPassword ? 'text' : 'password'} 
-                    name="password" 
-                    placeholder="Enter a strong password" 
-                    value={form.password} 
-                    onChange={handleChange} 
-                    required 
-                    style={formInputStyle} 
+          </div>
+
+          {/* Right Panel */}
+          <div className="w-full lg:w-3/5 p-5 sm:p-6 overflow-y-auto max-h-[90vh]">
+            <div className="lg:hidden text-center mb-4">
+              <img src={RenthiveLogo} alt="RentHive" className="h-10 mx-auto mb-2" />
+            </div>
+            
+            <h2 className="text-xl font-bold text-center mb-4 text-gray-900">Sign up as User</h2>
+            
+            {serverError && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-3 text-sm flex items-center gap-2"><AlertCircle size={14} /> {serverError}</div>}
+            {success && <div className="bg-green-50 text-green-600 p-3 rounded-lg mb-3 text-sm flex items-center gap-2"><CheckCircle size={14} /> {success}</div>}
+            
+            <form onSubmit={handleSubmit}>
+              {/* Full Name */}
+              <div className="mb-3">
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"><User size={16} /></span>
+                  <input name="fullName" placeholder="Full Name" value={form.fullName} onChange={handleChange} onBlur={() => handleBlur('fullName')}
+                    style={{ paddingLeft: '42px', paddingRight: '36px' }}
+                    className={`w-full py-2.5 text-sm border-2 ${getBorderClass('fullName')} rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50`}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    style={{
-                      position: 'absolute',
-                      right: '12px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: '18px',
-                      color: '#666'
-                    }}
-                    title={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? '👁️' : '👁️‍🗨️'}
+                  {touched.fullName && (valid.fullName ? <Check size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500" /> : errors.fullName && <X size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-red-500" />)}
+                </div>
+                {touched.fullName && errors.fullName && <p className="text-red-500 text-xs mt-1">{errors.fullName}</p>}
+              </div>
+
+              {/* Email & Phone row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                <div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"><Mail size={16} /></span>
+                    <input type="email" name="email" placeholder="Email" value={form.email} onChange={handleChange} onBlur={() => handleBlur('email')}
+                      style={{ paddingLeft: '42px', paddingRight: '36px' }}
+                      className={`w-full py-2.5 text-sm border-2 ${getBorderClass('email')} rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50`}
+                    />
+                    {touched.email && (valid.email ? <Check size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500" /> : errors.email && <X size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-red-500" />)}
+                  </div>
+                  {touched.email && errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
+                </div>
+                <div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"><Phone size={16} /></span>
+                    <input type="tel" name="phoneNumber" placeholder="Phone" value={form.phoneNumber} onChange={handleChange} onBlur={() => handleBlur('phoneNumber')}
+                      style={{ paddingLeft: '42px', paddingRight: '36px' }}
+                      className={`w-full py-2.5 text-sm border-2 ${getBorderClass('phoneNumber')} rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50`}
+                    />
+                    {touched.phoneNumber && (valid.phoneNumber ? <Check size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500" /> : errors.phoneNumber && <X size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-red-500" />)}
+                  </div>
+                  {touched.phoneNumber && errors.phoneNumber && <p className="text-red-500 text-xs mt-1">{errors.phoneNumber}</p>}
+                </div>
+              </div>
+
+              {/* Password */}
+              <div className="mb-2">
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"><Lock size={16} /></span>
+                  <input type={showPassword ? 'text' : 'password'} name="password" placeholder="Password (8+ chars)" value={form.password} onChange={handleChange} onBlur={() => handleBlur('password')}
+                    style={{ paddingLeft: '42px', paddingRight: '70px' }}
+                    className={`w-full py-2.5 text-sm border-2 ${getBorderClass('password')} rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50`}
+                  />
+                  {touched.password && (valid.password ? <Check size={14} className="absolute right-10 top-1/2 -translate-y-1/2 text-green-500" /> : errors.password && <X size={14} className="absolute right-10 top-1/2 -translate-y-1/2 text-red-500" />)}
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
               </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>Confirm Password</label>
-                <div style={{ position: 'relative' }}>
-                  <input 
-                    type={showConfirmPassword ? 'text' : 'password'} 
-                    name="confirmPassword" 
-                    placeholder="Re-enter your password" 
-                    value={form.confirmPassword} 
-                    onChange={handleChange} 
-                    required 
-                    style={formInputStyle} 
+
+              {/* Password Requirements */}
+              {form.password && (
+                <div className="bg-gray-50 rounded-lg p-2.5 mb-3 text-xs grid grid-cols-2 gap-1">
+                  <span className={passwordReqs.length ? 'text-green-600' : 'text-gray-400'}>{passwordReqs.length ? <Check size={10} className="inline" /> : <X size={10} className="inline" />} 8+ chars</span>
+                  <span className={passwordReqs.uppercase ? 'text-green-600' : 'text-gray-400'}>{passwordReqs.uppercase ? <Check size={10} className="inline" /> : <X size={10} className="inline" />} Uppercase</span>
+                  <span className={passwordReqs.lowercase ? 'text-green-600' : 'text-gray-400'}>{passwordReqs.lowercase ? <Check size={10} className="inline" /> : <X size={10} className="inline" />} Lowercase</span>
+                  <span className={passwordReqs.number ? 'text-green-600' : 'text-gray-400'}>{passwordReqs.number ? <Check size={10} className="inline" /> : <X size={10} className="inline" />} Number</span>
+                  <span className={passwordReqs.special ? 'text-green-600' : 'text-gray-400'}>{passwordReqs.special ? <Check size={10} className="inline" /> : <X size={10} className="inline" />} Special (!@#$)</span>
+                </div>
+              )}
+
+              {/* Confirm Password */}
+              <div className="mb-3">
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"><Lock size={16} /></span>
+                  <input type={showConfirmPassword ? 'text' : 'password'} name="confirmPassword" placeholder="Confirm Password" value={form.confirmPassword} onChange={handleChange} onBlur={() => handleBlur('confirmPassword')}
+                    style={{ paddingLeft: '42px', paddingRight: '70px' }}
+                    className={`w-full py-2.5 text-sm border-2 ${getBorderClass('confirmPassword')} rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50`}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    style={{
-                      position: 'absolute',
-                      right: '12px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: '18px',
-                      color: '#666'
-                    }}
-                    title={showConfirmPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showConfirmPassword ? '👁️' : '👁️‍🗨️'}
+                  {touched.confirmPassword && (valid.confirmPassword ? <Check size={14} className="absolute right-10 top-1/2 -translate-y-1/2 text-green-500" /> : errors.confirmPassword && <X size={14} className="absolute right-10 top-1/2 -translate-y-1/2 text-red-500" />)}
+                  <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
+                {touched.confirmPassword && errors.confirmPassword && <p className="text-red-500 text-xs mt-1">{errors.confirmPassword}</p>}
               </div>
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>Address</label>
-              <input type="text" name="address" placeholder="Enter your full address" value={form.address} onChange={handleChange} required style={formInputStyle} />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>Business Name</label>
-                <input type="text" name="businessName" placeholder="Enter your business name" value={form.businessName} onChange={handleChange} style={formInputStyle} />
+
+              {/* Address */}
+              <div className="mb-3">
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"><MapPin size={16} /></span>
+                  <input name="address" placeholder="Address" value={form.address} onChange={handleChange} onBlur={() => handleBlur('address')}
+                    style={{ paddingLeft: '42px', paddingRight: '36px' }}
+                    className={`w-full py-2.5 text-sm border-2 ${getBorderClass('address')} rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50`}
+                  />
+                  {touched.address && (valid.address ? <Check size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500" /> : errors.address && <X size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-red-500" />)}
+                </div>
+                {touched.address && errors.address && <p className="text-red-500 text-xs mt-1">{errors.address}</p>}
               </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>Ownership Type</label>
-                <select name="ownershipType" value={form.ownershipType} onChange={handleChange} style={formInputStyle}>
-                  <option value="Individual">Individual</option>
-                  <option value="Company">Company</option>
-                </select>
+
+              {/* Photo */}
+              <div className="mb-4">
+                <label className="block text-xs text-gray-600 mb-1">Profile Photo (Optional)</label>
+                <div className="flex items-center gap-2 p-2 border border-dashed border-gray-300 rounded-lg bg-gray-50">
+                  <Upload size={14} className="text-gray-400" />
+                  <input type="file" name="photo" accept="image/*" onChange={handleChange} className="w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:bg-blue-50 file:text-blue-600 cursor-pointer" />
+                </div>
               </div>
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>Profile Photo</label>
-              <input type="file" name="photo" accept="image/*" onChange={handleChange} style={{ padding: 8 }} />
-              {form.photo && <p style={{ color: '#388e3c', marginTop: 6, fontSize: 13 }}>✓ {form.photo.name}</p>}
-            </div>
-            <button type="submit" style={{ width: '100%', padding: '12px 16px', background: '#5963d6', color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>Create account</button>
-            <div style={{ textAlign: 'center', fontSize: 13, color: '#666', marginTop: 12 }}>
-              Already have an account? <a href="#" onClick={(e) => { e.preventDefault(); navigate('/login'); }} style={{ color: '#d9534f', textDecoration: 'none', fontWeight: 600 }}>Login</a>
-            </div>
-          </form>
+
+              <button type="submit" disabled={isLoading} className="w-full bg-linear-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg flex items-center justify-center gap-2">
+                {isLoading ? <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span> : <><ArrowRight size={16} /> Create Account</>}
+              </button>
+              
+              <p className="text-center text-sm text-gray-500 mt-4">
+                Already have an account? <a href="#" onClick={(e) => { e.preventDefault(); navigate('/login'); }} className="text-blue-600 font-medium">Login</a>
+              </p>
+            </form>
+          </div>
         </div>
       </div>
-      {showOtpModal && (
-        <OtpModal
-          email={registeredEmail}
-          onClose={() => setShowOtpModal(false)}
-          onVerify={() => {
-            setShowOtpModal(false);
-            setSuccess('Email verified successfully! Redirecting to login...');
-            setTimeout(() => navigate('/login'), 2000);
-          }}
-        />
-      )}
+      
+      {showOtpModal && <OtpModal email={registeredEmail} onClose={() => setShowOtpModal(false)} onVerify={() => { setShowOtpModal(false); setSuccess('Verified!'); setTimeout(() => navigate('/login'), 1500); }} />}
     </>
   );
-};
-
-const formInputStyle = {
-  width: '100%',
-  padding: '10px 12px',
-  border: '1.5px solid #e6eefc',
-  borderRadius: 6,
-  boxSizing: 'border-box',
-  fontSize: 13,
-  background: '#f3f7ff'
 };
 
 export default RegisterUser;

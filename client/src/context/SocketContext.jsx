@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, {
   createContext,
   useContext,
@@ -28,9 +29,9 @@ export const SocketProvider = ({ children }) => {
   const [currentUserId, setCurrentUserId] = useState(null);
 
   // Initialize socket once
+
   useEffect(() => {
     const url = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5050';
-
     const socketInstance = io(url, {
       transports: ['polling', 'websocket'],
       upgrade: true,
@@ -45,35 +46,28 @@ export const SocketProvider = ({ children }) => {
     setSocket(socketInstance);
 
     socketInstance.on('connect', () => {
-      console.log('✅ Socket connected:', socketInstance.id);
+      // console.log('✅ Socket connected:', socketInstance.id);
       setIsConnected(true);
-
-      // Re-register if we already know the user
-      if (currentUserId) {
-        socketInstance.emit('register', currentUserId);
-        console.log(`🔄 Re-registered user ${currentUserId} after reconnect`);
-      }
     });
 
-    socketInstance.on('disconnect', (reason) => {
-      console.log('❌ Socket disconnected:', reason);
+    socketInstance.on('disconnect', (_reason) => {
+      // console.log('❌ Socket disconnected:', _reason);
       setIsConnected(false);
     });
 
-    socketInstance.on('connect_error', (err) => {
-      console.warn('⚠️ Socket connection error:', err.message);
+    socketInstance.on('connect_error', (_err) => {
+      // console.warn('⚠️ Socket connection error:', err.message);
       setIsConnected(false);
     });
 
     // Real-time new notification
     socketInstance.on('new-notification', (notification) => {
-      console.log('🔔 Real-time notification received:', notification);
+      // console.log('🔔 Real-time notification received:', notification);
       setNotifications((prev) => [notification, ...prev]);
       setUnreadCount((prev) => prev + 1);
 
       // Browser notification (optional)
       if ('Notification' in window && Notification.permission === 'granted') {
-        const icon = getNotificationIcon(notification.type);
         new Notification(notification.title, {
           body: notification.message,
           icon: '/favicon.ico',
@@ -96,7 +90,7 @@ export const SocketProvider = ({ children }) => {
   useEffect(() => {
     if (!currentUserId || !socket || !isConnected) return;
 
-    console.log('👤 Registering user:', currentUserId);
+    // console.log('👤 Registering user:', currentUserId);
     socket.emit('register', currentUserId);
 
     // Fetch initial notifications
@@ -105,15 +99,7 @@ export const SocketProvider = ({ children }) => {
 
   // ── Helper functions ─────────────────────────────────────────────
 
-  const getNotificationIcon = (type) => {
-    const icons = {
-      success: '✅',
-      warning: '⚠️',
-      error: '❌',
-      info: 'ℹ️',
-    };
-    return icons[type] || icons.info;
-  };
+
 
   const registerUser = useCallback((userId) => {
     if (!userId) return;
@@ -130,10 +116,10 @@ export const SocketProvider = ({ children }) => {
       if (res.data.success) {
         setNotifications(res.data.data.notifications || []);
         setUnreadCount(res.data.data.unreadCount || 0);
-        console.log(`📥 Loaded ${res.data.data.notifications?.length || 0} notifications`);
+        // console.log(`📥 Loaded ${res.data.data.notifications?.length || 0} notifications`);
       }
     } catch (err) {
-      console.error('❌ Failed to fetch notifications:', err);
+      // console.error('❌ Failed to fetch notifications:', err);
     }
   };
 
@@ -152,10 +138,10 @@ export const SocketProvider = ({ children }) => {
           )
         );
         setUnreadCount((prev) => Math.max(0, prev - 1));
-        console.log('✅ Marked as read:', notificationId);
+        // console.log('✅ Marked as read:', notificationId);
       }
     } catch (err) {
-      console.error('❌ Mark as read failed:', err);
+      // console.error('❌ Mark as read failed:', err);
     }
   };
 
@@ -169,10 +155,10 @@ export const SocketProvider = ({ children }) => {
       if (res.data.success) {
         setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
         setUnreadCount(0);
-        console.log('✅ All notifications marked as read');
+        // console.log('✅ All notifications marked as read');
       }
     } catch (err) {
-      console.error('❌ Mark all failed:', err);
+      // console.error('❌ Mark all failed:', err);
     }
   };
 
@@ -192,10 +178,10 @@ export const SocketProvider = ({ children }) => {
           }
           return prev.filter((n) => n.id !== notificationId);
         });
-        console.log('🗑️ Notification deleted:', notificationId);
+        // console.log('🗑️ Notification deleted:', notificationId);
       }
     } catch (err) {
-      console.error('❌ Delete failed:', err);
+      // console.error('❌ Delete failed:', err);
     }
   };
 

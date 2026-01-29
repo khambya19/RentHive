@@ -1,7 +1,6 @@
+
 // API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL;
-
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5050/api';
 // Base server URL for uploads and other resources
-export const SERVER_BASE_URL = import.meta.env.VITE_SERVER_URL;
-
+export const SERVER_BASE_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5050';
 export default API_BASE_URL;

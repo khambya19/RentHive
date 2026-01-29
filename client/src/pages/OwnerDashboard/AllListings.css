@@ -1,6 +1,10 @@
+/* AllListings.css - Deprecated. Replaced by Tailwind in AllListings.jsx */
+/*
 .all-listings {
   padding: 2rem;
 }
+...
+*/
 
 .listings-header {
   display: flex;

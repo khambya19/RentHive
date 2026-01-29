@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSocket } from '../../context/SocketContext';
-import './OwnerBookings.css';
+// import './OwnerBookings.css'; // Deprecated
 import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
+import { RefreshCw, MapPin, Phone, Check, X, ClipboardList, Home, Bike, Calendar, Wallet } from 'lucide-react';
 
 const OwnerBookings = ({ showSuccess, showError }) => {
   const socket = useSocket();
@@ -14,17 +15,17 @@ const OwnerBookings = ({ showSuccess, showError }) => {
 
   useEffect(() => {
     fetchBookings();
-  }, []);
+  }, [fetchBookings]);
 
-  // Listen for real-time booking updates
+  
   useEffect(() => {
     if (socket && socket.connected) {
       const handleBookingUpdate = (notification) => {
         if (notification.type === 'booking') {
-          // Refresh bookings when there's a booking-related notification
-          fetchBookings();
           
-          // Show notification for booking status updates
+          fetchBookings();
+
+          
           if (notification.title.includes('Approved') || 
               notification.title.includes('Confirmed') ||
               notification.title.includes('Active') ||
@@ -43,9 +44,9 @@ const OwnerBookings = ({ showSuccess, showError }) => {
         socket.off('new-notification', handleBookingUpdate);
       };
     }
-  }, [socket, showSuccess, showError]);
+  }, [socket, showSuccess, showError, fetchBookings]);
 
-  const fetchBookings = async () => {
+  const fetchBookings = useCallback(async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
@@ -55,7 +56,7 @@ const OwnerBookings = ({ showSuccess, showError }) => {
         return;
       }
 
-      console.log('Fetching bookings from /api/owners/all-bookings');
+      // console.log('Fetching bookings from /api/owners/all-bookings');
       const response = await fetch(`${API_BASE_URL}/owners/all-bookings`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -63,24 +64,24 @@ const OwnerBookings = ({ showSuccess, showError }) => {
         }
       });
 
-      console.log('Response status:', response.status);
+      // console.log('Response status:', response.status);
 
       if (response.ok) {
         const data = await response.json();
-        console.log('Bookings data received:', data);
+        // console.log('Bookings data received:', data);
         setBookings(data);
       } else {
         const errorData = await response.json().catch(() => ({}));
-        console.error('Failed to fetch bookings:', response.status, errorData);
+        // console.error('Failed to fetch bookings:', response.status, errorData);
         showError('Failed to fetch bookings', errorData.details || errorData.error || 'Please try refreshing the page');
       }
     } catch (error) {
-      console.error('Error fetching bookings:', error);
+      // console.error('Error fetching bookings:', error);
       showError('Error loading bookings', error.message || 'Please check your connection and try again');
     } finally {
       setLoading(false);
     }
-  };
+  }, [showError]);
 
   const handleBookingAction = async (bookingId, action, bookingType) => {
     try {
@@ -111,7 +112,7 @@ const OwnerBookings = ({ showSuccess, showError }) => {
         showError('Failed to update booking', errorData.error || 'Please try again');
       }
     } catch (error) {
-      console.error('Error updating booking:', error);
+      // console.error('Error updating booking:', error);
       showError('Error', 'Failed to update booking status');
     }
   };
@@ -124,164 +125,120 @@ const OwnerBookings = ({ showSuccess, showError }) => {
     });
   };
 
-  const handleApproveBooking = async (bookingId, type) => {
-    try {
-      const token = localStorage.getItem('token');
-      const endpoint = type === 'property' 
-        ? `${API_BASE_URL}/owners/bookings/${bookingId}/approve`
-        : `${API_BASE_URL}/bikes/bookings/${bookingId}/approve`;
 
-      const response = await fetch(endpoint, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
 
-      if (response.ok) {
-        showSuccess('Booking Approved', 'Payment reminders will be sent automatically');
-        fetchBookings();
-      } else {
-        const error = await response.json();
-        showError('Failed to approve', error.message || 'Something went wrong');
-      }
-    } catch (error) {
-      console.error('Error approving booking:', error);
-      showError('Error', 'Failed to approve booking');
-    }
-  };
 
-  const handleRejectBooking = async (bookingId, type) => {
-    if (!confirm('Are you sure you want to reject this booking?')) {
-      return;
-    }
 
-    try {
-      const token = localStorage.getItem('token');
-      const endpoint = type === 'property'
-        ? `${API_BASE_URL}/owners/bookings/${bookingId}/reject`
-        : `${API_BASE_URL}/bikes/bookings/${bookingId}/reject`;
-
-      const response = await fetch(endpoint, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        showSuccess('Booking Rejected', 'The booking has been rejected');
-        fetchBookings();
-      } else {
-        const error = await response.json();
-        showError('Failed to reject', error.message || 'Something went wrong');
-      }
-    } catch (error) {
-      console.error('Error rejecting booking:', error);
-      showError('Error', 'Failed to reject booking');
-    }
-  };
-
-  const getStatusClass = (status) => {
+  const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
-      case 'pending':
-        return 'status-pending';
+      case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'confirmed':
       case 'active':
-        return 'status-confirmed';
-      case 'completed':
-        return 'status-completed';
+      case 'approved': return 'bg-green-100 text-green-800 border-green-200';
+      case 'completed': return 'bg-indigo-100 text-indigo-800 border-indigo-200';
       case 'cancelled':
-        return 'status-cancelled';
-      default:
-        return 'status-pending';
+      case 'rejected': return 'bg-red-100 text-red-800 border-red-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
   const renderPropertyBookings = () => {
     if (bookings.propertyBookings.length === 0) {
       return (
-        <div className="empty-state">
-          <div className="empty-icon">🏠</div>
-          <h3>No Property Bookings</h3>
-          <p>You haven't received any property rental requests yet.</p>
+        <div className="flex flex-col items-center justify-center p-16 text-center bg-white rounded-2xl border-2 border-dashed border-gray-200 text-gray-500">
+          <Home size={48} className="mb-4 text-gray-300" />
+          <h3 className="text-xl font-bold text-gray-800 mb-2">No Property Bookings</h3>
+          <p className="max-w-md mx-auto">You haven't received any property rental requests yet.</p>
         </div>
       );
     }
 
     return bookings.propertyBookings.map((booking) => (
-      <div key={`property-${booking.id}`} className="booking-card">
-        <div className="booking-header">
-          <div className="booking-type-badge property">PROPERTY RENTAL</div>
-          <div className={`booking-status ${getStatusClass(booking.status)}`}>
+      <div key={`property-${booking.id}`} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-lg transition-all duration-300 group">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 bg-gray-50/50 border-b border-gray-100 gap-4">
+          <div className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+            <Home size={12} /> Property Rental
+          </div>
+          <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${getStatusColor(booking.status)}`}>
             {booking.status?.toUpperCase() || 'PENDING'}
           </div>
         </div>
-        <div className="booking-content">
-          <div className="booking-image">
+        
+        <div className="p-5 flex flex-col md:flex-row gap-6">
+          <div className="md:w-48 h-48 md:h-auto flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 relative group-hover:scale-[1.02] transition-transform duration-300">
             {booking.property?.images?.[0] ? (
               <img 
                 src={`${SERVER_BASE_URL}/uploads/properties/${booking.property.images[0]}`} 
                 alt={booking.property.title}
+                className="w-full h-full object-cover"
+                onError={(e) => { e.target.src = "https://via.placeholder.com/300?text=No+Image"; }}
               />
             ) : (
-              <div className="placeholder-image">🏠</div>
+              <div className="flex items-center justify-center h-full w-full text-gray-300">
+                <Home size={40} />
+              </div>
             )}
+            <div className="absolute inset-0 bg-black/5 group-hover:bg-transparent transition-colors"></div>
           </div>
-          <div className="booking-details">
-            <h3>{booking.property?.title || 'Property'}</h3>
-            <p className="booking-location">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '16px', height: '16px', marginRight: '4px' }}>
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                <circle cx="12" cy="10" r="3"/>
-              </svg>
+          
+          <div className="flex-1 space-y-3">
+            <h3 className="text-xl font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">{booking.property?.title || 'Property'}</h3>
+            <p className="flex items-center gap-2 text-sm text-gray-600">
+              <MapPin size={16} className="text-indigo-500" />
               {booking.property?.address}, {booking.property?.city}
             </p>
-            <p className="booking-type">Type: {booking.property?.propertyType || 'House'}</p>
-            <p className="booking-renter">Renter: <strong>{booking.tenant?.fullName || booking.renter?.fullName}</strong></p>
-            <p className="booking-contact">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '16px', height: '16px', marginRight: '4px' }}>
-                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-              </svg>
-              {booking.tenant?.phone || booking.renter?.phone || '9811387634'}
-            </p>
-            <div className="booking-dates">
-              <span>From: <strong>{formatDate(booking.moveInDate || booking.startDate)}</strong></span>
-              <span>To: <strong>{formatDate(booking.moveOutDate || booking.endDate)}</strong></span>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+              <div className="space-y-2">
+                <p className="text-sm"><span className="font-semibold text-gray-500">Type:</span> {booking.property?.propertyType || 'House'}</p>
+                <p className="text-sm"><span className="font-semibold text-gray-500">Renter:</span> {booking.tenant?.fullName || booking.renter?.fullName}</p>
+                <p className="text-sm flex items-center gap-2">
+                  <span className="font-semibold text-gray-500">Contact:</span> 
+                  <span className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded text-xs font-medium">
+                    <Phone size={12} /> {booking.tenant?.phone || booking.renter?.phone || 'N/A'}
+                  </span>
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <div className="flex flex-col gap-1 text-sm bg-gray-50 p-2 rounded-lg border border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500 flex items-center gap-1"><Calendar size={14} /> From:</span>
+                    <span className="font-medium">{formatDate(booking.moveInDate || booking.startDate)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500 flex items-center gap-1"><Calendar size={14} /> To:</span>
+                    <span className="font-medium">{formatDate(booking.moveOutDate || booking.endDate)}</span>
+                  </div>
+                </div>
+                <p className="text-sm flex items-center gap-1 font-bold text-green-600 bg-green-50 p-2 rounded-lg border border-green-100">
+                  <Wallet size={16} /> NPR {(booking.monthlyRent || booking.totalAmount || 0).toLocaleString()} <span className="text-xs font-normal text-green-700">/month</span>
+                </p>
+              </div>
             </div>
-            <p className="booking-amount">Amount: <strong>NPR {(booking.monthlyRent || booking.totalAmount || 0).toLocaleString()}</strong></p>
           </div>
         </div>
         
         {/* Accept/Decline buttons for pending bookings */}
         {booking.status?.toLowerCase() === 'pending' && (
-          <div className="booking-actions">
+          <div className="flex flex-col sm:flex-row gap-3 p-5 bg-gray-50 border-t border-gray-100">
             <button 
-              className="btn-accept"
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl font-semibold shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 active:scale-95"
               onClick={() => handleBookingAction(booking.id, 'accept', 'property')}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
-              Accept
+              <Check size={18} /> Accept Request
             </button>
             <button 
-              className="btn-decline"
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white text-red-600 border border-red-100 rounded-xl font-semibold shadow-sm hover:bg-red-50 hover:border-red-200 hover:-translate-y-0.5 transition-all duration-200 active:scale-95"
               onClick={() => handleBookingAction(booking.id, 'decline', 'property')}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-              Decline
+              <X size={18} /> Decline
             </button>
           </div>
         )}
 
-        <div className="booking-footer">
-          <small>Booked on {formatDate(booking.createdAt)}</small>
+        <div className="px-5 py-3 bg-gray-50/80 border-t border-gray-100 text-xs text-gray-500 text-right">
+          Booked on {formatDate(booking.createdAt)}
         </div>
       </div>
     ));
@@ -290,50 +247,84 @@ const OwnerBookings = ({ showSuccess, showError }) => {
   const renderBikeBookings = () => {
     if (bookings.bikeBookings.length === 0) {
       return (
-        <div className="empty-state">
-          <div className="empty-icon">🚴</div>
-          <h3>No Bike Rentals</h3>
-          <p>You haven't rented any bikes yet.</p>
+        <div className="flex flex-col items-center justify-center p-16 text-center bg-white rounded-2xl border-2 border-dashed border-gray-200 text-gray-500">
+          <Bike size={48} className="mb-4 text-gray-300" />
+          <h3 className="text-xl font-bold text-gray-800 mb-2">No Bike Rentals</h3>
+          <p className="max-w-md mx-auto">You haven't rented any bikes yet.</p>
         </div>
       );
     }
 
     return bookings.bikeBookings.map((booking) => (
-      <div key={`bike-${booking.id}`} className="booking-card">
-        <div className="booking-header">
-          <div className="booking-type-badge bike">Bike Rental</div>
-          <div className={`booking-status ${getStatusClass(booking.status)}`}>
-            {booking.status || 'Pending'}
+      <div key={`bike-${booking.id}`} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-lg transition-all duration-300 group">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 bg-gray-50/50 border-b border-gray-100 gap-4">
+          <div className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+            <Bike size={12} /> Bike Rental
+          </div>
+          <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${getStatusColor(booking.status)}`}>
+            {booking.status || 'PENDING'}
           </div>
         </div>
-        <div className="booking-content">
-          <div className="booking-image">
+        
+        <div className="p-5 flex flex-col md:flex-row gap-6">
+          <div className="md:w-48 h-48 md:h-auto flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 relative group-hover:scale-[1.02] transition-transform duration-300">
             {booking.bike?.images?.[0] ? (
               <img 
                 src={`${SERVER_BASE_URL}/uploads/bikes/${booking.bike.images[0]}`} 
                 alt={`${booking.bike.brand} ${booking.bike.model}`}
+                className="w-full h-full object-cover"
+                onError={(e) => { e.target.src = "https://via.placeholder.com/300?text=No+Image"; }}
               />
             ) : (
-              <div className="placeholder-image">🚴</div>
+              <div className="flex items-center justify-center h-full w-full text-gray-300">
+                <Bike size={40} />
+              </div>
             )}
+            <div className="absolute inset-0 bg-black/5 group-hover:bg-transparent transition-colors"></div>
           </div>
-          <div className="booking-details">
-            <h3>{booking.bike?.brand} {booking.bike?.model}</h3>
-            <p className="booking-location">📍 {booking.bike?.location}</p>
-            <p className="booking-type">Type: {booking.bike?.type}</p>
-            <p className="booking-vendor">Vendor: {booking.vendor?.businessName || booking.vendor?.fullName}</p>
-            <p className="booking-contact">📞 {booking.vendor?.phone}</p>
-            <div className="booking-dates">
-              <span>From: {formatDate(booking.startDate)}</span>
-              <span>To: {formatDate(booking.endDate)}</span>
+          
+          <div className="flex-1 space-y-3">
+            <h3 className="text-xl font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">{booking.bike?.brand} {booking.bike?.model}</h3>
+            <p className="flex items-center gap-2 text-sm text-gray-600">
+              <MapPin size={16} className="text-indigo-500" />
+              {booking.bike?.location}
+            </p>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+              <div className="space-y-2">
+                <p className="text-sm"><span className="font-semibold text-gray-500">Type:</span> {booking.bike?.type}</p>
+                <p className="text-sm"><span className="font-semibold text-gray-500">Vendor:</span> {booking.vendor?.businessName || booking.vendor?.fullName}</p>
+                <p className="text-sm flex items-center gap-2">
+                  <span className="font-semibold text-gray-500">Contact:</span> 
+                  <span className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded text-xs font-medium">
+                    <Phone size={12} /> {booking.vendor?.phone || 'N/A'}
+                  </span>
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <div className="flex flex-col gap-1 text-sm bg-gray-50 p-2 rounded-lg border border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500 flex items-center gap-1"><Calendar size={14} /> From:</span>
+                    <span className="font-medium">{formatDate(booking.startDate)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500 flex items-center gap-1"><Calendar size={14} /> To:</span>
+                    <span className="font-medium">{formatDate(booking.endDate)}</span>
+                  </div>
+                </div>
+                {booking.totalAmount && (
+                  <p className="text-sm flex items-center gap-1 font-bold text-green-600 bg-green-50 p-2 rounded-lg border border-green-100">
+                    <Wallet size={16} /> NPR {booking.totalAmount.toLocaleString()}
+                  </p>
+                )}
+              </div>
             </div>
-            {booking.totalAmount && (
-              <p className="booking-amount">Amount: NPR {booking.totalAmount.toLocaleString()}</p>
-            )}
           </div>
         </div>
-        <div className="booking-footer">
-          <small>Booked on {formatDate(booking.createdAt)}</small>
+
+        <div className="px-5 py-3 bg-gray-50/80 border-t border-gray-100 text-xs text-gray-500 text-right">
+          Booked on {formatDate(booking.createdAt)}
         </div>
       </div>
     ));
@@ -353,10 +344,10 @@ const OwnerBookings = ({ showSuccess, showError }) => {
     
     if (allBookings.length === 0) {
       return (
-        <div className="empty-state">
-          <div className="empty-icon">📋</div>
-          <h3>No Bookings</h3>
-          <p>You don't have any bookings yet. Start by listing properties or renting bikes!</p>
+        <div className="flex flex-col items-center justify-center p-16 text-center bg-white rounded-2xl border-2 border-dashed border-gray-200 text-gray-500">
+          <ClipboardList size={64} className="mb-4 text-gray-300" />
+          <h3 className="text-xl font-bold text-gray-800 mb-2">No Bookings</h3>
+          <p className="max-w-md mx-auto">You don't have any bookings yet. Start by listing properties or renting bikes!</p>
         </div>
       );
     }
@@ -376,47 +367,47 @@ const OwnerBookings = ({ showSuccess, showError }) => {
 
   if (loading) {
     return (
-      <div className="loading-container">
-        <div className="spinner"></div>
-        <p>Loading bookings...</p>
+      <div className="flex flex-col items-center justify-center p-16 text-center">
+        <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
+        <p className="text-gray-500 font-medium">Loading bookings...</p>
       </div>
     );
   }
 
   return (
-    <div className="lessor-bookings">
-      <div className="bookings-header">
-        <div className="booking-tabs">
+    <div className="p-4 md:p-8 max-w-5xl mx-auto">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+        <div className="flex flex-wrap gap-2 w-full md:w-auto">
           <button 
-            className={`tab ${activeBookingType === 'all' ? 'active' : ''}`}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeBookingType === 'all' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
             onClick={() => setActiveBookingType('all')}
           >
             All Bookings ({getAllBookings().length})
           </button>
           <button 
-            className={`tab ${activeBookingType === 'properties' ? 'active' : ''}`}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${activeBookingType === 'properties' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
             onClick={() => setActiveBookingType('properties')}
           >
-            Property Rentals ({bookings.propertyBookings.length})
+            <Home size={16} /> Property Rentals ({bookings.propertyBookings.length})
           </button>
           <button 
-            className={`tab ${activeBookingType === 'bikes' ? 'active' : ''}`}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${activeBookingType === 'bikes' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
             onClick={() => setActiveBookingType('bikes')}
           >
-            Bike Rentals ({bookings.bikeBookings.length})
+            <Bike size={16} /> Bike Rentals ({bookings.bikeBookings.length})
           </button>
         </div>
-        <button className="refresh-btn" onClick={fetchBookings}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polyline points="23 4 23 10 17 10"/>
-            <polyline points="1 20 1 14 7 14"/>
-            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
-          </svg>
+        
+        <button 
+          className="w-full md:w-auto px-4 py-2 rounded-lg text-sm font-semibold bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-indigo-600 transition-all flex items-center justify-center gap-2"
+          onClick={fetchBookings}
+        >
+          <RefreshCw size={16} />
           Refresh
         </button>
       </div>
 
-      <div className="bookings-content">
+      <div className="space-y-6">
         {activeBookingType === 'all' && renderAllBookings()}
         {activeBookingType === 'properties' && renderPropertyBookings()}
         {activeBookingType === 'bikes' && renderBikeBookings()}

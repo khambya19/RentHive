@@ -295,7 +295,7 @@ exports.getMyApplications = async (req, res) => {
         {
           model: User,
           as: 'vendor',
-          attributes: ['id', 'fullName', 'email', 'phone']
+          attributes: ['id', 'name', 'email', 'phone']
         }
       ],
       order: [['createdAt', 'DESC']]

@@ -1,6 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import API_BASE_URL from '../config/api';
+import PaymentHistory from './PaymentHistory';
+import { 
+  CreditCard, 
+  Clock, 
+  AlertTriangle, 
+  CheckCircle, 
+  ClipboardList, 
+  Inbox, 
+  MapPin, 
+  Banknote, 
+  Calendar, 
+  User, 
+  Home, 
+  FileText, 
+  Check, 
+  X,
+  CreditCard as PaymentIcon
+} from 'lucide-react';
 import './PaymentManagement.css';
 
 const PaymentManagement = () => {
@@ -8,31 +26,25 @@ const PaymentManagement = () => {
   const [payments, setPayments] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all'); // all, pending, overdue, paid
+  const [filter, setFilter] = useState('all');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [notification, setNotification] = useState({ show: false, message: '', type: '' });
+  const [activeTab, setActiveTab] = useState('current');
   const [paymentForm, setPaymentForm] = useState({
     paymentMethod: '',
     transactionId: '',
     notes: ''
   });
 
-  useEffect(() => {
-    fetchPayments();
-    if (user.type === 'owner' || user.type === 'vendor') {
-      fetchStats();
-    }
-  }, []);
-
-  const showNotification = (message, type = 'success') => {
+  const showNotification = useCallback((message, type) => {
     setNotification({ show: true, message, type });
     setTimeout(() => {
       setNotification({ show: false, message: '', type: '' });
-    }, 4000);
-  };
+    }, 3000);
+  }, []);
 
-  const fetchPayments = async () => {
+  const fetchPayments = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
       const endpoint = user.type === 'owner' || user.type === 'vendor' 
@@ -55,14 +67,14 @@ const PaymentManagement = () => {
         showNotification('Failed to load payments', 'error');
       }
     } catch (error) {
-      console.error('Error fetching payments:', error);
+      // console.error('Error fetching payments:', error);
       showNotification('Error loading payments', 'error');
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter, user.type, showNotification]);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/payments/owner/stats`, {
@@ -74,9 +86,16 @@ const PaymentManagement = () => {
         setStats(data);
       }
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      // console.error('Error fetching stats:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchPayments();
+    if (user.type === 'owner' || user.type === 'vendor') {
+      fetchStats();
+    }
+  }, [fetchPayments, fetchStats, user.type]);
 
   const handleMarkAsPaid = async () => {
     if (!paymentForm.paymentMethod) {
@@ -105,7 +124,7 @@ const PaymentManagement = () => {
         showNotification('Failed to update payment', 'error');
       }
     } catch (error) {
-      console.error('Error marking payment:', error);
+      // console.error('Error marking payment:', error);
       showNotification('Error updating payment', 'error');
     }
   };
@@ -128,15 +147,6 @@ const PaymentManagement = () => {
     return 'normal';
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'Paid': return '#4caf50';
-      case 'Pending': return '#ff9800';
-      case 'Overdue': return '#f44336';
-      default: return '#757575';
-    }
-  };
-
   const filteredPayments = payments.filter(payment => {
     if (filter === 'all') return true;
     return payment.status.toLowerCase() === filter;
@@ -148,7 +158,6 @@ const PaymentManagement = () => {
 
   return (
     <div className="payment-management">
-      {/* Notification Toast */}
       {notification.show && (
         <div className={`notification-toast ${notification.type}`}>
           {notification.message}
@@ -156,63 +165,82 @@ const PaymentManagement = () => {
       )}
       
       <div className="payment-header">
-        <h2>💳 Rent Payment Management</h2>
-        <p className="subtitle">Track and manage your rent payments easily</p>
-        
-        {stats && (
-          <div className="payment-stats">
-            <div className="stat-card pending-card">
-              <div className="stat-icon">⏳</div>
-              <div className="stat-content">
-                <h3>Rs. {stats.totalPending?.toLocaleString() || 0}</h3>
-                <p>Pending Payments</p>
-              </div>
-            </div>
-            <div className="stat-card overdue-card">
-              <div className="stat-icon">⚠️</div>
-              <div className="stat-content">
-                <h3>Rs. {stats.totalOverdue?.toLocaleString() || 0}</h3>
-                <p>Overdue ({stats.overdueCount || 0} payments)</p>
-              </div>
-            </div>
-            <div className="stat-card success-card">
-              <div className="stat-icon">✅</div>
-              <div className="stat-content">
-                <h3>Rs. {stats.totalCollected?.toLocaleString() || 0}</h3>
-                <p>Collected This Month</p>
-              </div>
-            </div>
-          </div>
-        )}
+        <h2><PaymentIcon className="header-icon" /> Rent Payment Management</h2>
+        <div className="tab-navigation">
+          <button 
+            className={activeTab === 'current' ? 'tab-btn active' : 'tab-btn'}
+            onClick={() => setActiveTab('current')}
+          >
+            Current Payments
+          </button>
+          <button 
+            className={activeTab === 'history' ? 'tab-btn active' : 'tab-btn'}
+            onClick={() => setActiveTab('history')}
+          >
+            Payment History
+          </button>
+        </div>
       </div>
 
-      <div className="payment-filters">
+      {activeTab === 'history' ? (
+        <PaymentHistory />
+      ) : (
+        <>
+          <p className="subtitle">Track and manage your rent payments easily</p>
+          
+          {stats && (
+            <div className="payment-stats">
+              <div className="stat-card pending-card">
+                <div className="stat-icon"><Clock size={24} /></div>
+                <div className="stat-content">
+                  <h3>Rs. {stats.totalPending?.toLocaleString() || 0}</h3>
+                  <p>Pending Payments</p>
+                </div>
+              </div>
+              <div className="stat-card overdue-card">
+                <div className="stat-icon"><AlertTriangle size={24} /></div>
+                <div className="stat-content">
+                  <h3>Rs. {stats.totalOverdue?.toLocaleString() || 0}</h3>
+                  <p>Overdue ({stats.overdueCount || 0} payments)</p>
+                </div>
+              </div>
+              <div className="stat-card success-card">
+                <div className="stat-icon"><CheckCircle size={24} /></div>
+                <div className="stat-content">
+                  <h3>Rs. {stats.totalCollected?.toLocaleString() || 0}</h3>
+                  <p>Collected This Month</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="payment-filters">
         <button 
           className={filter === 'all' ? 'filter-btn active' : 'filter-btn'} 
           onClick={() => setFilter('all')}
         >
-          <span className="filter-icon">📋</span>
+          <span className="filter-icon"><ClipboardList size={16} /></span>
           All <span className="badge">{payments.length}</span>
         </button>
         <button 
           className={filter === 'pending' ? 'filter-btn active' : 'filter-btn'} 
           onClick={() => setFilter('pending')}
         >
-          <span className="filter-icon">⏳</span>
+          <span className="filter-icon"><Clock size={16} /></span>
           Pending <span className="badge">{payments.filter(p => p.status === 'Pending').length}</span>
         </button>
         <button 
           className={filter === 'overdue' ? 'filter-btn active' : 'filter-btn'} 
           onClick={() => setFilter('overdue')}
         >
-          <span className="filter-icon">⚠️</span>
+          <span className="filter-icon"><AlertTriangle size={16} /></span>
           Overdue <span className="badge">{payments.filter(p => p.status === 'Overdue').length}</span>
         </button>
         <button 
           className={filter === 'paid' ? 'filter-btn active' : 'filter-btn'} 
           onClick={() => setFilter('paid')}
         >
-          <span className="filter-icon">✅</span>
+          <span className="filter-icon"><CheckCircle size={16} /></span>
           Paid <span className="badge">{payments.filter(p => p.status === 'Paid').length}</span>
         </button>
       </div>
@@ -221,7 +249,7 @@ const PaymentManagement = () => {
         {filteredPayments.length === 0 ? (
           <div className="no-payments">
             <div className="empty-state">
-              <div className="empty-icon">📭</div>
+              <div className="empty-icon"><Inbox size={48} /></div>
               <h3>No payments found</h3>
               <p>You don't have any {filter !== 'all' ? filter : ''} payments at the moment</p>
             </div>
@@ -232,7 +260,7 @@ const PaymentManagement = () => {
               <div className="payment-card-header">
                 <div className="property-info">
                   <h3>{payment.Booking?.property?.title || 'Property'}</h3>
-                  <p className="payment-address">📍 {payment.Booking?.property?.address}</p>
+                  <p className="payment-address"><MapPin size={14} /> {payment.Booking?.property?.address}</p>
                 </div>
                 <span 
                   className={`payment-status-badge ${payment.status.toLowerCase()}`}
@@ -244,11 +272,11 @@ const PaymentManagement = () => {
               <div className="payment-details">
                 <div className="detail-grid">
                   <div className="detail-item amount-highlight">
-                    <span className="detail-label">💰 Amount</span>
+                    <span className="detail-label"><Banknote size={14} /> Amount</span>
                     <span className="detail-value">Rs. {payment.amount?.toLocaleString()}</span>
                   </div>
                   <div className="detail-item">
-                    <span className="detail-label">📅 Due Date</span>
+                    <span className="detail-label"><Calendar size={14} /> Due Date</span>
                     <span className="detail-value">{new Date(payment.dueDate).toLocaleDateString()}</span>
                     {payment.status !== 'Paid' && (
                       <span className={`days-indicator ${getUrgencyClass(payment)}`}>
@@ -261,13 +289,13 @@ const PaymentManagement = () => {
                   </div>
                   {payment.paidDate && (
                     <div className="detail-item">
-                      <span className="detail-label">✅ Paid On</span>
+                      <span className="detail-label"><CheckCircle size={14} /> Paid On</span>
                       <span className="detail-value">{new Date(payment.paidDate).toLocaleDateString()}</span>
                     </div>
                   )}
                   <div className="detail-item">
                     <span className="detail-label">
-                      {user.type === 'owner' || user.type === 'vendor' ? '👤 Tenant' : '🏠 Owner'}
+                      {user.type === 'owner' || user.type === 'vendor' ? <><User size={14} /> Tenant</> : <><Home size={14} /> Owner</>}
                     </span>
                     <span className="detail-value">
                       {user.type === 'owner' || user.type === 'vendor' 
@@ -277,13 +305,13 @@ const PaymentManagement = () => {
                   </div>
                   {payment.paymentMethod && (
                     <div className="detail-item">
-                      <span className="detail-label">💳 Method</span>
+                      <span className="detail-label"><CreditCard size={14} /> Method</span>
                       <span className="detail-value">{payment.paymentMethod}</span>
                     </div>
                   )}
                   {payment.transactionId && (
                     <div className="detail-item">
-                      <span className="detail-label">🔖 Transaction ID</span>
+                      <span className="detail-label"><FileText size={14} /> Transaction ID</span>
                       <span className="detail-value">{payment.transactionId}</span>
                     </div>
                   )}
@@ -291,7 +319,7 @@ const PaymentManagement = () => {
                 
                 {payment.notes && (
                   <div className="payment-notes">
-                    <strong>📝 Notes:</strong> {payment.notes}
+                    <strong><FileText size={14} /> Notes:</strong> {payment.notes}
                   </div>
                 )}
               </div>
@@ -305,7 +333,7 @@ const PaymentManagement = () => {
                       setShowPaymentModal(true);
                     }}
                   >
-                    <span className="btn-icon">✓</span>
+                    <span className="btn-icon"><Check size={16} /></span>
                     Mark as Paid
                   </button>
                 </div>
@@ -320,7 +348,7 @@ const PaymentManagement = () => {
           <div className="payment-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Mark Payment as Paid</h3>
-              <button className="modal-close" onClick={() => setShowPaymentModal(false)}>×</button>
+              <button className="modal-close" onClick={() => setShowPaymentModal(false)}><X size={20} /></button>
             </div>
             
             <div className="modal-body">
@@ -374,6 +402,8 @@ const PaymentManagement = () => {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

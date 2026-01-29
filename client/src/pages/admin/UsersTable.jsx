@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import UserProfileModal from './UserProfileModal';
 import API_BASE_URL from '../../config/api';
 import axios from 'axios';
+import { Search, Filter, Lock, Unlock, Trash2, Key, Eye } from 'lucide-react';
 
 // Table for listing, searching, filtering, and managing users (customers + owners)
 const UsersTable = () => {
@@ -13,11 +14,7 @@ const UsersTable = () => {
   const [showProfile, setShowProfile] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchUsers();
-  }, [search, role, status]);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
@@ -34,13 +31,17 @@ const UsersTable = () => {
         setUsers(response.data.users);
       }
     } catch (err) {
-      console.error('Error fetching users:', err);
+      // console.error('Error fetching users:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [search, role, status]);
 
-  const handleBlockToggle = async (userId, currentActive) => {
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  const handleBlockToggle = async (userId) => {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.patch(`${API_BASE_URL}/admin/users/${userId}/block`, {}, {
@@ -51,7 +52,7 @@ const UsersTable = () => {
         fetchUsers();
       }
     } catch (err) {
-      console.error('Error toggling user block:', err);
+      // console.error('Error toggling user block:', err);
       alert('Failed to update user status');
     }
   };
@@ -66,7 +67,7 @@ const UsersTable = () => {
       });
       fetchUsers();
     } catch (err) {
-      console.error('Error deleting user:', err);
+      // console.error('Error deleting user:', err);
       alert('Failed to delete user');
     }
   };
@@ -82,7 +83,7 @@ const UsersTable = () => {
         alert(`Temporary password: ${response.data.tempPassword}\n\nPlease save this and share it with the user.`);
       }
     } catch (err) {
-      console.error('Error resetting password:', err);
+      // console.error('Error resetting password:', err);
       alert('Failed to reset password');
     }
   };
@@ -90,21 +91,35 @@ const UsersTable = () => {
   if (loading) return <div className="text-center py-8 text-gray-600">Loading users...</div>;
 
   return (
-    <div className="bg-white rounded shadow p-4">
+    <div className="rounded shadow p-4" style={{ background: '#f8fafc' }}>
       <div className="flex flex-wrap gap-4 mb-4">
-        <input className="border p-2 rounded flex-1" placeholder="Search by name, email, phone" value={search} onChange={e => setSearch(e.target.value)} />
-        <select className="border p-2 rounded" value={role} onChange={e => setRole(e.target.value)}>
-          <option value="all">All Roles</option>
-          <option value="renter">Customer (Renter)</option>
-          <option value="lessor">Lessor</option>
-          <option value="owner">Owner</option>
-          <option value="vendor">Vendor</option>
-        </select>
-        <select className="border p-2 rounded" value={status} onChange={e => setStatus(e.target.value)}>
-          <option value="all">All Status</option>
-          <option value="active">Active</option>
-          <option value="blocked">Blocked</option>
-        </select>
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+          <input 
+            className="border p-2 pl-10 rounded w-full" 
+            placeholder="Search by name, email, phone" 
+            value={search} 
+            onChange={e => setSearch(e.target.value)} 
+          />
+        </div>
+        <div className="relative">
+          <Filter className="absolute left-3 top-2.5 text-gray-400" size={18} />
+          <select className="border p-2 pl-10 rounded appearance-none pr-8" style={{ background: '#f8fafc' }} value={role} onChange={e => setRole(e.target.value)}>
+            <option value="all">All Roles</option>
+            <option value="renter">Customer (Renter)</option>
+            <option value="lessor">Lessor</option>
+            <option value="owner">Owner</option>
+            <option value="vendor">Vendor</option>
+          </select>
+        </div>
+        <div className="relative">
+          <Filter className="absolute left-3 top-2.5 text-gray-400" size={18} />
+          <select className="border p-2 pl-10 rounded appearance-none pr-8" style={{ background: '#f8fafc' }} value={status} onChange={e => setStatus(e.target.value)}>
+            <option value="all">All Status</option>
+            <option value="active">Active</option>
+            <option value="blocked">Blocked</option>
+          </select>
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
@@ -126,7 +141,9 @@ const UsersTable = () => {
             ) : (
               users.map(user => (
                 <tr key={user.id} className="border-t hover:bg-gray-50">
-                  <td className="p-2 cursor-pointer text-blue-600 underline" onClick={() => { setSelectedUser(user); setShowProfile(true); }}>{user.name}</td>
+                  <td className="p-2 cursor-pointer text-blue-600 hover:text-blue-800 flex items-center gap-1" onClick={() => { setSelectedUser(user); setShowProfile(true); }}>
+                    <Eye size={14} /> {user.name}
+                  </td>
                   <td className="p-2">{user.email}</td>
                   <td className="p-2">{user.phone || 'N/A'}</td>
                   <td className="p-2 capitalize">{user.role}</td>
@@ -135,10 +152,30 @@ const UsersTable = () => {
                       {user.active ? 'Active' : 'Blocked'}
                     </span>
                   </td>
-                  <td className="p-2 flex gap-2">
-                    <button className={`px-2 py-1 rounded text-xs ${user.active ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-green-100 text-green-700 hover:bg-green-200'}`} onClick={() => handleBlockToggle(user.id, user.active)}>{user.active ? 'Block' : 'Unblock'}</button>
-                    <button className="px-2 py-1 rounded text-xs bg-yellow-100 text-yellow-700 hover:bg-yellow-200" onClick={() => handleResetPassword(user.id)}>Reset Password</button>
-                    <button className="px-2 py-1 rounded text-xs bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={() => handleDelete(user.id)}>Delete</button>
+                  <td className="p-2">
+                    <div className="flex gap-2">
+                      <button 
+                        className={`p-1.5 rounded text-white ${user.active ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`} 
+                        onClick={() => handleBlockToggle(user.id, user.active)}
+                        title={user.active ? 'Block User' : 'Unblock User'}
+                      >
+                        {user.active ? <Lock size={16} /> : <Unlock size={16} />}
+                      </button>
+                      <button 
+                        className="p-1.5 rounded bg-yellow-500 hover:bg-yellow-600 text-white" 
+                        onClick={() => handleResetPassword(user.id)}
+                        title="Reset Password"
+                      >
+                        <Key size={16} />
+                      </button>
+                      <button 
+                        className="p-1.5 rounded bg-gray-500 hover:bg-gray-600 text-white" 
+                        onClick={() => handleDelete(user.id)}
+                        title="Delete User"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))

@@ -11,12 +11,14 @@ const SALT_ROUNDS = 10;
 function validateRegisterBody(body) {
   if (!body) return 'Request body is missing or invalid';
   
-  const { type, fullName, email, password, confirmPassword } = body;
+  const { type, fullName, email, phone, password, confirmPassword } = body;
+    // Nepali phone validation: must be 10 digits, start with 9
+    if (!phone || !/^9\d{9}$/.test(phone)) return 'Phone must be a valid Nepali number (10 digits, starts with 9)';
   if (!type || !['lessor', 'owner', 'vendor', 'renter'].includes(type)) return 'Invalid type';
-  if (!fullName) return 'fullName required';
-  if (!email) return 'email required';
-  if (!password) return 'password required';
-  if (password !== confirmPassword) return 'password and confirmPassword must match';
+  if (!fullName) return 'Name required';
+  if (!email) return 'Email required';
+  if (!password) return 'Password required';
+  if (password !== confirmPassword) return 'Passwords must match';
   return null;
 }
 
@@ -56,14 +58,16 @@ exports.register = async (req, res) => {
     // Update existing unverified user or create new user
     if (user && !user.isVerified) {
       await user.update({
-        fullName, phone, password: hashed,
+        name: fullName,  // Use 'name' to match User model
+        phone, password: hashed,
         address, idNumber, businessName, ownershipType,
         profileImage, type,
         otp, otpExpiry, isVerified: false
       });
     } else {
       user = await User.create({
-        fullName, email, phone, password: hashed,
+        name: fullName,  // Use 'name' to match User model
+        email, phone, password: hashed,
         address, idNumber, businessName, ownershipType,
         profileImage, type, otp, otpExpiry, isVerified: false
       });
@@ -72,7 +76,7 @@ exports.register = async (req, res) => {
     const html = `
       <div style="font-family: sans-serif; line-height: 1.4;">
         <h3>RentHive - Email Verification</h3>
-        <p>Hi ${user.fullName || ''},</p>
+        <p>Hi ${user.name || ''},</p>
         <p>Your verification OTP is:</p>
         <h2 style="letter-spacing: 4px;">${otp}</h2>
         <p>This code will expire in ${process.env.OTP_EXPIRE_MINUTES || 10} minutes.</p>
@@ -80,24 +84,49 @@ exports.register = async (req, res) => {
       </div>
     `;
 
+    // Log OTP only in development mode for testing
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🔑 [DEV] OTP for', email, ':', otp);
+    }
+    
     try {
       await sendEmail({ to: email, subject: 'RentHive - Verify your email', html });
       console.log('✅ OTP email sent successfully to:', email);
     } catch (emailErr) {
       console.error('❌ Email sending failed:', emailErr.message);
-      // Log the OTP for development purposes so you can still test
-      console.log('🔑 DEV OTP for', email, ':', otp);
     }
 
     return res.status(201).json({ 
       message: 'OTP sent to email', 
       email, 
-      otp: process.env.NODE_ENV === 'development' ? otp : undefined 
+      // Only include OTP in response during development
+      ...(process.env.NODE_ENV !== 'production' && { otp })
     });
 
   } catch (err) {
     console.error('register error', err);
     return res.status(500).json({ error: 'Server error', details: err.message });
+  }
+};
+
+// Check if email already exists (for client-side validation)
+exports.checkEmail = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email required' });
+
+    const user = await User.findOne({ where: { email } });
+    
+    // Email exists and is verified = not available
+    if (user && user.isVerified) {
+      return res.json({ exists: true, message: 'This email is already registered' });
+    }
+    
+    // Email doesn't exist or is unverified = available
+    return res.json({ exists: false });
+  } catch (err) {
+    console.error('checkEmail error', err);
+    return res.status(500).json({ error: 'Server error' });
   }
 };
 
@@ -115,6 +144,11 @@ exports.resendOtp = async (req, res) => {
     user.otp = otp;
     user.otpExpiry = otpExpiry;
     await user.save();
+
+    // Log OTP to terminal for dev/testing
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🔑 [DEV] Resent OTP for', email, ':', otp);
+    }
 
     const html = `<p>Your new RentHive OTP: <b>${otp}</b>. Expires in ${process.env.OTP_EXPIRE_MINUTES || 10} minutes.</p>`;
     await sendEmail({ to: email, subject: 'RentHive - New OTP', html });
@@ -166,6 +200,10 @@ exports.login = async (req, res) => {
     const payload = { id: user.id, email: user.email, type: user.type };
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
 
+    // Log token in terminal for dev/testing
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🔒 [DEV] JWT Token for', email, ':', token);
+    }
     return res.json({
       message: 'Login successful',
       success: true,
@@ -173,10 +211,20 @@ exports.login = async (req, res) => {
       user: {
         id: user.id,
         email: user.email,
-        fullName: user.fullName,
+        fullName: user.name,  // Map 'name' to 'fullName' in response for frontend compatibility
         type: user.type
       }
     });
+
+// JWT logout is stateless; for visibility, add a logout endpoint that logs the event
+// Add this at the end of the file:
+// exports.logout = (req, res) => {
+//   if (process.env.NODE_ENV !== 'production') {
+//     console.log('🚪 [DEV] User logged out:', req.user ? req.user.email : 'Unknown');
+//   }
+//   // Invalidate token on client side (remove from storage)
+//   return res.json({ message: 'Logged out' });
+// };
   } catch (err) {
     console.error('login error', err);
     return res.status(500).json({ error: 'Server error' });
@@ -196,6 +244,11 @@ exports.forgotPassword = async (req, res) => {
     user.otp = otp;
     user.otpExpiry = otpExpiry;
     await user.save();
+
+    // Log OTP to terminal for dev/testing
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🔑 [DEV] Password Reset OTP for', email, ':', otp);
+    }
 
     const html = `<p>Your password reset OTP is: <b>${otp}</b></p>`;
     await sendEmail({ to: email, subject: 'RentHive - Password Reset', html });
@@ -223,4 +276,13 @@ exports.resetPassword = async (req, res) => {
   } catch (err) {
     return res.status(500).json({ error: 'Server error' });
   }
+};
+
+// JWT logout is stateless; for visibility, add a logout endpoint that logs the event
+exports.logout = (req, res) => {
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('🚪 [DEV] User logged out:', req.user ? req.user.email : 'Unknown');
+  }
+  // Invalidate token on client side (remove from storage)
+  return res.json({ message: 'Logged out' });
 };

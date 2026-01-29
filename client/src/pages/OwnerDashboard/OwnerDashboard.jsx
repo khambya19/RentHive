@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { useSocket } from '../../context/SocketContext';
+
 import { useNotifications } from '../../hooks/useNotifications';
 import DashboardNotifications from '../../components/DashboardNotifications';
 import NotificationBell from '../../components/NotificationBell';
@@ -9,20 +9,42 @@ import PaymentManagement from '../../components/PaymentManagement';
 import OwnerBookings from "./OwnerBookings";
 import UnifiedPostingForm from "./UnifiedPostingForm";
 import AllListings from "./AllListings";
+import Settings from "../Settings/Settings";
 import API_BASE_URL from '../../config/api';
+import { 
+  LayoutDashboard, 
+  PlusCircle, 
+  List, 
+  CalendarDays, 
+  CreditCard, 
+  MessageSquare, 
+  LogOut, 
+  ChevronLeft, 
+  ChevronRight, 
+  RefreshCw, 
+  Home, 
+  Banknote, 
+  CalendarCheck, 
+  Bike,
+  Settings as SettingsIcon,
+  Hexagon,
+  User,
+  Construction
+} from 'lucide-react';
 import "./OwnerDashboard.css";
 
 const OwnerDashboard = () => {
+    useEffect(() => {
+      document.body.style.background = '#d6eef5';
+      return () => { document.body.style.background = ''; };
+    }, []);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user, logout } = useAuth();
-  const socket = useSocket();
   const { notifications, removeNotification, showSuccess, showError } = useNotifications();
   const [activeTab, setActiveTab] = useState('overview');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [newBikeCount, setNewBikeCount] = useState(0);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // New state for mobile menu
   const [stats, setStats] = useState({
     totalProperties: 0,
     availableProperties: 0,
@@ -32,6 +54,11 @@ const OwnerDashboard = () => {
   });
   const [loading, setLoading] = useState(true);
 
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    setMobileMenuOpen(false);
+  };
+
   // Handle tab from URL query parameter
   useEffect(() => {
     const tabFromUrl = searchParams.get('tab');
@@ -40,192 +67,125 @@ const OwnerDashboard = () => {
     }
   }, [searchParams]);
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  // Listen for real-time bike availability notifications
-  useEffect(() => {
-    if (socket && socket.connected) {
-      const handleNewNotification = (notification) => {
-        if (notification.type === 'bike_available') {
-          // Increment new bike counter for badge
-          setNewBikeCount(prev => prev + 1);
-          
-          // Show success notification
-          showSuccess(
-            notification.title,
-            notification.message
-          );
-        }
-      };
-
-      socket.on('new-notification', handleNewNotification);
-
-      return () => {
-        socket.off('new-notification', handleNewNotification);
-      };
-    }
-  }, [socket, showSuccess]);
-
-  // Clear new bike count when user visits bikes tab
-  const handleTabChange = (tab) => {
-    if (tab === 'bikes' && newBikeCount > 0) {
-      setNewBikeCount(0);
-    }
-    setActiveTab(tab);
-  };
-
-  const fetchDashboardData = async () => {
-    console.log('🔍 Starting to fetch dashboard data...');
+  const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const user = localStorage.getItem('user');
-      
-      console.log('📝 Token exists:', !!token);
-      console.log('👤 User exists:', !!user);
-      
       if (!token) {
-        console.log('No token found, redirecting to login');
         navigate('/login');
         return;
       }
 
       const headers = { 'Authorization': `Bearer ${token}` };
-      
-      console.log('🚀 Making API request to:', `${API_BASE_URL}/owners/stats`);
-      
-      // Fetch owner stats (properties they own + bike rentals they've made)
       const response = await fetch(`${API_BASE_URL}/owners/stats`, { headers });
-      
-      console.log('Response status:', response.status);
-      console.log('Response ok:', response.ok);
       
       if (response.ok) {
         const data = await response.json();
-        console.log('Dashboard data received:', data);
         setStats(data);
       } else {
         const errorText = await response.text();
-        console.error('Failed to fetch dashboard data:', response.status, errorText);
-        showError('Error', `Failed to load dashboard data: ${response.status}`);
+        showError('Error', `Failed to load dashboard data: ${response.status} ${errorText}`);
       }
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
       showError('Error', 'Failed to load dashboard data');
     } finally {
       setLoading(false);
-      console.log('Finished fetching dashboard data');
     }
-  };
+  }, [navigate, showError]);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
   const renderOverview = () => (
-    <div className="overview-container">
+    <div className="overview-container max-w-7xl mx-auto">
       {/* Welcome Banner */}
-      <div className="welcome-banner">
-        <div className="welcome-content">
-          <h1>Welcome back, {user?.fullName || 'Owner'}! 👋</h1>
-          <p>Here's what's happening with your rentals today</p>
+      <div className="welcome-banner rounded-2xl p-6 md:p-10 mb-8 flex flex-col md:flex-row flex-wrap gap-4 justify-between items-center shadow-lg relative overflow-hidden" style={{ background: '#465A66' }}>
+        <div className="welcome-content relative z-10 text-center md:text-left mb-4 md:mb-0">
+          <h1 className="flex items-center justify-center md:justify-start gap-2 text-2xl md:text-3xl font-bold text-white mb-2">Welcome back, {user?.fullName || 'Owner'}! <span className="text-2xl">👋</span></h1>
+          <p className="text-indigo-100 text-lg">Here's what's happening with your rentals today</p>
         </div>
-        <button className="refresh-dashboard-btn" onClick={fetchDashboardData} disabled={loading}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polyline points="23 4 23 10 17 10"/>
-            <polyline points="1 20 1 14 7 14"/>
-            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
-          </svg>
+        <button 
+          className="refresh-dashboard-btn relative z-10 flex items-center gap-2 px-6 py-3 text-indigo-600 rounded-xl font-semibold hover:shadow-lg transition-all active:scale-95" style={{ background: '#f8fafc' }} 
+          onClick={fetchDashboardData} 
+          disabled={loading}
+        >
+          <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
           {loading ? 'Refreshing...' : 'Refresh Data'}
         </button>
       </div>
 
       {/* Stats Grid */}
-      <div className="stats-grid">
-        <div className="stat-card gradient-primary">
-          <div className="stat-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-              <polyline points="9 22 9 12 15 12 15 22"/>
-            </svg>
+      <div className="stats-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+        <div className="stat-card p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow" style={{ background: '#f4fbfd' }}>
+          <div className="stat-icon w-12 h-12 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center mb-4">
+            <Home size={24} />
           </div>
           <div className="stat-info">
-            <p className="stat-label">Total Properties</p>
-            <h3 className="stat-value">{stats.totalProperties}</h3>
-            <p className="stat-detail">{stats.availableProperties} available</p>
+            <p className="stat-label text-sm font-medium text-gray-500 uppercase tracking-wider mb-1">Total Properties</p>
+            <h3 className="stat-value text-3xl font-bold text-gray-900 mb-1">{stats.totalProperties}</h3>
+            <p className="stat-detail text-sm text-gray-400">{stats.availableProperties} available</p>
           </div>
         </div>
 
-        <div className="stat-card gradient-success">
-          <div className="stat-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="1" x2="12" y2="23"/>
-              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-            </svg>
+        <div className="stat-card p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow" style={{ background: '#f8fafc' }}>
+          <div className="stat-icon w-12 h-12 rounded-xl bg-green-100 text-green-600 flex items-center justify-center mb-4">
+            <Banknote size={24} />
           </div>
           <div className="stat-info">
-            <p className="stat-label">Monthly Revenue</p>
-            <h3 className="stat-value">NPR {stats.monthlyRevenue.toLocaleString()}</h3>
-            <p className="stat-detail">From rentals</p>
+            <p className="stat-label text-sm font-medium text-gray-500 uppercase tracking-wider mb-1">Monthly Revenue</p>
+            <h3 className="stat-value text-3xl font-bold text-gray-900 mb-1">NPR {stats.monthlyRevenue.toLocaleString()}</h3>
+            <p className="stat-detail text-sm text-gray-400">From rentals</p>
           </div>
         </div>
 
-        <div className="stat-card gradient-info">
-          <div className="stat-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-              <line x1="16" y1="2" x2="16" y2="6"/>
-              <line x1="8" y1="2" x2="8" y2="6"/>
-              <line x1="3" y1="10" x2="21" y2="10"/>
-            </svg>
+        <div className="stat-card p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow" style={{ background: '#f8fafc' }}>
+          <div className="stat-icon w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center mb-4">
+            <CalendarCheck size={24} />
           </div>
           <div className="stat-info">
-            <p className="stat-label">Property Bookings</p>
-            <h3 className="stat-value">{stats.totalBookings}</h3>
-            <p className="stat-detail">Total requests</p>
+            <p className="stat-label text-sm font-medium text-gray-500 uppercase tracking-wider mb-1">Property Bookings</p>
+            <h3 className="stat-value text-3xl font-bold text-gray-900 mb-1">{stats.totalBookings}</h3>
+            <p className="stat-detail text-sm text-gray-400">Total requests</p>
           </div>
         </div>
 
-        <div className="stat-card gradient-warning">
-          <div className="stat-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="5.5" cy="17.5" r="3.5"/>
-              <circle cx="18.5" cy="17.5" r="3.5"/>
-              <path d="M5.5 17.5h13"/>
-            </svg>
+        <div className="stat-card p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow" style={{ background: '#f8fafc' }}>
+          <div className="stat-icon w-12 h-12 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center mb-4">
+            <Bike size={24} />
           </div>
           <div className="stat-info">
-            <p className="stat-label">Bike Rentals</p>
-            <h3 className="stat-value">{stats.bikeRentals}</h3>
-            <p className="stat-detail">Active rentals</p>
+            <p className="stat-label text-sm font-medium text-gray-500 uppercase tracking-wider mb-1">Bike Rentals</p>
+            <h3 className="stat-value text-3xl font-bold text-gray-900 mb-1">{stats.bikeRentals}</h3>
+            <p className="stat-detail text-sm text-gray-400">Active rentals</p>
           </div>
         </div>
       </div>
 
       {/* Quick Actions Section */}
       <div className="quick-actions-section">
-        <h2>Quick Actions</h2>
-        <div className="action-cards">
-          <div className="action-card" onClick={() => setActiveTab('add-listing')}>
-            <div className="action-icon add">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="12" y1="5" x2="12" y2="19"/>
-                <line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
+        <h2 className="text-xl font-bold text-gray-800 mb-6">Quick Actions</h2>
+        <div className="action-cards grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div 
+            className="action-card p-8 rounded-2xl border border-gray-100 hover:border-indigo-500 cursor-pointer transition-all hover:shadow-lg text-center group" style={{ background: '#f4fbfd' }} 
+            onClick={() => setActiveTab('add-listing')}
+          >
+            <div className="action-icon w-16 h-16 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+              <PlusCircle size={32} />
             </div>
-            <h3>Add New Listing</h3>
-            <p>List a property or automobile</p>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Add New Listing</h3>
+            <p className="text-gray-500">List a property or automobile</p>
           </div>
 
-          <div className="action-card" onClick={() => handleTabChange('bookings')}>
-            <div className="action-icon bookings">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                <line x1="16" y1="2" x2="16" y2="6"/>
-                <line x1="8" y1="2" x2="8" y2="6"/>
-                <line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
+          <div 
+            className="action-card p-8 rounded-2xl border border-gray-100 hover:border-blue-500 cursor-pointer transition-all hover:shadow-lg text-center group" style={{ background: '#f4fbfd' }} 
+            onClick={() => handleTabChange('bookings')}
+          >
+            <div className="action-icon w-16 h-16 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+              <CalendarDays size={32} />
             </div>
-            <h3>View Bookings</h3>
-            <p>Check rental requests</p>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">View Bookings</h3>
+            <p className="text-gray-500">Check rental requests</p>
           </div>
         </div>
       </div>
@@ -234,203 +194,191 @@ const OwnerDashboard = () => {
 
   if (loading) {
     return (
-      <div className="loading-container">
-        <div className="spinner"></div>
-        <p>Loading dashboard...</p>
+      <div className="loading-container flex flex-col items-center justify-center h-screen bg-gray-50">
+        <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
+        <p className="text-gray-500 font-medium">Loading dashboard...</p>
       </div>
     );
   }
 
   return (
-    <div className="owner-dashboard">
+    <div className="owner-dashboard flex h-screen overflow-hidden" style={{ background: '#aed8e0' }}>
       {/* Dashboard Notifications */}
       <DashboardNotifications 
         notifications={notifications} 
         onRemove={removeNotification} 
       />
       
-      <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
-        <div className="sidebar-header">
-          <div className="sidebar-brand">
-            <div className="brand-icon-wrapper">
-              <svg className="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                <polyline points="9 22 9 12 15 12 15 22"/>
-              </svg>
+      {/* Mobile Overlay */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-20 lg:hidden backdrop-blur-sm"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar - Mobile: Fixed Slide-over, Desktop: Static/Sticky */}
+      <aside 
+        className={`
+          sidebar fixed inset-y-0 left-0 z-30 text-white transition-transform duration-300 ease-in-out w-72 bg-[#465A66]
+          ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+          lg:relative lg:translate-x-0
+          ${sidebarCollapsed ? 'lg:w-20' : 'lg:w-72'}
+          flex flex-col shadow-xl
+        `}
+      >
+        <div className="sidebar-header p-6 flex items-center justify-between border-b border-white/10">
+          <div className="sidebar-brand flex items-center gap-3">
+            <div className="brand-icon-wrapper bg-white/10 p-2 rounded-lg">
+              <Hexagon className="brand-icon text-white" size={24} />
             </div>
-            {!sidebarCollapsed && <span className="brand-name">RentHive</span>}
+            {!sidebarCollapsed && <span className="brand-name text-xl font-bold tracking-tight">RentHive</span>}
           </div>
-          <button className="sidebar-toggle" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              {sidebarCollapsed ? (
-                <path d="M9 18l6-6-6-6"/>
-              ) : (
-                <path d="M15 18l-6-6 6-6"/>
-              )}
-            </svg>
+          <button 
+            className="sidebar-toggle hidden lg:flex items-center justify-center p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors" 
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          >
+            {sidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+          </button>
+          {/* Mobile Close Button */}
+          <button 
+            className="lg:hidden flex items-center justify-center p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <ChevronLeft size={24} />
           </button>
         </div>
 
-        <div className="user-profile">
-          <div className="user-avatar">
-            {user?.fullName?.[0] || 'L'}
+        <div className="user-profile p-6 border-b border-white/10 flex items-center gap-4">
+          <div className="user-avatar w-12 h-12 bg-white/10 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-lg">
+            {user?.photo ? <img src={user.photo} alt="User" className="w-full h-full rounded-full object-cover" /> : <User size={24} />}
           </div>
           {!sidebarCollapsed && (
-            <div className="user-info">
-              <p className="user-name">{user?.fullName || 'Owner'}</p>
-              <p className="user-role">Property Owner</p>
+            <div className="user-info overflow-hidden">
+              <p className="user-name font-semibold truncate hover:text-clip">{user?.fullName || 'Owner'}</p>
+              <p className="user-role text-xs text-gray-400 uppercase tracking-wider">Property Owner</p>
             </div>
           )}
         </div>
 
-        <nav className="sidebar-menu">
+        <nav className="sidebar-menu flex-1 py-6 overflow-y-auto custom-scrollbar">
           <button 
-            className={`menu-item ${activeTab === 'overview' ? 'active' : ''}`} 
+            className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'overview' ? 'bg-white/10 text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`} 
             onClick={() => handleTabChange('overview')}
           >
-            <svg className="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="3" width="7" height="7"/>
-              <rect x="14" y="3" width="7" height="7"/>
-              <rect x="14" y="14" width="7" height="7"/>
-              <rect x="3" y="14" width="7" height="7"/>
-            </svg>
-            {!sidebarCollapsed && <span>Overview</span>}
+            <LayoutDashboard size={20} />
+            {!sidebarCollapsed && <span className="font-medium">Overview</span>}
           </button>
 
           <button 
-            className={`menu-item ${activeTab === 'add-listing' ? 'active' : ''}`} 
+            className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'add-listing' ? 'bg-white/10 text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`} 
             onClick={() => handleTabChange('add-listing')}
           >
-            <svg className="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            {!sidebarCollapsed && <span>Add New Listing</span>}
+            <PlusCircle size={20} />
+            {!sidebarCollapsed && <span className="font-medium">Add New Listing</span>}
           </button>
 
           <button 
-            className={`menu-item ${activeTab === 'listings' ? 'active' : ''}`} 
+            className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'listings' ? 'bg-white/10 text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`} 
             onClick={() => handleTabChange('listings')}
           >
-            <svg className="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="3" width="7" height="7"/>
-              <rect x="14" y="3" width="7" height="7"/>
-              <rect x="14" y="14" width="7" height="7"/>
-              <rect x="3" y="14" width="7" height="7"/>
-            </svg>
-            {!sidebarCollapsed && <span>All Listings</span>}
+            <List size={20} />
+            {!sidebarCollapsed && <span className="font-medium">All Listings</span>}
           </button>
 
           <button 
-            className={`menu-item ${activeTab === 'bookings' ? 'active' : ''}`} 
+            className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'bookings' ? 'bg-white/10 text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`} 
             onClick={() => handleTabChange('bookings')}
           >
-            <svg className="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-              <line x1="16" y1="2" x2="16" y2="6"/>
-              <line x1="8" y1="2" x2="8" y2="6"/>
-              <line x1="3" y1="10" x2="21" y2="10"/>
-            </svg>
-            {!sidebarCollapsed && <span>Incoming Bookings</span>}
+            <CalendarDays size={20} />
+            {!sidebarCollapsed && <span className="font-medium">Incoming Bookings</span>}
           </button>
 
           <button 
-            className={`menu-item ${activeTab === 'payments' ? 'active' : ''}`} 
+            className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'payments' ? 'bg-white/10 text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`} 
             onClick={() => handleTabChange('payments')}
           >
-            <svg className="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="1" x2="12" y2="23"/>
-              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-            </svg>
-            {!sidebarCollapsed && <span>Payments & Finances</span>}
+            <CreditCard size={20} />
+            {!sidebarCollapsed && <span className="font-medium">Payments & Finances</span>}
           </button>
 
           <button 
-            className={`menu-item ${activeTab === 'messages' ? 'active' : ''}`} 
+            className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'messages' ? 'bg-white/10 text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`} 
             onClick={() => handleTabChange('messages')}
           >
-            <svg className="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
-            {!sidebarCollapsed && <span>Messages</span>}
+            <MessageSquare size={20} />
+            {!sidebarCollapsed && <span className="font-medium">Messages</span>}
+          </button>
+
+          <button 
+            className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'settings' ? 'bg-white/10 text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`} 
+            onClick={() => handleTabChange('settings')}
+          >
+            <SettingsIcon size={20} />
+            {!sidebarCollapsed && <span className="font-medium">Settings</span>}
           </button>
         </nav>
 
-        <div className="sidebar-footer">
-          <button className="logout-button" onClick={() => { logout(); navigate('/login'); }}>
-            <svg className="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
-            {!sidebarCollapsed && <span>Logout</span>}
+        <div className="sidebar-footer p-6 border-t border-white/10">
+          <button className="logout-button flex items-center gap-3 w-full text-left text-gray-400 hover:text-white hover:bg-white/5 p-3 rounded-lg transition-colors" onClick={() => { logout(); navigate('/login'); }}>
+            <LogOut size={20} />
+            {!sidebarCollapsed && <span className="font-medium">Logout</span>}
           </button>
         </div>
       </aside>
 
-      <main className="main-content">
-        <div className="content-header">
-          <div className="header-left">
-            <h1>
-              {activeTab === 'overview' && 'Dashboard'}
-              {activeTab === 'listings' && 'All Listings'}
-              {activeTab === 'bookings' && 'Incoming Bookings'}
-              {activeTab === 'payments' && 'Payments & Finances'}
-              {activeTab === 'messages' && 'Messages'}
-              {activeTab === 'add-listing' && 'Add New Listing'}
-            </h1>
-            <p className="header-subtitle">
-              {activeTab === 'overview' && 'Welcome back! Manage your properties and automobiles'}
-              {activeTab === 'listings' && 'View and manage all your posted properties and automobiles'}
-              {activeTab === 'bookings' && 'Review and manage incoming rental requests'}
-              {activeTab === 'payments' && 'Track income, expenses, and payouts'}
-              {activeTab === 'messages' && 'Communicate with tenants and prospective renters'}
-              {activeTab === 'add-listing' && 'Choose what you want to list - property or automobile'}
-            </p>
-          </div>
-          <div className="header-right">
-            <NotificationBell userId={user?.id} />
-            <button 
-              className="settings-btn"
-              onClick={() => setShowSettings(!showSettings)}
-              title="Settings"
+      <main className="main-content flex-1 flex flex-col h-screen overflow-hidden relative">
+        <div className="content-header bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm z-10">
+          <div className="header-left flex items-center gap-4">
+             {/* Mobile Menu Toggle */}
+             <button 
+              className="lg:hidden p-2 -ml-2 rounded-lg text-gray-600 hover:bg-gray-100"
+              onClick={() => setMobileMenuOpen(true)}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M12 1v6m0 6v6m-5.66-15.66l4.24 4.24m0 8.48l-4.24 4.24M1 12h6m6 0h6m-15.66 5.66l4.24-4.24m8.48 0l4.24 4.24"/>
-              </svg>
+              <List size={24} />
             </button>
+
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold text-gray-900 truncate max-w-[200px] md:max-w-none">
+                {activeTab === 'overview' && 'Dashboard'}
+                {activeTab === 'listings' && 'All Listings'}
+                {activeTab === 'bookings' && 'Incoming Bookings'}
+                {activeTab === 'payments' && 'Payments & Finances'}
+                {activeTab === 'messages' && 'Messages'}
+                {activeTab === 'add-listing' && 'Add New Listing'}
+                {activeTab === 'settings' && 'Settings'}
+              </h1>
+              <p className="header-subtitle hidden md:block text-sm text-gray-500 mt-1">
+                {activeTab === 'overview' && 'Welcome back! Manage your properties and automobiles'}
+                {activeTab === 'listings' && 'View and manage all your posted properties and automobiles'}
+                {activeTab === 'bookings' && 'Review and manage incoming rental requests'}
+                {activeTab === 'payments' && 'Track income, expenses, and payouts'}
+                {activeTab === 'messages' && 'Communicate with tenants and prospective renters'}
+                {activeTab === 'add-listing' && 'Choose what you want to list - property or automobile'}
+                {activeTab === 'settings' && 'Manage your account and preferences'}
+              </p>
+            </div>
+          </div>
+          <div className="header-right flex items-center gap-4">
+            <NotificationBell userId={user?.id} />
           </div>
         </div>
 
-        <div className="content-area">
+        <div className="content-area flex-1 overflow-y-auto p-4 md:p-8 bg-gray-50">
           {activeTab === 'overview' && renderOverview()}
           {activeTab === 'listings' && <AllListings showSuccess={showSuccess} showError={showError} />}
           {activeTab === 'bookings' && <OwnerBookings showSuccess={showSuccess} showError={showError} />}
           {activeTab === 'payments' && <PaymentManagement />}
-          {activeTab === 'messages' && <div className="placeholder">Messages - Coming Soon</div>}
-          {activeTab === 'add-listing' && <UnifiedPostingForm showSuccess={showSuccess} showError={showError} />}
-        </div>
-        
-        {/* Settings Modal/Panel */}
-        {showSettings && (
-          <div className="settings-modal">
-            <div className="settings-content">
-              <div className="settings-header">
-                <h2>Settings</h2>
-                <button className="close-btn" onClick={() => setShowSettings(false)}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="18" y1="6" x2="6" y2="18"/>
-                    <line x1="6" y1="6" x2="18" y2="18"/>
-                  </svg>
-                </button>
-              </div>
-              <div className="settings-body">
-                <div className="placeholder">Settings - Coming Soon</div>
-              </div>
+          {activeTab === 'messages' && (
+            <div className="placeholder flex flex-col items-center justify-center h-full text-gray-500">
+              <Construction size={48} className="mb-4 text-gray-400" />
+              <h3 className="text-xl font-semibold">Messages Feature</h3>
+              <p>Coming Soon</p>
             </div>
-          </div>
-        )}
+          )}
+          {activeTab === 'add-listing' && <UnifiedPostingForm showSuccess={showSuccess} showError={showError} />}
+          {activeTab === 'settings' && <Settings />}
+        </div>
       </main>
     </div>
   );

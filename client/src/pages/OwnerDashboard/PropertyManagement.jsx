@@ -4,33 +4,19 @@ import PropertyLocationMap from '../../components/PropertyLocationMap';
 import AddPropertyForm from '../../components/AddPropertyForm';
 import '../../components/PropertyLocationMap.css';
 import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
+import noImage from '../../assets/no-image.png';
+import { Plus, MapPin, Home, Bed, Bath, Ruler, Trash2, Edit } from 'lucide-react';
 
 const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
-  const { user } = useAuth();
+  const { user: _user } = useAuth();
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showPropertyModal, setShowPropertyModal] = useState(false);
   const [editingProperty, setEditingProperty] = useState(null);
-  const [propertyForm, setPropertyForm] = useState({
-    title: '',
-    propertyType: 'Apartment',
-    address: '',
-    city: '',
-    bedrooms: 1,
-    bathrooms: 1,
-    area: '',
-    rentPrice: '',
-    securityDeposit: '',
-    amenities: [],
-    description: '',
-    latitude: null,
-    longitude: null,
-  });
+
 
   // Location-related states
   const [selectedLocation, setSelectedLocation] = useState(null);
-  const [showLocationPicker, setShowLocationPicker] = useState(false);
-  const [locationSearchQuery, setLocationSearchQuery] = useState('');
 
   useEffect(() => {
     if (!inlineMode) {
@@ -58,6 +44,10 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const resetForm = () => {
+    setSelectedLocation(null);
   };
 
   const handleAddProperty = async (formData) => {
@@ -99,55 +89,22 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
     }
   };
 
-  const resetForm = () => {
-    setPropertyForm({
-      title: '',
-      propertyType: 'Apartment',
-      address: '',
-      city: '',
-      bedrooms: 1,
-      bathrooms: 1,
-      area: '',
-      rentPrice: '',
-      securityDeposit: '',
-      amenities: [],
-      description: '',
-      latitude: null,
-      longitude: null,
-    });
-    setSelectedLocation(null);
-    setShowLocationPicker(false);
-    setLocationSearchQuery('');
-  };
 
-  const handleLocationSelect = (location) => {
-    setSelectedLocation(location);
-    setPropertyForm(prev => ({
-      ...prev,
-      latitude: location.lat,
-      longitude: location.lng
-    }));
-  };
-
-  const clearLocation = () => {
-    setSelectedLocation(null);
-    setPropertyForm(prev => ({
-      ...prev,
-      latitude: null,
-      longitude: null
-    }));
-  };
 
   if (loading) {
-    return <div className="loading-container"><div className="spinner"></div></div>;
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
   }
 
   // In inline mode, just render the form without the list
   if (inlineMode) {
     return (
-      <div className="property-management inline-mode">
+      <div className="p-4 md:p-8 max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100">
         {showPropertyModal && (
-          <div className="inline-form-container">
+          <div className="animate-fade-in">
             <AddPropertyForm
               onSubmit={handleAddProperty}
               onCancel={() => setShowPropertyModal(false)}
@@ -160,78 +117,96 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
   }
 
   return (
-    <div className="property-management">
-      <div className="section-header">
+    <div className="p-6 md:p-8 max-w-7xl mx-auto">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
-          <h2>My Properties</h2>
-          <p>Manage your rental properties</p>
+          <h2 className="text-2xl font-bold text-gray-900">My Properties</h2>
+          <p className="text-gray-500">Manage your rental properties</p>
         </div>
         <button 
-          className="btn-primary"
+          className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-xl font-semibold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200"
           onClick={() => { setEditingProperty(null); resetForm(); setShowPropertyModal(true); }}
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="12" y1="5" x2="12" y2="19"/>
-            <line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
+          <Plus size={20} />
           Add Property
         </button>
       </div>
 
-      <div className="properties-grid">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {properties.length > 0 ? properties.map(property => (
-          <div key={property.id} className="property-card">
-            <div className="property-image">
+          <div key={property.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 group">
+            <div className="relative h-48 overflow-hidden">
               <img 
-                src={property.images?.[0] ? `${SERVER_BASE_URL}/uploads/properties/${property.images[0]}` : 'https://via.placeholder.com/300x200'}
+                src={property.images?.[0] ? `${SERVER_BASE_URL}/uploads/properties/${property.images[0]}` : noImage}
                 alt={property.title}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 onError={(e) => {
-                  e.target.src = 'https://via.placeholder.com/300x200?text=No+Image';
+                  e.target.src = noImage;
                 }}
               />
-              <span className={`status-badge status-${property.status?.toLowerCase()}`}>
+              <span className={`absolute top-4 right-4 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide backdrop-blur-md
+                ${property.status === 'Available' ? 'bg-green-500/90 text-white' : 'bg-gray-800/80 text-white'}`}>
                 {property.status || 'Available'}
               </span>
             </div>
-            <div className="property-content">
-              <h3>{property.title}</h3>
-              <p className="property-type">{property.propertyType}</p>
-              <p className="property-location">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                  <circle cx="12" cy="10" r="3"/>
-                </svg>
-                {property.address}, {property.city}
-                {property.latitude && property.longitude && (
-                  <span className="location-indicator">📍</span>
-                )}
+            <div className="p-5">
+              <h3 className="text-lg font-bold text-gray-900 mb-1 truncate">{property.title}</h3>
+              <p className="text-sm text-blue-600 font-medium mb-3">{property.propertyType}</p>
+              <p className="flex items-center gap-1 text-gray-500 text-sm mb-4">
+                <MapPin size={16} className="flex-shrink-0" />
+                <span className="truncate">{property.address}, {property.city}</span>
               </p>
-              <div className="property-features">
-                <span>🛏️ {property.bedrooms} Bed{property.bedrooms > 1 ? 's' : ''}</span>
-                <span>🚿 {property.bathrooms} Bath{property.bathrooms > 1 ? 's' : ''}</span>
-                <span>📐 {property.area} sq.ft</span>
+              
+              <div className="flex items-center gap-4 py-3 border-t border-b border-gray-50 mb-4">
+                <span className="flex items-center gap-1.5 text-gray-600 text-sm font-medium">
+                  <Bed size={18} className="text-gray-400" /> {property.bedrooms} <span className="hidden sm:inline">Bed</span>
+                </span>
+                <span className="flex items-center gap-1.5 text-gray-600 text-sm font-medium">
+                  <Bath size={18} className="text-gray-400" /> {property.bathrooms} <span className="hidden sm:inline">Bath</span>
+                </span>
+                <span className="flex items-center gap-1.5 text-gray-600 text-sm font-medium">
+                  <Ruler size={18} className="text-gray-400" /> {property.area} <span className="hidden sm:inline">sq.ft</span>
+                </span>
               </div>
-              <div className="property-price">
-                NPR {property.rentPrice ? Number(property.rentPrice).toLocaleString() : '0'}/month
-              </div>
-              <div className="property-actions">
-                <button className="btn-outline" onClick={() => {/* Edit logic */}}>Edit</button>
-                <button className="btn-danger" onClick={() => {/* Delete logic */}}>Delete</button>
+              
+              <div className="flex items-center justify-between mt-auto">
+                <div className="text-xl font-bold text-gray-900">
+                  NPR {property.rentPrice ? Number(property.rentPrice).toLocaleString() : '0'}<span className="text-sm text-gray-400 font-normal">/mo</span>
+                </div>
+                <div className="flex gap-2">
+                  <button 
+                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    onClick={() => {
+                      setEditingProperty(property);
+                      setShowPropertyModal(true);
+                    }}
+                    title="Edit Property"
+                  >
+                    <Edit size={18} />
+                  </button>
+                  <button 
+                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    onClick={() => {/* Delete logic */}}
+                    title="Delete Property"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         )) : (
-          <div className="empty-state">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-              <polyline points="9 22 9 12 15 12 15 22"/>
-            </svg>
-            <h3>No properties yet</h3>
-            <p>Start by adding your first property to rent out</p>
+          <div className="col-span-full flex flex-col items-center justify-center py-16 px-4 text-center bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm">
+              <Home size={32} className="text-gray-300" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">No properties yet</h3>
+            <p className="text-gray-500 mb-8 max-w-sm">Start by adding your first property to rent out. It only takes a few minutes.</p>
             <button 
-              className="btn-primary"
+              className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200"
               onClick={() => { setEditingProperty(null); resetForm(); setShowPropertyModal(true); }}
             >
+              <Plus size={20} />
               Add Your First Property
             </button>
           </div>
@@ -240,14 +215,22 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
 
       {/* Property Modal */}
       {showPropertyModal && (
-        <div className="modal-backdrop" onClick={() => setShowPropertyModal(false)}>
-          <div className="modal-dialog large-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>{editingProperty ? 'Edit Property' : 'Add New Property'}</h2>
-              <button className="modal-close" onClick={() => setShowPropertyModal(false)}>×</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowPropertyModal(false)}>
+          <div 
+            className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl animate-scale-up" 
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 flex items-center justify-between p-6 bg-white border-b border-gray-100">
+              <h2 className="text-2xl font-bold text-gray-900">{editingProperty ? 'Edit Property' : 'Add New Property'}</h2>
+              <button 
+                className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors"
+                onClick={() => setShowPropertyModal(false)}
+              >
+                <div className="text-2xl leading-none">&times;</div>
+              </button>
             </div>
             
-            <div className="modal-body">
+            <div className="p-6 md:p-8">
               <AddPropertyForm
                 onSubmit={handleAddProperty}
                 onCancel={() => setShowPropertyModal(false)}

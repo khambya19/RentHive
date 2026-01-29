@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { Download, FileX, FileSpreadsheet, Banknote, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import './PaymentHistory.css';
+import { SERVER_BASE_URL } from '../config/api';
 
 const PaymentHistory = () => {
   const [payments, setPayments] = useState([]);
@@ -13,11 +15,7 @@ const PaymentHistory = () => {
     limit: 50
   });
 
-  useEffect(() => {
-    fetchPaymentHistory();
-  }, [filter]);
-
-  const fetchPaymentHistory = async () => {
+  const fetchPaymentHistory = useCallback(async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
@@ -29,18 +27,22 @@ const PaymentHistory = () => {
       params.append('limit', filter.limit);
 
       const response = await axios.get(
-        `http://localhost:5001/api/payments/history?${params.toString()}`,
+        `${SERVER_BASE_URL}/api/payments/history?${params.toString()}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       setPayments(response.data.payments);
       setStats(response.data.stats);
     } catch (error) {
-      console.error('Error fetching payment history:', error);
+      // console.error('Error fetching payment history:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
+
+  useEffect(() => {
+    fetchPaymentHistory();
+  }, [fetchPaymentHistory]);
 
   const formatDate = (date) => {
     return new Date(date).toLocaleDateString('en-US', {
@@ -92,9 +94,7 @@ const PaymentHistory = () => {
       <div className="history-header">
         <h2>Payment History</h2>
         <button onClick={exportToCSV} className="export-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-          </svg>
+          <Download size={18} />
           Export CSV
         </button>
       </div>
@@ -102,24 +102,49 @@ const PaymentHistory = () => {
       {stats && (
         <div className="stats-grid">
           <div className="stat-card">
-            <div className="stat-value">{stats.total}</div>
-            <div className="stat-label">Total Transactions</div>
+            <div className="stat-icon-wrapper blue">
+              <FileSpreadsheet size={24} />
+            </div>
+            <div className="stat-content">
+              <div className="stat-value">{stats.total}</div>
+              <div className="stat-label">Total Transactions</div>
+            </div>
           </div>
           <div className="stat-card">
-            <div className="stat-value">{formatCurrency(stats.totalAmount)}</div>
-            <div className="stat-label">Total Amount</div>
+            <div className="stat-icon-wrapper green">
+              <Banknote size={24} />
+            </div>
+            <div className="stat-content">
+              <div className="stat-value">{formatCurrency(stats.totalAmount)}</div>
+              <div className="stat-label">Total Amount</div>
+            </div>
           </div>
           <div className="stat-card">
-            <div className="stat-value paid">{stats.paid}</div>
-            <div className="stat-label">Paid</div>
+            <div className="stat-icon-wrapper teal">
+              <CheckCircle size={24} />
+            </div>
+            <div className="stat-content">
+              <div className="stat-value paid">{stats.paid}</div>
+              <div className="stat-label">Paid</div>
+            </div>
           </div>
           <div className="stat-card">
-            <div className="stat-value pending">{stats.pending}</div>
-            <div className="stat-label">Pending</div>
+            <div className="stat-icon-wrapper yellow">
+              <Clock size={24} />
+            </div>
+            <div className="stat-content">
+              <div className="stat-value pending">{stats.pending}</div>
+              <div className="stat-label">Pending</div>
+            </div>
           </div>
           <div className="stat-card">
-            <div className="stat-value overdue">{stats.overdue}</div>
-            <div className="stat-label">Overdue</div>
+            <div className="stat-icon-wrapper red">
+              <AlertCircle size={24} />
+            </div>
+            <div className="stat-content">
+              <div className="stat-value overdue">{stats.overdue}</div>
+              <div className="stat-label">Overdue</div>
+            </div>
           </div>
         </div>
       )}
@@ -174,10 +199,7 @@ const PaymentHistory = () => {
         <div className="loading-state">Loading payment history...</div>
       ) : payments.length === 0 ? (
         <div className="empty-state">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="3" y="8" width="18" height="12" rx="2"/>
-            <path d="M7 8V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2"/>
-          </svg>
+          <FileX size={48} color="#94a3b8" />
           <p>No payment history found</p>
         </div>
       ) : (

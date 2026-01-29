@@ -110,7 +110,7 @@ router.get('/all-bookings', async (req, res) => {
         {
           model: User,
           as: 'tenant',
-          attributes: ['id', 'fullName', 'phone', 'email']
+          attributes: ['id', 'name', 'phone', 'email']
         },
         {
           model: Property,
@@ -132,7 +132,7 @@ router.get('/all-bookings', async (req, res) => {
       message: booking.message,
       createdAt: booking.createdAt,
       renter: booking.tenant ? {
-        fullName: booking.tenant.fullName,
+        fullName: booking.tenant.name,
         phone: booking.tenant.phone,
         email: booking.tenant.email
       } : null,
@@ -151,7 +151,7 @@ router.get('/all-bookings', async (req, res) => {
         {
           model: User,
           as: 'lessor',
-          attributes: ['id', 'fullName', 'phone', 'email']
+          attributes: ['id', 'name', 'phone', 'email']
         },
         {
           model: Bike,

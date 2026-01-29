@@ -31,7 +31,7 @@ exports.getTenantPayments = async (req, res) => {
           model: Booking,
           include: [{ model: Property, as: 'property' }]
         },
-        { model: User, as: 'owner', attributes: ['id', 'fullName', 'email', 'phone'] }
+        { model: User, as: 'owner', attributes: ['id', 'name', 'email', 'phone'] }
       ],
       order: [['dueDate', 'DESC']]
     });
@@ -69,7 +69,7 @@ exports.getOwnerPayments = async (req, res) => {
           model: Booking,
           include: [{ model: Property, as: 'property' }]
         },
-        { model: User, as: 'tenant', attributes: ['id', 'fullName', 'email', 'phone'] }
+        { model: User, as: 'tenant', attributes: ['id', 'name', 'email', 'phone'] }
       ],
       order: [['dueDate', 'DESC']]
     });

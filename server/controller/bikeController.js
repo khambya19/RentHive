@@ -25,9 +25,10 @@ exports.getAvailableBikes = async (req, res) => {
     
     let whereClause = { status: 'Available' };
     
-    // Search by brand or model
+    // Search by brand, model, or name
     if (search) {
       whereClause[Op.or] = [
+        { name: { [Op.iLike || Op.like]: `%${search}%` } },
         { brand: { [Op.iLike || Op.like]: `%${search}%` } },
         { model: { [Op.iLike || Op.like]: `%${search}%` } },
         { description: { [Op.iLike || Op.like]: `%${search}%` } }
@@ -95,7 +96,7 @@ exports.getAvailableBikes = async (req, res) => {
         {
           model: User,
           as: 'vendor',
-          attributes: ['id', 'businessName', 'fullName', 'phone']
+          attributes: ['id', 'businessName', 'name', 'phone']
         }
       ],
       order: orderClause
@@ -103,6 +104,7 @@ exports.getAvailableBikes = async (req, res) => {
 
     return res.json(bikes.map(bike => ({
       id: bike.id,
+      name: bike.name || `${bike.brand} ${bike.model}`,
       brand: bike.brand,
       model: bike.model,
       type: bike.type,
@@ -123,7 +125,7 @@ exports.getAvailableBikes = async (req, res) => {
       rating: bike.rating,
       ratingCount: bike.ratingCount,
       vendorId: bike.vendorId,
-      vendorName: bike.vendor?.businessName || bike.vendor?.fullName,
+      vendorName: bike.vendor?.businessName || bike.vendor?.name,
       vendorPhone: bike.vendor?.phone
     })));
   } catch (error) {
@@ -158,7 +160,7 @@ exports.bookBike = async (req, res) => {
         {
           model: User,
           as: 'vendor',
-          attributes: ['id', 'businessName', 'fullName']
+          attributes: ['id', 'businessName', 'name']
         }
       ]
     });
@@ -169,7 +171,7 @@ exports.bookBike = async (req, res) => {
 
     // Get lessor info
     const lessor = await User.findByPk(lessorId, {
-      attributes: ['id', 'fullName', 'email', 'phone']
+      attributes: ['id', 'name', 'email', 'phone']
     });
 
     // Prevent self-booking
@@ -237,7 +239,7 @@ exports.bookBike = async (req, res) => {
       const { io, connectedUsers } = require('../server');
       
       const notificationTitle = '🏍️ New Bike Rental Request';
-      const notificationMessage = `${lessor.fullName} wants to rent your ${bike.brand} ${bike.model} from ${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}. Total: NPR ${totalAmount.toLocaleString()}`;
+      const notificationMessage = `${lessor.name} wants to rent your ${bike.brand} ${bike.model} from ${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}. Total: NPR ${totalAmount.toLocaleString()}`;
       
       const notification = await Notification.create({
         userId: vendorId,
@@ -319,7 +321,7 @@ exports.bookBikeDirect = async (req, res) => {
 
     // Get lessor info
     const lessor = await User.findByPk(lessorId, {
-      attributes: ['id', 'fullName', 'email', 'phone']
+      attributes: ['id', 'name', 'email', 'phone']
     });
 
     if (!lessor) {
@@ -398,7 +400,7 @@ exports.bookBikeDirect = async (req, res) => {
       const { io, connectedUsers } = require('../server');
       
       const notificationTitle = '🏍️ New Bike Rental Confirmed';
-      const notificationMessage = `${lessor.fullName} has booked your ${bike.brand} ${bike.model} from ${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}. Total: NPR ${totalAmount.toLocaleString()}. Booking ID: #${booking.id}`;
+      const notificationMessage = `${lessor.name} has booked your ${bike.brand} ${bike.model} from ${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}. Total: NPR ${totalAmount.toLocaleString()}. Booking ID: #${booking.id}`;
       
       const notification = await Notification.create({
         userId: vendorId,
@@ -524,7 +526,7 @@ exports.createBike = async (req, res) => {
 
     // Get vendor info for notification
     const vendor = await User.findByPk(vendorId, {
-      attributes: ['businessName', 'fullName']
+      attributes: ['businessName', 'name']
     });
 
     // Send broadcast notification to all lessors about the new bike
@@ -532,7 +534,7 @@ exports.createBike = async (req, res) => {
       const { createBroadcast } = require('./notificationController');
       
       const notificationTitle = `🏍️ New Bike Available for Rent!`;
-      const notificationMessage = `${vendor?.businessName || vendor?.fullName || 'A vendor'} just added a ${brand} ${model} (${type}) available for rent at NPR ${parseInt(dailyRate).toLocaleString()}/day in ${location}. Book it now!`;
+      const notificationMessage = `${vendor?.businessName || vendor?.name || 'A vendor'} just added a ${brand} ${model} (${type}) available for rent at NPR ${parseInt(dailyRate).toLocaleString()}/day in ${location}. Book it now!`;
       
       await createBroadcast({
         body: {
@@ -630,7 +632,7 @@ exports.getVendorBookings = async (req, res) => {
         {
           model: User,
           as: 'lessor',
-          attributes: ['id', 'fullName', 'email', 'phone', 'profileImage']
+          attributes: ['id', 'name', 'email', 'phone', 'profileImage']
         },
         {
           model: Bike,
@@ -665,8 +667,8 @@ exports.getVendorBookings = async (req, res) => {
       // Customer information
       customer: {
         id: booking.lessor?.id,
-        name: booking.lessor?.fullName || 'N/A',
-        fullName: booking.lessor?.fullName,
+        name: booking.lessor?.name || 'N/A',
+        fullName: booking.lessor?.name,
         email: booking.lessor?.email,
         phone: booking.lessor?.phone,
         profileImage: booking.lessor?.profileImage
@@ -704,7 +706,7 @@ exports.updateBookingStatus = async (req, res) => {
         {
           model: User,
           as: 'lessor',
-          attributes: ['id', 'fullName', 'email', 'phone']
+          attributes: ['id', 'name', 'email', 'phone']
         },
         {
           model: Bike,
@@ -904,7 +906,7 @@ exports.getVendorCustomers = async (req, res) => {
         {
           model: User,
           as: 'lessor',
-          attributes: ['id', 'fullName', 'email', 'phone', 'profileImage', 'createdAt']
+          attributes: ['id', 'name', 'email', 'phone', 'profileImage', 'createdAt']
         }
       ],
       order: [['createdAt', 'DESC']]
@@ -919,7 +921,7 @@ exports.getVendorCustomers = async (req, res) => {
       if (!customerMap.has(customerId)) {
         customerMap.set(customerId, {
           id: customerId,
-          fullName: booking.lessor.fullName,
+          fullName: booking.lessor.name,
           email: booking.lessor.email,
           phone: booking.lessor.phone,
           profileImage: booking.lessor.profileImage,

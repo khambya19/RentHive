@@ -1,10 +1,30 @@
 import React, { useState } from 'react';
 import './Settings.css';
+import { SERVER_BASE_URL } from '../../config/api';
+import { useAuth } from '../../context/AuthContext';
+import { 
+  User, 
+  Shield, 
+  Bell, 
+  Palette, 
+  CreditCard, 
+  FileText, 
+  Camera, 
+  Moon, 
+  Sun, 
+  MapPin, 
+  Activity, 
+  Smartphone, 
+  Mail,
+  Lock,
+  Globe
+} from 'lucide-react';
 
 const Settings = () => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('account');
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [pic, setPic] = useState(null);
+  const [pic, setPic] = useState(user?.profilePic || null);
 
   const toggleTheme = () => setIsDarkMode(!isDarkMode);
 
@@ -13,10 +33,10 @@ const Settings = () => {
     const formData = new FormData();
     formData.append('profilePic', file);
     try {
-      const res = await fetch('http://localhost:5001/api/users/upload-photo', { method: 'POST', body: formData });
+      const res = await fetch(`${SERVER_BASE_URL}/api/users/upload-photo`, { method: 'POST', body: formData });
       const data = await res.json();
       setPic(data.photoUrl);
-    } catch (err) { console.error("Upload failed"); }
+    } catch (err) { /* console.error("Upload failed"); */ }
   };
 
   return (
@@ -26,15 +46,26 @@ const Settings = () => {
         <aside className="pro-sidebar">
           <div className="brand">RentHive</div>
           <nav>
-            <button className={activeTab === 'account' ? 'active' : ''} onClick={() => setActiveTab('account')}>👤 Account</button>
-            <button className={activeTab === 'security' ? 'active' : ''} onClick={() => setActiveTab('security')}>🔐 Security</button>
-            <button className={activeTab === 'notif' ? 'active' : ''} onClick={() => setActiveTab('notif')}>🔔 Notifications</button>
-            <button className={activeTab === 'appearance' ? 'active' : ''} onClick={() => setActiveTab('appearance')}>🎨 Appearance</button>
-            <button className={activeTab === 'billing' ? 'active' : ''} onClick={() => setActiveTab('billing')}>💳 Billing</button>
-            <button className={activeTab === 'activity' ? 'active' : ''} onClick={() => setActiveTab('activity')}>📜 Activity Log</button>
+            <button className={activeTab === 'account' ? 'active' : ''} onClick={() => setActiveTab('account')}>
+              <User size={18} /> Account
+            </button>
+            <button className={activeTab === 'security' ? 'active' : ''} onClick={() => setActiveTab('security')}>
+              <Shield size={18} /> Security
+            </button>
+            <button className={activeTab === 'notif' ? 'active' : ''} onClick={() => setActiveTab('notif')}>
+              <Bell size={18} /> Notifications
+            </button>
+            <button className={activeTab === 'appearance' ? 'active' : ''} onClick={() => setActiveTab('appearance')}>
+              <Palette size={18} /> Appearance
+            </button>
+            <button className={activeTab === 'billing' ? 'active' : ''} onClick={() => setActiveTab('billing')}>
+              <CreditCard size={18} /> Billing
+            </button>
+            <button className={activeTab === 'activity' ? 'active' : ''} onClick={() => setActiveTab('activity')}>
+              <FileText size={18} /> Activity Log
+            </button>
           </nav>
         </aside>
-
         
         <main className="pro-main">
           {activeTab === 'account' && (
@@ -42,14 +73,50 @@ const Settings = () => {
               <h2>Account Settings</h2>
               <div className="profile-hero">
                 <div className="avatar-lg">
-                  {pic ? <img src={pic} alt="profile" /> : <div className="letter"></div>}
-                  <label className="upload-icon">📷<input type="file" hidden onChange={handleUpload}/></label>
+                  {pic ? <img src={pic} alt="profile" /> : <div className="letter">{user?.fullName?.[0] || 'U'}</div>}
+                  <label className="upload-icon">
+                    <Camera size={16} />
+                    <input type="file" hidden onChange={handleUpload}/>
+                  </label>
                 </div>
-                <div className="hero-text"><h3>Achyut</h3><p>Lessor Account • Kathmandu</p></div>
+                <div className="hero-text">
+                  <h3>{user?.fullName || 'User'}</h3>
+                  <p>{user?.role === 'vendor' ? 'Owner Account' : 'Tenant Account'} • {user?.address || 'Nepal'}</p>
+                </div>
               </div>
               <div className="form-layout">
-                <div className="input-group"><label>Full Name</label><input type="text" defaultValue="Achyut" /></div>
-                <div className="input-group"><label>Email Address</label><input type="email" defaultValue="achyut@renthive.com" /></div>
+                <div className="input-group">
+                  <label>Full Name</label>
+                  <input type="text" defaultValue={user?.fullName || ''} />
+                </div>
+                <div className="input-group">
+                  <label>Email Address</label>
+                  <input type="email" defaultValue={user?.email || ''} readOnly />
+                </div>
+                <div className="input-group">
+                  <label>Phone Number</label>
+                  <input type="text" defaultValue={user?.phone || ''} placeholder="+977-98XXXXXXXX" />
+                </div>
+                <div className="input-group">
+                  <label>Address</label>
+                  <input type="text" defaultValue={user?.address || ''} placeholder="City, Street" />
+                </div>
+                <div className="input-group">
+                  <label>Citizenship / ID Number</label>
+                  <input type="text" defaultValue={user?.citizenshipNumber || user?.idNumber || ''} placeholder="Citizenship No." />
+                </div>
+                {user?.role === 'vendor' && (
+                  <>
+                    <div className="input-group">
+                      <label>Business Name</label>
+                      <input type="text" defaultValue={user?.businessName || ''} placeholder="Company Name" />
+                    </div>
+                    <div className="input-group">
+                      <label>Ownership Type</label>
+                      <input type="text" defaultValue={user?.ownershipType || ''} placeholder="Individual / Company" />
+                    </div>
+                  </>
+                )}
               </div>
               <button className="btn-primary">Update Profile</button>
             </div>
@@ -60,7 +127,10 @@ const Settings = () => {
               <h2>Appearance</h2>
               <div className="feature-card theme-toggle">
                 <div className="info">
-                  <h4>Dark Mode</h4>
+                  <div className="flex items-center gap-2 mb-1">
+                    {isDarkMode ? <Moon size={20} className="text-purple-400" /> : <Sun size={20} className="text-orange-400" />}
+                    <h4>Dark Mode</h4>
+                  </div>
                   <p>Switch between light and dark themes for better eye comfort.</p>
                 </div>
                 <label className="toggle-switch">
@@ -75,11 +145,23 @@ const Settings = () => {
             <div className="tab-panel animate-in">
               <h2>Notification Preferences</h2>
               <div className="feature-card">
-                <div className="info"><h4>Email Updates</h4><p>Receive rental booking alerts.</p></div>
+                <div className="info">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Mail size={18} className="text-gray-500" />
+                    <h4>Email Updates</h4>
+                  </div>
+                  <p>Receive rental booking alerts.</p>
+                </div>
                 <input type="checkbox" defaultChecked />
               </div>
               <div className="feature-card">
-                <div className="info"><h4>SMS Alerts</h4><p>Urgent property messages.</p></div>
+                <div className="info">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Smartphone size={18} className="text-gray-500" />
+                    <h4>SMS Alerts</h4>
+                  </div>
+                  <p>Urgent property messages.</p>
+                </div>
                 <input type="checkbox" />
               </div>
             </div>
@@ -102,7 +184,13 @@ const Settings = () => {
             <div className="tab-panel animate-in">
               <h2>Security</h2>
               <div className="feature-card">
-                <div className="info"><h4>Password</h4><p>Last changed 3 months ago</p></div>
+                <div className="info">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Lock size={18} className="text-gray-500" />
+                    <h4>Password</h4>
+                  </div>
+                  <p>Last changed 3 months ago</p>
+                </div>
                 <button className="btn-small">Update</button>
               </div>
             </div>
@@ -113,8 +201,14 @@ const Settings = () => {
             <div className="tab-panel animate-in">
               <h2>Login Activity</h2>
               <ul className="activity-list">
-                <li>🟢 Currently active in Kathmandu, Nepal</li>
-                <li>⚪ Logged in via Chrome (Windows) - 2 hours ago</li>
+                <li className="flex items-center gap-3">
+                  <Activity size={16} className="text-green-500" />
+                  <span>Currently active in Kathmandu, Nepal</span>
+                </li>
+                <li className="flex items-center gap-3">
+                  <Globe size={16} className="text-gray-400" />
+                  <span>Logged in via Chrome (Windows) - 2 hours ago</span>
+                </li>
               </ul>
             </div>
           )}

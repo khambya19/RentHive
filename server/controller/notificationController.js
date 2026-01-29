@@ -1,310 +1,314 @@
 const Notification = require('../models/Notification');
+const { Sequelize, Op } = require('sequelize');
 
-// Function to get io and connectedUsers (avoids circular dependency)
+// Helper to get socket.io instance safely
 const getSocketIO = () => {
-  const { io, connectedUsers } = require('../server');
-  return { io, connectedUsers };
+  try {
+    const { io, connectedUsers } = require('../server');
+    return { io, connectedUsers };
+  } catch (err) {
+    console.warn('Socket.IO not available:', err.message);
+    return { io: null, connectedUsers: null };
+  }
 };
 
 /**
- * Create a broadcast notification for all users
- * @route POST /api/notifications/broadcast
+ * Create broadcast notification → visible to everyone
+ * POST /api/notifications/broadcast
  */
 const createBroadcast = async (req, res) => {
   try {
     const { title, message, type = 'info', link } = req.body;
 
-    // Validate required fields
-    if (!title || !message) {
+    if (!title?.trim() || !message?.trim()) {
       return res.status(400).json({
         success: false,
-        message: 'Title and message are required'
+        message: 'Title and message are required',
       });
     }
 
-    // Create broadcast notification (userId is null for broadcasts)
     const notification = await Notification.create({
-      userId: null,
-      title,
-      message,
+      user_id: null,
+      title: title.trim(),
+      message: message.trim(),
       type,
-      isBroadcast: true,
-      link
+      is_broadcast: true,
+      link: link || null,
     });
 
-    console.log('📢 Broadcasting notification to all users:', notification.id);
+    console.log(`📢 Broadcast created → ID ${notification.id}`);
 
-    // Get io instance and emit to all connected users
     const { io } = getSocketIO();
     if (io) {
-      io.emit('new-notification', {
+      const payload = {
         id: notification.id,
         title: notification.title,
         message: notification.message,
         type: notification.type,
         isBroadcast: notification.is_broadcast,
         link: notification.link,
-        isRead: notification.is_read,
-        createdAt: notification.created_at
-      });
-      console.log('✅ Broadcast notification emitted to all users');
+        isRead: notification.is_read ?? false,
+        createdAt: notification.created_at,
+      };
+      io.emit('new-notification', payload);
+      console.log('✅ Broadcast emitted to all connected clients');
     }
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: 'Broadcast notification sent successfully',
-      data: notification
+      message: 'Broadcast notification created and sent',
+      data: notification,
     });
   } catch (error) {
-    console.error('❌ Error creating broadcast:', error);
-    res.status(500).json({
+    console.error('❌ createBroadcast error:', error);
+    return res.status(500).json({
       success: false,
       message: 'Failed to create broadcast notification',
-      error: error.message
+      error: error.message,
     });
   }
 };
 
 /**
- * Create a user-specific notification
- * @route POST /api/notifications/user
+ * Create personal notification for one user
+ * POST /api/notifications/user
  */
 const createUserNotification = async (req, res) => {
   try {
     const { userId, title, message, type = 'info', link } = req.body;
 
-    // Validate required fields
-    if (!userId || !title || !message) {
+    if (!userId || !title?.trim() || !message?.trim()) {
       return res.status(400).json({
         success: false,
-        message: 'userId, title, and message are required'
+        message: 'userId, title, and message are required',
       });
     }
 
-    // Create user notification
     const notification = await Notification.create({
-      userId,
-      title,
-      message,
+      user_id: Number(userId),
+      title: title.trim(),
+      message: message.trim(),
       type,
-      isBroadcast: false,
-      link
+      is_broadcast: false,
+      link: link || null,
     });
 
-    console.log(`📧 Sending notification to user ${userId}:`, notification.id);
+    console.log(`📧 Notification created for user ${userId} → ID ${notification.id}`);
 
-    // Get io and connectedUsers, emit to specific user if they are connected
     const { io, connectedUsers } = getSocketIO();
     if (io && connectedUsers) {
-      const socketId = connectedUsers.get(userId.toString());
+      const socketId = connectedUsers.get(String(userId));
       if (socketId) {
-        io.to(socketId).emit('new-notification', {
+        const payload = {
           id: notification.id,
           title: notification.title,
           message: notification.message,
           type: notification.type,
           isBroadcast: notification.is_broadcast,
           link: notification.link,
-          isRead: notification.is_read,
-          createdAt: notification.created_at
-        });
-        console.log(`✅ Notification sent to socket ${socketId}`);
+          isRead: notification.is_read ?? false,
+          createdAt: notification.created_at,
+        };
+        io.to(socketId).emit('new-notification', payload);
+        console.log(`✅ Real-time notification sent to socket ${socketId}`);
       } else {
-        console.log(`⚠️ User ${userId} is not connected (notification saved to DB)`);
+        console.log(`⚠️ User ${userId} offline → saved to DB only`);
       }
     }
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: 'User notification created successfully',
-      data: notification
+      message: 'Notification created successfully',
+      data: notification,
     });
   } catch (error) {
-    console.error('❌ Error creating user notification:', error);
-    res.status(500).json({
+    console.error('❌ createUserNotification error:', error);
+    return res.status(500).json({
       success: false,
       message: 'Failed to create user notification',
-      error: error.message
+      error: error.message,
     });
   }
 };
 
 /**
- * Get all notifications for a user (including broadcasts)
- * @route GET /api/notifications/user/:userId
+ * Get user's notifications (personal + broadcasts)
+ * GET /api/notifications/user/:userId
  */
 const getUserNotifications = async (req, res) => {
+  console.log('getUserNotifications called for user:', req.params.userId);
   try {
     const { userId } = req.params;
-    const { limit = 50, offset = 0, unreadOnly = false } = req.query;
+    const { limit = 50, offset = 0, unreadOnly = 'false' } = req.query;
 
-    // Validate userId
-    if (!userId) {
+    if (!userId || isNaN(Number(userId))) {
       return res.status(400).json({
         success: false,
-        message: 'userId is required'
+        message: 'Valid numeric userId is required',
       });
     }
 
-    // Get notifications
-    const notifications = await Notification.findByUserId(parseInt(userId), {
-      limit: parseInt(limit),
-      offset: parseInt(offset),
-      unreadOnly: unreadOnly === 'true'
+    const parsedLimit = Math.min(Math.max(1, Number(limit)), 100);
+    const parsedOffset = Math.max(0, Number(offset));
+    const onlyUnread = unreadOnly === 'true' || unreadOnly === true;
+
+    const notifications = await Notification.findByUserId(Number(userId), {
+      limit: parsedLimit,
+      offset: parsedOffset,
+      unreadOnly: onlyUnread,
     });
 
-    // Get unread count
-    const unreadCount = await Notification.getUnreadCount(parseInt(userId));
+    const unreadCount = await Notification.getUnreadCount(Number(userId));
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: {
         notifications,
         unreadCount,
-        total: notifications.length
-      }
+        returned: notifications.length,
+      },
     });
   } catch (error) {
-    console.error('❌ Error fetching user notifications:', error);
-    res.status(500).json({
+    console.error('❌ getUserNotifications error:', error);
+    console.error(error); // Log full error object
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch notifications',
-      error: error.message
+      error: error.message,
     });
   }
 };
 
 /**
- * Mark a notification as read
- * @route PATCH /api/notifications/:id/read
+ * Mark one notification as read
+ * PATCH /api/notifications/:id/read
  */
 const markAsRead = async (req, res) => {
   try {
     const { id } = req.params;
     const { userId } = req.body;
 
-    // Validate required fields
     if (!id || !userId) {
       return res.status(400).json({
         success: false,
-        message: 'Notification ID and userId are required'
+        message: 'notification id and userId are required',
       });
     }
 
-    // Mark as read
-    const notification = await Notification.markAsRead(parseInt(id), parseInt(userId));
+    const notification = await Notification.markAsRead(Number(id), Number(userId));
 
     if (!notification) {
       return res.status(404).json({
         success: false,
-        message: 'Notification not found or already read'
+        message: 'Notification not found, not owned by you, or already read',
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: 'Notification marked as read',
-      data: notification
+      data: notification,
     });
   } catch (error) {
-    console.error('❌ Error marking notification as read:', error);
-    res.status(500).json({
+    console.error('❌ markAsRead error:', error);
+    return res.status(500).json({
       success: false,
       message: 'Failed to mark notification as read',
-      error: error.message
+      error: error.message,
     });
   }
 };
 
 /**
- * Mark all notifications as read for a user
- * @route PATCH /api/notifications/user/:userId/read-all
+ * Mark all notifications as read for the user
+ * PATCH /api/notifications/user/:userId/read-all
  */
 const markAllAsRead = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    // Validate userId
-    if (!userId) {
+    if (!userId || isNaN(Number(userId))) {
       return res.status(400).json({
         success: false,
-        message: 'userId is required'
+        message: 'Valid numeric userId is required',
       });
     }
 
-    // Mark all as read
-    const count = await Notification.markAllAsRead(parseInt(userId));
+    const count = await Notification.markAllAsRead(Number(userId));
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: `${count} notifications marked as read`,
-      data: { count }
+      message: `${count} notification(s) marked as read`,
+      data: { count },
     });
   } catch (error) {
-    console.error('❌ Error marking all notifications as read:', error);
-    res.status(500).json({
+    console.error('❌ markAllAsRead error:', error);
+    return res.status(500).json({
       success: false,
       message: 'Failed to mark all notifications as read',
-      error: error.message
+      error: error.message,
     });
   }
 };
 
 /**
- * Delete a notification
- * @route DELETE /api/notifications/:id
+ * Delete a personal notification (broadcasts usually protected)
+ * DELETE /api/notifications/:id
  */
 const deleteNotification = async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId } = req.body;
+    const userId = req.user?.id; // from auth middleware
 
-    // Validate required fields
     if (!id || !userId) {
       return res.status(400).json({
         success: false,
-        message: 'Notification ID and userId are required'
+        message: 'Notification ID and authenticated user required',
       });
     }
 
-    // Delete notification
-    const success = await Notification.delete(parseInt(id), parseInt(userId));
+    const deletedCount = await Notification.destroy({
+      where: {
+        id: Number(id),
+        user_id: Number(userId),          // ← snake_case
+        is_broadcast: false,
+      },
+    });
 
-    if (!success) {
+    if (deletedCount === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Notification not found'
+        message: 'Notification not found or you do not have permission to delete it',
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: 'Notification deleted successfully'
+      message: 'Notification deleted successfully',
     });
   } catch (error) {
-    console.error('❌ Error deleting notification:', error);
-    res.status(500).json({
+    console.error('❌ deleteNotification error:', error);
+    return res.status(500).json({
       success: false,
       message: 'Failed to delete notification',
-      error: error.message
+      error: error.message,
     });
   }
 };
 
 /**
- * Handle booking response (Accept/Decline)
- * @route POST /api/notifications/booking-response
+ * Vendor accepts / declines a booking → notifies tenant
+ * POST /api/notifications/booking-response
  */
 const handleBookingResponse = async (req, res) => {
   try {
     const { bookingId, action, notificationId } = req.body;
-    const vendorId = req.user.id;
+    const vendorId = req.user?.id;
 
-    // Validate required fields
     if (!bookingId || !action || !['accept', 'decline'].includes(action)) {
       return res.status(400).json({
         success: false,
-        message: 'Booking ID and valid action (accept/decline) are required'
+        message: 'bookingId and valid action (accept/decline) required',
       });
     }
 
@@ -312,27 +316,24 @@ const handleBookingResponse = async (req, res) => {
     const Property = require('../models/Property');
     const User = require('../models/User');
 
-    // Get the booking
     const booking = await Booking.findOne({
       where: { id: bookingId, vendorId },
       include: [
         { model: User, as: 'tenant', attributes: ['id', 'fullName', 'email'] },
-        { model: Property, as: 'property', attributes: ['id', 'title'] }
-      ]
+        { model: Property, as: 'property', attributes: ['id', 'title'] },
+      ],
     });
 
     if (!booking) {
       return res.status(404).json({
         success: false,
-        message: 'Booking not found'
+        message: 'Booking not found or not owned by you',
       });
     }
 
-    // Update booking status
     const newStatus = action === 'accept' ? 'Approved' : 'Rejected';
     await booking.update({ status: newStatus });
 
-    // Update property status if accepted
     if (action === 'accept') {
       await Property.update(
         { status: 'Rented' },
@@ -340,67 +341,61 @@ const handleBookingResponse = async (req, res) => {
       );
     }
 
-    // Mark the original notification as read
+    // Optional: mark vendor's own notification as read
     if (notificationId) {
-      await Notification.markAsRead(parseInt(notificationId), vendorId);
+      await Notification.markAsRead(Number(notificationId), vendorId).catch(() => {});
     }
 
-    // Send notification to tenant about the response
+    // Notify tenant
     const moveInFormatted = new Date(booking.moveInDate).toLocaleDateString('en-US', {
       month: 'long',
       day: 'numeric',
-      year: 'numeric'
+      year: 'numeric',
     });
 
-    const responseTitle = action === 'accept' 
-      ? '✅ Booking Request Accepted!' 
-      : '❌ Booking Request Declined';
-    
-    const responseMessage = action === 'accept'
-      ? `Great news! Your booking request for "${booking.property.title}" starting ${moveInFormatted} has been approved. The owner will contact you soon with next steps.`
-      : `Unfortunately, your booking request for "${booking.property.title}" starting ${moveInFormatted} has been declined. Please try another property.`;
+    const isAccept = action === 'accept';
+    const title = isAccept ? '✅ Booking Request Accepted!' : '❌ Booking Request Declined';
+    const message = isAccept
+      ? `Your booking request for "${booking.property.title}" starting ${moveInFormatted} has been approved. The owner will contact you soon.`
+      : `Your booking request for "${booking.property.title}" starting ${moveInFormatted} was declined. Please try other properties.`;
 
-    // Create notification for tenant
-    const tenantNotification = await Notification.create({
-      userId: booking.tenantId,
-      title: responseTitle,
-      message: responseMessage,
-      type: action === 'accept' ? 'success' : 'error',
-      isBroadcast: false,
-      link: `/user/applications`
+    const tenantNotif = await Notification.create({
+      user_id: booking.tenantId,
+      title,
+      message,
+      type: isAccept ? 'success' : 'error',
+      is_broadcast: false,
+      link: '/user/applications',
     });
 
-    // Emit real-time notification to tenant
     const { io, connectedUsers } = getSocketIO();
     if (io && connectedUsers) {
-      const tenantSocketId = connectedUsers.get(booking.tenantId.toString());
-      if (tenantSocketId) {
-        io.to(tenantSocketId).emit('new-notification', {
-          id: tenantNotification.id,
-          title: tenantNotification.title,
-          message: tenantNotification.message,
-          type: tenantNotification.type,
-          link: tenantNotification.link,
-          isRead: false,
-          createdAt: tenantNotification.created_at
-        });
+      const socketId = connectedUsers.get(String(booking.tenantId));
+      if (socketId) {
+        const payload = {
+          id: tenantNotif.id,
+          title: tenantNotif.title,
+          message: tenantNotif.message,
+          type: tenantNotif.type,
+          link: tenantNotif.link,
+          isRead: tenantNotif.is_read ?? false,
+          createdAt: tenantNotif.created_at,
+        };
+        io.to(socketId).emit('new-notification', payload);
       }
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: `Booking ${action === 'accept' ? 'accepted' : 'declined'} successfully`,
-      data: {
-        bookingId: booking.id,
-        status: newStatus
-      }
+      message: `Booking ${action}ed successfully`,
+      data: { bookingId: booking.id, status: newStatus },
     });
   } catch (error) {
-    console.error('❌ Error handling booking response:', error);
-    res.status(500).json({
+    console.error('❌ handleBookingResponse error:', error);
+    return res.status(500).json({
       success: false,
       message: 'Failed to process booking response',
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -412,5 +407,5 @@ module.exports = {
   markAsRead,
   markAllAsRead,
   deleteNotification,
-  handleBookingResponse
+  handleBookingResponse,
 };

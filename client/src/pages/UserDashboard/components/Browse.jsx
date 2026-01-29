@@ -1,0 +1,114 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import axios from 'axios';
+import ListingCard from './ListingCard';
+import { useAuth } from '../../../context/AuthContext';
+
+const Browse = ({ onViewProperty }) => {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('all'); // 'all', 'property', 'bike'
+  const { logout } = useAuth();
+
+  const fetchItems = useCallback(async () => {
+    console.log('Browse component loaded v2.2'); // Debug version
+    try {
+      setLoading(true);
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5050/api';
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        console.error('No auth token found');
+        logout(); // Use context logout
+        return;
+      }
+
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      };
+
+      // Fetch properties and bikes in parallel
+      const [propertiesRes, bikesRes] = await Promise.all([
+        axios.get(`${apiUrl}/properties/available`, config),
+        axios.get(`${apiUrl}/bikes/available`, config)
+      ]);
+
+      // Format and combine data
+      const properties = (Array.isArray(propertiesRes.data) ? propertiesRes.data : []).map(p => ({ ...p, type: 'property' }));
+      const bikes = (Array.isArray(bikesRes.data) ? bikesRes.data : []).map(b => ({ ...b, type: 'bike' }));
+
+      setItems([...properties, ...bikes]);
+    } catch (error) {
+      console.error('Error fetching items:', error);
+      if (error.response && error.response.status === 401) {
+        // Token expired or invalid
+        logout(); // Use context logout
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [logout]);
+
+  useEffect(() => {
+    fetchItems();
+  }, [fetchItems]);
+
+  const filteredItems = items.filter(item => {
+    if (filter === 'all') return true;
+    return item.type === filter;
+  });
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full min-h-[70vh] flex flex-col items-center justify-start py-4 px-0 sm:px-0">
+      <div className="flex flex-col items-center w-full max-w-2xl px-0 sm:px-0">
+        <h2 className="text-2xl font-bold text-gray-800 text-center mb-4">Browse Listings</h2>
+        <div className="flex gap-2 flex-wrap justify-center mb-8">
+          <button 
+            className={`px-5 py-2 rounded-xl font-semibold shadow-sm border transition-all duration-200 ${filter === 'all' ? 'bg-linear-to-r from-blue-500 to-cyan-400 text-white border-blue-400 shadow-md' : 'bg-white/80 text-gray-700 border-gray-200 hover:bg-blue-50'}`}
+            onClick={() => setFilter('all')}
+          >
+            All
+          </button>
+          <button 
+            className={`px-5 py-2 rounded-xl font-semibold shadow-sm border transition-all duration-200 ${filter === 'property' ? 'bg-linear-to-r from-green-400 to-blue-400 text-white border-green-300 shadow-md' : 'bg-white/80 text-gray-700 border-gray-200 hover:bg-green-50'}`}
+            onClick={() => setFilter('property')}
+          >
+            Properties
+          </button>
+          <button 
+            className={`px-5 py-2 rounded-xl font-semibold shadow-sm border transition-all duration-200 ${filter === 'bike' ? 'bg-linear-to-r from-purple-400 to-blue-400 text-white border-purple-300 shadow-md' : 'bg-white/80 text-gray-700 border-gray-200 hover:bg-purple-50'}`}
+            onClick={() => setFilter('bike')}
+          >
+            Bikes
+          </button>
+        </div>
+        <div className="w-full flex flex-col items-center gap-4 px-0 sm:px-0">
+          {filteredItems.map((item) => (
+            <ListingCard 
+              key={`${item.type}-${item.id}`} 
+              item={item} 
+              onClick={onViewProperty} 
+              beautified
+            />
+          ))}
+        </div>
+        {filteredItems.length === 0 && (
+          <div className="text-center py-12 text-gray-500">
+            No listings found. Check back later!
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default Browse;

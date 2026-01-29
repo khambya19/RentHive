@@ -91,6 +91,13 @@ exports.getAvailableProperties = async (req, res) => {
 
     const properties = await Property.findAll({
       where: whereClause,
+      include: [
+        {
+          model: User,
+          as: 'vendor',
+          attributes: ['id', 'name', 'email', 'phone', 'profileImage']
+        }
+      ],
       order: orderClause
     });
 
@@ -111,7 +118,12 @@ exports.getAvailableProperties = async (req, res) => {
       status: p.status,
       latitude: p.latitude,
       longitude: p.longitude,
-      createdAt: p.createdAt
+      createdAt: p.createdAt,
+      vendorId: p.vendorId,
+      vendorName: p.vendor?.name,
+      vendorEmail: p.vendor?.email,
+      vendorPhone: p.vendor?.phone,
+      vendorImage: p.vendor?.profileImage
     })));
   } catch (error) {
     console.error('Error fetching available properties:', error);
@@ -189,7 +201,7 @@ exports.getVendorStats = async (req, res) => {
     const allBookings = await Booking.findAll({
       where: { vendorId },
       include: [
-        { model: User, as: 'tenant', attributes: ['id', 'fullName', 'email', 'phone'] },
+        { model: User, as: 'tenant', attributes: ['id', 'name', 'email', 'phone'] },
         { model: Property, as: 'property', attributes: ['id', 'title'] }
       ],
       order: [['createdAt', 'DESC']]
@@ -538,7 +550,7 @@ exports.bookProperty = async (req, res) => {
         {
           model: User,
           as: 'vendor',
-          attributes: ['id', 'fullName', 'email', 'phone']
+          attributes: ['id', 'name', 'email', 'phone']
         }
       ]
     });
@@ -550,7 +562,7 @@ exports.bookProperty = async (req, res) => {
 
     // Get tenant info
     const tenant = await User.findByPk(tenantId, {
-      attributes: ['id', 'fullName', 'email', 'phone']
+      attributes: ['id', 'name', 'email', 'phone']
     });
 
     if (!tenant) {
@@ -601,7 +613,7 @@ exports.bookProperty = async (req, res) => {
         : 'Not specified';
 
       const notificationTitle = '🏠 New Property Booking Request';
-      const notificationMessage = `${tenant.fullName} wants to rent your property "${property.title}" from ${moveInFormatted}${moveOutDate ? ` to ${moveOutFormatted}` : ''}. Monthly rent: NPR ${parseInt(property.rentPrice).toLocaleString()}`;
+      const notificationMessage = `${tenant.name} wants to rent your property "${property.title}" from ${moveInFormatted}${moveOutDate ? ` to ${moveOutFormatted}` : ''}. Monthly rent: NPR ${parseInt(property.rentPrice).toLocaleString()}`;
 
       // Create notification
       const notification = await Notification.create({

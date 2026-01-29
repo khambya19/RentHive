@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../controller/authController');
 const { profileUpload } = require('../config/upload');
+const { protect } = require('../middleware/auth');
 
 // Updated register route with explicit error handling
 router.post('/register', (req, res, next) => {
@@ -21,10 +22,16 @@ router.post('/register', (req, res, next) => {
   }
 }, auth.register);
 
+// Check if email already exists
+router.post('/check-email', auth.checkEmail);
+
 router.post('/resend-otp', auth.resendOtp);
 router.post('/verify-otp', auth.verifyOtp);
 router.post('/login', auth.login);
 router.post('/forgot-password', auth.forgotPassword);
 router.post('/reset-password', auth.resetPassword);
+
+// Add logout route
+router.post('/logout', protect, auth.logout);
 
 module.exports = router;

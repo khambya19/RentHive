@@ -4,8 +4,13 @@ const userController = require('../controller/userController');
 const { protect } = require('../middleware/auth');
 const { profileUpload } = require('../config/upload');
 
-// Get all users with optional filters
-router.get('/', userController.getAllVendors);
+// SUPER ADMIN: User management
+const { superAdminOnly } = require('../middleware/auth');
+router.get('/admin/users', protect, superAdminOnly, userController.getAllUsers); // List users
+router.get('/admin/users/:id', protect, superAdminOnly, userController.getUserById); // View user
+router.patch('/admin/users/:id/block', protect, superAdminOnly, userController.toggleBlockUser); // Block/unblock
+router.delete('/admin/users/:id', protect, superAdminOnly, userController.softDeleteUser); // Soft delete
+router.post('/admin/users/:id/reset-password', protect, superAdminOnly, userController.resetUserPassword); // Reset password
 
 // Get user statistics
 router.get('/stats', userController.getVendorStats);

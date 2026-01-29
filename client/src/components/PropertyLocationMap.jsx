@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { Search, MapPin, Banknote, Bed, Lightbulb, Loader2 } from 'lucide-react';
 
 // Fix for default markers in React Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -12,14 +14,15 @@ L.Icon.Default.mergeOptions({
 });
 
 // Custom property icon
-const propertyIcon = new L.Icon({
-  iconUrl: 'data:image/svg+xml;base64,' + btoa(`
-    <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="16" cy="16" r="15" fill="#10b981" stroke="#fff" stroke-width="2"/>
-      <path d="M8 20V12l8-6 8 6v8a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2z" fill="#fff"/>
-      <path d="M12 20v-6h8v6" fill="#10b981" opacity="0.3"/>
-    </svg>
-  `),
+const propertyIconMarkup = renderToStaticMarkup(
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%', background: '#10b981', border: '2px solid white', boxShadow: '0 2px 5px rgba(0,0,0,0.3)' }}>
+    <MapPin size={20} color="white" />
+  </div>
+);
+
+const propertyIcon = new L.DivIcon({
+  html: propertyIconMarkup,
+  className: 'custom-leaflet-icon',
   iconSize: [32, 32],
   iconAnchor: [16, 32],
   popupAnchor: [0, -32],
@@ -67,7 +70,7 @@ const PropertyLocationMap = ({
       const data = await response.json();
       setSearchResults(data);
     } catch (error) {
-      console.error('Error searching location:', error);
+      // console.error('Error searching location:', error);
       setSearchResults([]);
     } finally {
       setIsSearching(false);
@@ -100,34 +103,36 @@ const PropertyLocationMap = ({
   };
 
   return (
-    <div className="property-map-container">
+    <div className="relative rounded-xl overflow-hidden shadow-md bg-white border border-gray-100">
       {/* Search Box */}
-      <div className="map-search-container">
-        <div className="map-search-box">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="8"/>
-            <path d="m21 21-4.35-4.35"/>
-          </svg>
+      <div className="relative p-2 md:p-3 pb-0 z-[400]">
+        <div className="relative flex items-center bg-white border-2 border-gray-200 rounded-xl px-4 py-3 transition-all focus-within:border-green-500 focus-within:ring-4 focus-within:ring-green-500/10 shadow-sm">
+          <Search size={20} className="text-gray-400 mr-3 flex-shrink-0" />
           <input
             type="text"
+            className="flex-1 bg-transparent border-none outline-none text-gray-800 placeholder-gray-400 font-medium"
             placeholder="Search for property location in Nepal..."
             value={searchQuery}
             onChange={(e) => onSearchLocationChange && onSearchLocationChange(e.target.value)}
           />
-          {isSearching && <div className="search-loading">Searching...</div>}
+          {isSearching && (
+            <div className="absolute right-4 text-green-500 animate-spin">
+              <Loader2 size={18} />
+            </div>
+          )}
         </div>
         
         {/* Search Results */}
         {searchResults.length > 0 && (
-          <div className="map-search-results">
+          <div className="absolute top-full left-2 right-2 md:left-3 md:right-3 z-[1000] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 max-h-60 overflow-y-auto divide-y divide-gray-50">
             {searchResults.map((result, index) => (
               <div 
                 key={index} 
-                className="search-result-item"
+                className="px-4 py-3 cursor-pointer hover:bg-green-50 transition-colors"
                 onClick={() => handleSearchResultClick(result)}
               >
-                <div className="result-name">{result.display_name.split(',')[0]}</div>
-                <div className="result-address">{result.display_name}</div>
+                <div className="font-semibold text-gray-800 text-sm mb-0.5 truncate">{result.display_name.split(',')[0]}</div>
+                <div className="text-xs text-gray-500 truncate">{result.display_name}</div>
               </div>
             ))}
           </div>
@@ -135,7 +140,7 @@ const PropertyLocationMap = ({
       </div>
 
       {/* Map */}
-      <div className="leaflet-map-wrapper" style={{ height }}>
+      <div className="w-full relative z-0 mt-2" style={{ height }}>
         <MapContainer
           center={mapCenter}
           zoom={13}
@@ -158,14 +163,16 @@ const PropertyLocationMap = ({
               position={[selectedLocation.lat, selectedLocation.lng]}
               icon={propertyIcon}
             >
-              <Popup>
-                <div className="map-popup">
-                  <h4>Selected Property Location</h4>
-                  <p><strong>Latitude:</strong> {selectedLocation.lat.toFixed(6)}</p>
-                  <p><strong>Longitude:</strong> {selectedLocation.lng.toFixed(6)}</p>
-                  {selectedLocation.address && (
-                    <p><strong>Address:</strong> {selectedLocation.address}</p>
-                  )}
+              <Popup className="custom-popup rounded-xl shadow-xl border-0">
+                <div className="p-1 min-w-[200px]">
+                  <h4 className="font-bold text-gray-900 mb-2 border-b border-gray-100 pb-2">Selected Location</h4>
+                  <div className="space-y-1 text-sm text-gray-600">
+                    <p><span className="font-medium text-gray-800">Lat:</span> {selectedLocation.lat.toFixed(6)}</p>
+                    <p><span className="font-medium text-gray-800">Lng:</span> {selectedLocation.lng.toFixed(6)}</p>
+                    {selectedLocation.address && (
+                      <p className="mt-2 text-xs bg-gray-50 p-2 rounded border border-gray-100">{selectedLocation.address}</p>
+                    )}
+                  </div>
                 </div>
               </Popup>
             </Marker>
@@ -179,32 +186,25 @@ const PropertyLocationMap = ({
                 position={[parseFloat(property.latitude), parseFloat(property.longitude)]}
                 icon={propertyIcon}
               >
-                <Popup>
-                  <div className="property-popup">
-                    <div className="popup-header">
-                      <h4>{property.title}</h4>
-                      <span className="property-type">{property.propertyType}</span>
+                <Popup className="custom-popup rounded-xl shadow-xl border-0 overflow-hidden p-0">
+                  <div className="min-w-[240px]">
+                    <div className="bg-white border-b border-gray-100 p-3 flex justify-between items-start">
+                      <h4 className="font-bold text-gray-900 leading-tight m-0 pr-2">{property.title}</h4>
+                      <span className="bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide flex-shrink-0">
+                        {property.propertyType}
+                      </span>
                     </div>
-                    <div className="popup-content">
-                      <div className="popup-detail">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                          <circle cx="12" cy="10" r="3"/>
-                        </svg>
-                        <span>{property.address}, {property.city}</span>
+                    <div className="p-3 space-y-2">
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <MapPin size={14} className="text-green-500 flex-shrink-0" />
+                        <span className="truncate">{property.address}, {property.city}</span>
                       </div>
-                      <div className="popup-detail">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <line x1="12" y1="1" x2="12" y2="23"/>
-                          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                        </svg>
-                        <span>NPR {parseInt(property.rentPrice || 0).toLocaleString()}/month</span>
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Banknote size={14} className="text-green-500 flex-shrink-0" />
+                        <span className="font-semibold text-gray-900">NPR {parseInt(property.rentPrice || 0).toLocaleString()}</span><span className="text-xs text-gray-400">/mo</span>
                       </div>
-                      <div className="popup-detail">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                          <polyline points="9 22 9 12 15 12 15 22"/>
-                        </svg>
+                      <div className="flex items-center gap-2 text-xs text-gray-500 pt-1 border-t border-gray-50 mt-2">
+                        <Bed size={14} className="text-gray-400" />
                         <span>{property.bedrooms} bed • {property.bathrooms} bath • {property.area} sq ft</span>
                       </div>
                     </div>
@@ -217,8 +217,11 @@ const PropertyLocationMap = ({
       </div>
       
       {showLocationPicker && (
-        <div className="map-instructions">
-          <p>💡 Click anywhere on the map to select your property location</p>
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[400] w-full max-w-sm px-4">
+          <div className="bg-green-600/90 backdrop-blur-md text-white px-4 py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 text-sm font-medium animate-bounce-in">
+            <Lightbulb size={16} className="text-yellow-300" />
+            Click map to pin exact location
+          </div>
         </div>
       )}
     </div>

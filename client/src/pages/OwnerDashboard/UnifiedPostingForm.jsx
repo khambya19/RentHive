@@ -152,40 +152,6 @@ const UnifiedPostingForm = ({ showSuccess, showError }) => {
     }
   };
 
-  const resetBikeForm = () => {
-    setBikeForm({
-      name: '',
-      brand: '',
-      model: '',
-      type: 'Scooter',
-      year: new Date().getFullYear(),
-      color: '',
-      registrationNumber: '',
-      dailyRate: '',
-      weeklyRate: '',
-      securityDeposit: '',
-      location: '',
-      description: '',
-      features: [],
-      images: [],
-      latitude: null,
-      longitude: null
-    });
-    setCurrentStep(1);
-    setSelectedLocation(null);
-    setShowLocationPicker(false);
-  };
-
-  const handleLocationSelect = (location) => {
-    setSelectedLocation(location);
-    setBikeForm({ ...bikeForm, latitude: location.lat, longitude: location.lng });
-  };
-
-  const clearLocation = () => {
-    setSelectedLocation(null);
-    setBikeForm({ ...bikeForm, latitude: null, longitude: null });
-  };
-
   const nextStep = () => {
     const totalSteps = 4;
     if (currentStep < totalSteps) {

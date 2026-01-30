@@ -11,7 +11,8 @@ import {
   ChevronRight, 
   CheckCircle,
   X,
-  Home
+  Home,
+  DollarSign
 } from 'lucide-react';
 
 const AddPropertyForm = ({ onSubmit, initialData = null }) => {
@@ -190,6 +191,31 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
   };
 
   const nextStep = () => {
+    // Validate current step before moving forward
+    if (currentStep === 1) {
+      // Step 1: Basic Info validation
+      if (!formData.title || !formData.propertyType || !formData.listingType || !formData.price || !formData.area || !formData.propertyCondition) {
+        alert('Please fill in all required fields in Basic Information: Title, Property Type, Listing Type, Price, Area, and Property Condition');
+        return;
+      }
+    }
+    
+    if (currentStep === 2) {
+      // Step 2: Location validation
+      if (!formData.address || !formData.city || !formData.country) {
+        alert('Please fill in all required fields in Location: Address, City, and Country');
+        return;
+      }
+    }
+    
+    if (currentStep === 3) {
+      // Step 3: Property Details validation
+      if (!formData.bedrooms || !formData.bathrooms) {
+        alert('Please fill in Bedrooms and Bathrooms');
+        return;
+      }
+    }
+    
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -204,13 +230,21 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
   };
 
   const validateForm = () => {
+    console.log('Form Data:', formData); // Debug log
     const requiredFields = [
       'title', 'propertyType', 'listingType', 'price', 
       'area', 'propertyCondition', 'address', 'city', 
       'country', 'bedrooms', 'bathrooms'
     ];
 
-    const missingFields = requiredFields.filter(field => !formData[field]);
+    const missingFields = requiredFields.filter(field => 
+      formData[field] === undefined || 
+      formData[field] === null || 
+      formData[field] === ''
+    );
+    
+    console.log('Missing Fields:', missingFields); // Debug log
+    
     if (missingFields.length > 0) {
       alert(`Please fill in all required fields. Missing: ${missingFields.join(', ')}`);
       return false;
@@ -467,12 +501,12 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                       onChange={(e) => handleInputChange('area', e.target.value)}
                       placeholder="e.g., 1200"
                       required
-                      className={`${inputClass} flex-1`}
+                      className="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all placeholder-gray-400 text-gray-800 bg-white shadow-sm"
                     />
                     <select
                       value={formData.areaUnit}
                       onChange={(e) => handleInputChange('areaUnit', e.target.value)}
-                      className={`${inputClass} w-24`}
+                      className="w-28 px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-gray-800 bg-white shadow-sm"
                     >
                       <option value="sq ft">sq ft</option>
                       <option value="m²">m²</option>

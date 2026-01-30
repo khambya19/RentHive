@@ -82,7 +82,7 @@ const Browse = ({ onViewProperty }) => {
   }
 
   return (
-    <div className="w-full min-h-[70vh] flex flex-col items-center justify-start py-4 px-0 sm:px-0">
+    <div className="w-full min-h-[70vh] flex flex-col items-center justify-start py-4 px-4 sm:px-6 lg:px-8">
       {/* Success Notification */}
       {notification && (
         <div className={`fixed top-4 right-4 z-50 px-6 py-4 rounded-xl shadow-lg backdrop-blur-md ${
@@ -92,29 +92,29 @@ const Browse = ({ onViewProperty }) => {
         </div>
       )}
 
-      <div className="flex flex-col items-center w-full max-w-2xl px-0 sm:px-0">
-        <h2 className="text-2xl font-bold text-gray-800 text-center mb-4">Browse Listings</h2>
-        <div className="flex gap-2 flex-wrap justify-center mb-8">
+      <div className="flex flex-col items-center w-full max-w-7xl">
+        <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 text-center mb-4 sm:mb-6">Browse Listings</h2>
+        <div className="flex gap-2 sm:gap-3 flex-wrap justify-center mb-6 sm:mb-8">
           <button 
-            className={`px-5 py-2 rounded-xl font-semibold shadow-sm border transition-all duration-200 ${filter === 'all' ? 'bg-linear-to-r from-blue-500 to-cyan-400 text-white border-blue-400 shadow-md' : 'bg-white/80 text-gray-700 border-gray-200 hover:bg-blue-50'}`}
+            className={`px-4 sm:px-5 py-2 rounded-xl font-semibold shadow-sm border transition-all duration-200 text-sm sm:text-base ${filter === 'all' ? 'bg-gradient-to-r from-blue-500 to-cyan-400 text-white border-blue-400 shadow-md' : 'bg-white/80 text-gray-700 border-gray-200 hover:bg-blue-50'}`}
             onClick={() => setFilter('all')}
           >
             All
           </button>
           <button 
-            className={`px-5 py-2 rounded-xl font-semibold shadow-sm border transition-all duration-200 ${filter === 'property' ? 'bg-linear-to-r from-green-400 to-blue-400 text-white border-green-300 shadow-md' : 'bg-white/80 text-gray-700 border-gray-200 hover:bg-green-50'}`}
+            className={`px-4 sm:px-5 py-2 rounded-xl font-semibold shadow-sm border transition-all duration-200 text-sm sm:text-base ${filter === 'property' ? 'bg-gradient-to-r from-green-400 to-blue-400 text-white border-green-300 shadow-md' : 'bg-white/80 text-gray-700 border-gray-200 hover:bg-green-50'}`}
             onClick={() => setFilter('property')}
           >
             Properties
           </button>
           <button 
-            className={`px-5 py-2 rounded-xl font-semibold shadow-sm border transition-all duration-200 ${filter === 'bike' ? 'bg-linear-to-r from-purple-400 to-blue-400 text-white border-purple-300 shadow-md' : 'bg-white/80 text-gray-700 border-gray-200 hover:bg-purple-50'}`}
+            className={`px-4 sm:px-5 py-2 rounded-xl font-semibold shadow-sm border transition-all duration-200 text-sm sm:text-base ${filter === 'bike' ? 'bg-gradient-to-r from-purple-400 to-blue-400 text-white border-purple-300 shadow-md' : 'bg-white/80 text-gray-700 border-gray-200 hover:bg-purple-50'}`}
             onClick={() => setFilter('bike')}
           >
             Bikes
           </button>
         </div>
-        <div className="w-full flex flex-col items-center gap-4 px-0 sm:px-0">
+        <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {filteredItems.map((item) => (
             <ListingCard 
               key={`${item.type}-${item.id}`} 

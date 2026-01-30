@@ -16,10 +16,6 @@ const AllListings = ({ showSuccess, showError }) => {
   const [editingType, setEditingType] = useState(null); // 'property' or 'automobile'
   const [editForm, setEditForm] = useState({});
 
-  useEffect(() => {
-    fetchAllListings();
-  }, [fetchAllListings]);
-
   const fetchProperties = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
@@ -57,6 +53,10 @@ const AllListings = ({ showSuccess, showError }) => {
     await Promise.all([fetchProperties(), fetchBikes()]);
     setLoading(false);
   }, [fetchProperties, fetchBikes]);
+
+  useEffect(() => {
+    fetchAllListings();
+  }, [fetchAllListings]);
 
   const handleDeleteProperty = async (propertyId) => {
     if (!window.confirm('Are you sure you want to delete this property?')) return;
@@ -173,6 +173,7 @@ const AllListings = ({ showSuccess, showError }) => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
+      console.log('Updating bike with data:', editForm);
       const response = await fetch(`${API_BASE_URL}/bikes/vendor/${editingItem.id}`, {
         method: 'PUT',
         headers: {
@@ -188,10 +189,12 @@ const AllListings = ({ showSuccess, showError }) => {
         setShowEditModal(false);
         showSuccess('Success', 'Automobile updated successfully');
       } else {
-        showError('Error', 'Failed to update automobile');
+        const errorData = await response.json();
+        console.error('Update error:', errorData);
+        showError('Error', errorData.error || 'Failed to update automobile');
       }
     } catch (error) {
-      // console.error('Error updating automobile:', error);
+      console.error('Error updating automobile:', error);
       showError('Error', 'Failed to update automobile');
     }
   };
@@ -201,13 +204,13 @@ const AllListings = ({ showSuccess, showError }) => {
     
     if (filterType === 'all' || filterType === 'properties') {
       properties.forEach(property => {
-        allListings.push({ ...property, type: 'property' });
+        allListings.push({ ...property, listingType: 'property' });
       });
     }
     
     if (filterType === 'all' || filterType === 'automobiles') {
       bikes.forEach(bike => {
-        allListings.push({ ...bike, type: 'automobile' });
+        allListings.push({ ...bike, listingType: 'automobile' });
       });
     }
     
@@ -285,7 +288,7 @@ const AllListings = ({ showSuccess, showError }) => {
       <div className="h-48 overflow-hidden bg-gray-100 relative">
         {bike.images && bike.images.length > 0 ? (
           <img 
-            src={`${SERVER_BASE_URL}/uploads/bikes/${bike.images[0]}`} 
+            src={bike.images[0].startsWith('/uploads') ? `${SERVER_BASE_URL}${bike.images[0]}` : `${SERVER_BASE_URL}/uploads/bikes/${bike.images[0]}`}
             alt={`${bike.brand} ${bike.model}`}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
             onError={(e) => {
@@ -409,7 +412,7 @@ const AllListings = ({ showSuccess, showError }) => {
           </div>
         ) : (
           filteredListings.map(listing => 
-            listing.type === 'property' 
+            listing.listingType === 'property' 
               ? renderPropertyCard(listing) 
               : renderBikeCard(listing)
           )
@@ -596,11 +599,10 @@ const AllListings = ({ showSuccess, showError }) => {
                         value={editForm.type || ''}
                         onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}
                       >
-                        <option value="Scooter">Scooter</option>
                         <option value="Motorcycle">Motorcycle</option>
-                        <option value="Sport Bike">Sport Bike</option>
-                        <option value="Cruiser">Cruiser</option>
-                        <option value="Electric">Electric</option>
+                        <option value="Scooter">Scooter</option>
+                        <option value="Electric Bike">Electric Bike</option>
+                        <option value="Bicycle">Bicycle</option>
                       </select>
                     </div>
                     <div>

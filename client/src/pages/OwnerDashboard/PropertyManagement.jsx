@@ -54,11 +54,9 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
     try {
       const token = localStorage.getItem('token');
       
-      // Include location data in the property form
+      // Use location data from formData directly
       const propertyData = {
-        ...formData,
-        latitude: selectedLocation?.lat || null,
-        longitude: selectedLocation?.lng || null,
+        ...formData
       };
 
       const response = await fetch(`${API_BASE_URL}/properties`, {

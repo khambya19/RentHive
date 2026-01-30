@@ -3,6 +3,7 @@ const BikeBooking = require('../models/BikeBooking');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { Op } = require('sequelize');
+const sendEmail = require('../utils/mailer');
 
 // Get all available bikes for lessors to rent
 exports.getAvailableBikes = async (req, res) => {
@@ -139,6 +140,14 @@ exports.bookBike = async (req, res) => {
     const lessorId = req.user.id;
     const { bikeId, vendorId, startDate, endDate, message } = req.body;
 
+    console.log('📍 Bike booking request:', { lessorId, bikeId, vendorId, startDate, endDate });
+
+    // Validate required fields
+    if (!bikeId || !vendorId || !startDate || !endDate) {
+      console.log('❌ Missing required fields');
+      return res.status(400).json({ error: 'Missing required fields: bikeId, vendorId, startDate, endDate' });
+    }
+
     // Validate dates
     const start = new Date(startDate);
     const end = new Date(endDate);
@@ -235,38 +244,44 @@ exports.bookBike = async (req, res) => {
 
     // Send notification to vendor
     try {
-      const { io, connectedUsers } = require('../server');
-      
       const notificationTitle = '🏍️ New Bike Rental Request';
       const notificationMessage = `${lessor.name} wants to rent your ${bike.brand} ${bike.model} from ${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}. Total: NPR ${totalAmount.toLocaleString()}`;
       
       const notification = await Notification.create({
-        userId: vendorId,
+        user_id: vendorId,
         title: notificationTitle,
         message: notificationMessage,
         type: 'info',
-        isBroadcast: false,
-        link: `/owner/dashboard?tab=bookings`
+        is_broadcast: false,
+        link: `/owner/dashboard?tab=bookings`,
+        metadata: JSON.stringify({
+          bookingId: booking.id,
+          bikeId: bike.id,
+          lessorId: lessor.id,
+          requiresAction: true
+        })
       });
 
       console.log('✅ Bike booking notification created:', notification.id);
       console.log(`📧 Sending bike booking notification to vendor ${vendorId}`);
 
-      if (io && connectedUsers) {
-        const socketId = connectedUsers.get(vendorId.toString());
-        if (socketId) {
-          io.to(socketId).emit('new-notification', {
-            id: notification.id,
-            title: notification.title,
-            message: notification.message,
-            type: notification.type,
-            link: notification.link,
-            is_read: false,
-            created_at: notification.created_at,
-            is_broadcast: false
-          });
-          console.log(`✅ Bike booking request notification sent to vendor ${vendorId}`);
-        }
+      // Emit real-time notification via Socket.IO
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user_${vendorId}`).emit('new-notification', {
+          id: notification.id,
+          title: notification.title,
+          message: notification.message,
+          type: notification.type,
+          link: notification.link,
+          is_read: false,
+          created_at: notification.created_at,
+          is_broadcast: false,
+          metadata: notification.metadata
+        });
+        console.log(`✅ Real-time notification sent to vendor ${vendorId}`);
+      } else {
+        console.log('⚠️ Socket.IO not available, notification saved to database only');
       }
     } catch (notificationError) {
       console.error('Error sending notification:', notificationError);
@@ -402,11 +417,11 @@ exports.bookBikeDirect = async (req, res) => {
       const notificationMessage = `${lessor.name} has booked your ${bike.brand} ${bike.model} from ${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}. Total: NPR ${totalAmount.toLocaleString()}. Booking ID: #${booking.id}`;
       
       const notification = await Notification.create({
-        userId: vendorId,
+        user_id: vendorId,
         title: notificationTitle,
         message: notificationMessage,
         type: 'info',
-        isBroadcast: false,
+        is_broadcast: false,
         link: `/owner/dashboard?tab=bookings`
       });
 
@@ -483,14 +498,22 @@ exports.createBike = async (req, res) => {
       name, brand, model, type, year, engineCapacity, fuelType,
       dailyRate, weeklyRate, monthlyRate, securityDeposit,
       features, description, location, pickupLocation,
-      licenseRequired, minimumAge, status, latitude, longitude
+      licenseRequired, minimumAge, status, color, registrationNumber,
+      latitude, longitude
     } = req.body;
 
     // Process uploaded image files
     const imagePaths = req.files ? req.files.map(file => `/uploads/bikes/${file.filename}`) : [];
 
     // Parse features if it's a JSON string
-    const parsedFeatures = typeof features === 'string' ? JSON.parse(features) : (features || []);
+    let parsedFeatures = [];
+    if (features) {
+      try {
+        parsedFeatures = typeof features === 'string' ? JSON.parse(features) : (features || []);
+      } catch (e) {
+        parsedFeatures = [];
+      }
+    }
 
     // Map frontend bike types to database enum values
     const typeMapping = {
@@ -527,6 +550,8 @@ exports.createBike = async (req, res) => {
       images: imagePaths,
       location,
       pickupLocation,
+      color,
+      registrationNumber,
       latitude: latitude ? parseFloat(latitude) : null,
       longitude: longitude ? parseFloat(longitude) : null,
       licenseRequired: licenseRequired !== false,
@@ -764,7 +789,8 @@ exports.updateBookingStatus = async (req, res) => {
 
     // Send notification to lessor based on status change
     try {
-      const { io, connectedUsers } = require('../server');
+      const io = req.app.get('io');
+      const connectedUsers = req.app.get('connectedUsers');
       
       let notificationTitle = '';
       let notificationMessage = '';
@@ -794,30 +820,84 @@ exports.updateBookingStatus = async (req, res) => {
       
       if (notificationTitle && notificationMessage) {
         const notification = await Notification.create({
-          userId: booking.lessorId,
+          user_id: booking.lessorId,
           title: notificationTitle,
           message: notificationMessage,
           type: 'info',
-          isBroadcast: false,
-          link: `/tenant/dashboard?tab=applications`
+          is_broadcast: false,
+          link: `/user/dashboard?tab=rentals`
         });
 
         console.log(`📧 Sending bike status update to lessor ${booking.lessorId}`);
+        
+        // Send email if booking is approved
+        if (status === 'Approved' && booking.lessor && booking.lessor.email) {
+          try {
+            const startDate = new Date(booking.startDate).toLocaleDateString('en-US', {
+              month: 'long',
+              day: 'numeric',
+              year: 'numeric'
+            });
+            const endDate = new Date(booking.endDate).toLocaleDateString('en-US', {
+              month: 'long',
+              day: 'numeric',
+              year: 'numeric'
+            });
+            
+            const emailHtml = `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #4F46E5;">🎉 Your Bike Rental Has Been Approved!</h2>
+                <p>Dear ${booking.lessor.name},</p>
+                <p>Great news! Your bike rental request has been approved by the vendor.</p>
+                
+                <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                  <h3 style="margin-top: 0; color: #1F2937;">Bike Details</h3>
+                  <p><strong>Bike:</strong> ${booking.bike.brand} ${booking.bike.model}</p>
+                  <p><strong>Type:</strong> ${booking.bike.type}</p>
+                  <p><strong>Rental Period:</strong> ${startDate} to ${endDate}</p>
+                  <p><strong>Total Days:</strong> ${booking.totalDays}</p>
+                  <p><strong>Daily Rate:</strong> NPR ${parseInt(booking.dailyRate).toLocaleString()}</p>
+                  <p><strong>Total Amount:</strong> NPR ${parseInt(booking.totalAmount).toLocaleString()}</p>
+                  ${booking.securityDeposit ? `<p><strong>Security Deposit:</strong> NPR ${parseInt(booking.securityDeposit).toLocaleString()}</p>` : ''}
+                </div>
+                
+                <p>Please log in to your dashboard to view more details and arrange for pickup.</p>
+                <a href="http://localhost:5173/user/dashboard?tab=rentals" style="display: inline-block; background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">View My Bookings</a>
+                
+                <p style="color: #6B7280; font-size: 14px; margin-top: 30px;">Best regards,<br>RentHive Team</p>
+              </div>
+            `;
+            
+            await sendEmail({
+              to: booking.lessor.email,
+              subject: `🎉 Bike Rental Approved - ${booking.bike.brand} ${booking.bike.model}`,
+              html: emailHtml,
+              text: `Your rental for ${booking.bike.brand} ${booking.bike.model} has been approved! Rental period: ${startDate} to ${endDate}. Total: NPR ${parseInt(booking.totalAmount).toLocaleString()}`
+            });
+            
+            console.log(`✅ Approval email sent to ${booking.lessor.email}`);
+          } catch (emailError) {
+            console.error('Error sending approval email:', emailError);
+            // Don't fail the approval if email fails
+          }
+        }
 
         if (io && connectedUsers) {
-          const socketId = connectedUsers.get(booking.lessorId.toString());
-          if (socketId) {
-            io.to(socketId).emit('new-notification', {
+          const userSocketId = connectedUsers.get(`user_${booking.lessorId}`);
+          if (userSocketId) {
+            io.to(userSocketId).emit('new-notification', {
               id: notification.id,
               title: notification.title,
               message: notification.message,
               type: notification.type,
               link: notification.link,
               is_read: false,
-              created_at: notification.created_at,
+              created_at: notification.createdAt,
               is_broadcast: false
             });
             console.log(`✅ Bike booking status notification sent to lessor ${booking.lessorId}`);
+          } else {
+            console.log(`⚠️ Lessor ${booking.lessorId} not connected to socket`);
           }
         }
       }

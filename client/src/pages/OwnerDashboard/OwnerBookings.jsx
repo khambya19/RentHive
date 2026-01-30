@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSocket } from '../../context/SocketContext';
-// import './OwnerBookings.css'; // Deprecated
 import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
-import { RefreshCw, MapPin, Phone, Check, X, ClipboardList, Home, Bike, Calendar, Wallet } from 'lucide-react';
+import { RefreshCw, MapPin, Phone, Check, X, ClipboardList, Home, Bike, Calendar, Wallet, Eye, User, Clock, AlertTriangle } from 'lucide-react';
 
 const OwnerBookings = ({ showSuccess, showError }) => {
   const socket = useSocket();
@@ -12,50 +11,39 @@ const OwnerBookings = ({ showSuccess, showError }) => {
   });
   const [loading, setLoading] = useState(true);
   const [activeBookingType, setActiveBookingType] = useState('all');
+  const [selectedBooking, setSelectedBooking] = useState(null); // For View Application modal
 
   const fetchBookings = useCallback(async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
+      
       if (!token) {
-        showError('Error', 'No authentication token found');
-        setLoading(false);
+        showError('Authentication Error', 'Please login again');
         return;
       }
 
-      const headers = { Authorization: `Bearer ${token}` };
-
-      const [ownersRes, bikeRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/owners/bookings`, { headers }),
-        fetch(`${API_BASE_URL}/bikes/vendor/bookings`, { headers })
-      ]);
-
-      let propertyBookings = [];
-      let bikeBookings = [];
-
-      if (ownersRes.ok) {
-        const data = await ownersRes.json();
-        propertyBookings = data.propertyBookings || [];
-        // Use bike bookings from /owners/bookings if available, otherwise fetch separately
-        if (data.bikeBookings && data.bikeBookings.length > 0) {
-          bikeBookings = data.bikeBookings;
+      const response = await fetch(`${API_BASE_URL}/owners/all-bookings`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setBookings({
+          propertyBookings: Array.isArray(data?.propertyBookings) ? data.propertyBookings : [],
+          bikeBookings: Array.isArray(data?.bikeBookings) ? data.bikeBookings : []
+        });
       } else {
-        console.error('Failed to fetch owner bookings:', await ownersRes.text());
+        const errorData = await response.json().catch(() => ({}));
+        showError('Failed to fetch bookings', errorData.details || errorData.error || 'Please try refreshing the page');
+        setBookings({ propertyBookings: [], bikeBookings: [] });
       }
-
-      // Only fetch bike bookings separately if not already included
-      if (bikeRes.ok && bikeBookings.length === 0) {
-        const data = await bikeRes.json();
-        bikeBookings = data || [];
-      } else if (!bikeRes.ok) {
-        console.error('Failed to fetch bike bookings:', await bikeRes.text());
-      }
-
-      setBookings({ propertyBookings, bikeBookings });
     } catch (error) {
-      console.error('Error fetching bookings:', error);
-      showError('Error', 'Failed to load bookings');
+      showError('Error loading bookings', error.message || 'Please check your connection and try again');
+      setBookings({ propertyBookings: [], bikeBookings: [] });
     } finally {
       setLoading(false);
     }
@@ -65,29 +53,19 @@ const OwnerBookings = ({ showSuccess, showError }) => {
     fetchBookings();
   }, [fetchBookings]);
 
-  
   useEffect(() => {
     if (socket && socket.connected) {
       const handleBookingUpdate = (notification) => {
         if (notification.type === 'booking') {
-          
           fetchBookings();
-
-          
-          if (notification.title.includes('Approved') || 
-              notification.title.includes('Confirmed') ||
-              notification.title.includes('Active') ||
-              notification.title.includes('Completed')) {
+          if (notification.title.includes('Approved') || notification.title.includes('Confirmed') || notification.title.includes('Active') || notification.title.includes('Completed')) {
             showSuccess(notification.title, notification.message);
-          } else if (notification.title.includes('Rejected') || 
-                     notification.title.includes('Cancelled')) {
+          } else if (notification.title.includes('Rejected') || notification.title.includes('Cancelled')) {
             showError(notification.title, notification.message);
           }
         }
       };
-
       socket.on('new-notification', handleBookingUpdate);
-
       return () => {
         socket.off('new-notification', handleBookingUpdate);
       };
@@ -99,12 +77,12 @@ const OwnerBookings = ({ showSuccess, showError }) => {
       const token = localStorage.getItem('token');
       const endpoint = bookingType === 'property' 
         ? `${API_BASE_URL}/properties/bookings/${bookingId}/status`
-        : `${API_BASE_URL}/bikes/vendor/bookings/${bookingId}/status`;
+        : `${API_BASE_URL}/bikes/bookings/${bookingId}/status`;
 
       const status = action === 'accept' ? 'Approved' : 'Rejected';
 
       const response = await fetch(endpoint, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -117,18 +95,19 @@ const OwnerBookings = ({ showSuccess, showError }) => {
           action === 'accept' ? 'Booking Accepted!' : 'Booking Declined',
           `The booking has been ${action === 'accept' ? 'accepted' : 'declined'} successfully.`
         );
-        fetchBookings(); // Refresh the bookings list
+        fetchBookings();
+        setSelectedBooking(null); // Close modal if open
       } else {
         const errorData = await response.json();
         showError('Failed to update booking', errorData.error || 'Please try again');
       }
     } catch (error) {
-      // console.error('Error updating booking:', error);
       showError('Error', 'Failed to update booking status');
     }
   };
 
   const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
@@ -136,314 +115,310 @@ const OwnerBookings = ({ showSuccess, showError }) => {
     });
   };
 
-
-
-
+  const formatCurrency = (amount) => {
+    return Number(amount || 0).toLocaleString();
+  };
 
   const getStatusColor = (status) => {
-    switch (status?.toLowerCase()) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'confirmed':
-      case 'active':
-      case 'approved': return 'bg-green-100 text-green-800 border-green-200';
-      case 'completed': return 'bg-indigo-100 text-indigo-800 border-indigo-200';
-      case 'cancelled':
-      case 'rejected': return 'bg-red-100 text-red-800 border-red-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
+    const s = (status || '').toLowerCase();
+    if (s === 'pending' || s === 'available') return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+    if (['confirmed', 'active', 'approved'].includes(s)) return 'bg-green-100 text-green-800 border-green-200';
+    if (s === 'completed') return 'bg-indigo-100 text-indigo-800 border-indigo-200';
+    if (['cancelled', 'rejected'].includes(s)) return 'bg-red-100 text-red-800 border-red-200';
+    return 'bg-gray-100 text-gray-800 border-gray-200';
   };
 
-  const renderPropertyBookings = () => {
-    if (bookings.propertyBookings.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center p-16 text-center bg-white rounded-2xl border-2 border-dashed border-gray-200 text-gray-500">
-          <Home size={48} className="mb-4 text-gray-300" />
-          <h3 className="text-xl font-bold text-gray-800 mb-2">No Property Bookings</h3>
-          <p className="max-w-md mx-auto">You haven't received any property rental requests yet.</p>
-        </div>
-      );
-    }
+  const renderBookingCard = (booking, type) => {
+    const isProperty = type === 'property';
+    const item = isProperty ? booking.property : booking.bike;
+    const renter = isProperty ? booking.renter : booking.lessor;
+    const itemsImage = item?.images?.[0] 
+      ? `${SERVER_BASE_URL}/uploads/${isProperty ? 'properties' : 'bikes'}/${item.images[0]}`
+      : "https://via.placeholder.com/300?text=No+Image";
 
-    return bookings.propertyBookings.map((booking) => (
-      <div key={`property-${booking.id}`} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-lg transition-all duration-300 group">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 bg-gray-50/50 border-b border-gray-100 gap-4">
-          <div className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1">
-            <Home size={12} /> Property Rental
-          </div>
-          <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${getStatusColor(booking.status)}`}>
-            {booking.status?.toUpperCase() || 'PENDING'}
+    const isPending = (booking.status || '').toLowerCase() === 'pending' || (booking.status || '').toLowerCase() === 'available';
+
+    return (
+      <div key={`${type}-${booking.id}`} className="bg-white rounded-2xl overflow-hidden shadow border border-gray-100/50 hover:shadow-2xl hover:border-indigo-100 transition-all duration-300 relative group flex flex-col h-full">
+        {/* Type Badge */}
+        <div className={`absolute top-4 left-4 z-10 px-3 py-1 bg-white/90 backdrop-blur-md text-[10px] font-bold uppercase tracking-wider rounded-full shadow-sm flex items-center gap-1 ${isProperty ? 'text-indigo-600' : 'text-blue-600'}`}>
+          {isProperty ? <Home size={12} /> : <Bike size={12} />}
+          {isProperty ? 'Property' : 'Vehicle'}
+        </div>
+
+        {/* Image Section */}
+        <div className="h-48 overflow-hidden bg-gray-100 relative">
+          <img 
+            src={itemsImage} 
+            alt={item?.title || `${item?.brand} ${item?.model}`}
+            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+            onError={(e) => { e.target.onerror = null; e.target.src = "https://via.placeholder.com/300?text=No+Image"; }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60" />
+          <div className="absolute bottom-4 left-4 right-4 text-white">
+            <h3 className="text-lg font-bold leading-tight truncate drop-shadow-md">
+              {isProperty ? item?.title : `${item?.brand} ${item?.model}`}
+            </h3>
+            <p className="text-xs font-medium text-white/90 drop-shadow-md truncate flex items-center gap-1">
+              <MapPin size={10} className={isProperty ? "text-indigo-300" : "text-blue-300"} />
+              {isProperty ? item?.location : item?.location}
+            </p>
           </div>
         </div>
-        
-        <div className="p-5 flex flex-col md:flex-row gap-6">
-          <div className="md:w-48 h-48 md:h-auto flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 relative group-hover:scale-[1.02] transition-transform duration-300">
-            {booking.property?.images?.[0] ? (
-              <img 
-                src={`${SERVER_BASE_URL}/uploads/properties/${booking.property.images[0]}`} 
-                alt={booking.property.title}
-                className="w-full h-full object-cover"
-                onError={(e) => { e.target.src = "https://via.placeholder.com/300?text=No+Image"; }}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full w-full text-gray-300">
-                <Home size={40} />
-              </div>
-            )}
-            <div className="absolute inset-0 bg-black/5 group-hover:bg-transparent transition-colors"></div>
-          </div>
-          
-          <div className="flex-1 space-y-3">
-            <h3 className="text-xl font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">{booking.property?.title || 'Property'}</h3>
-            <p className="flex items-center gap-2 text-sm text-gray-600">
-              <MapPin size={16} className="text-indigo-500" />
-              {booking.property?.address}, {booking.property?.city}
+
+        {/* Content Section */}
+        <div className="p-5 flex-1 flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getStatusColor(booking.status)}`}>
+              {booking.status || 'PENDING'}
+            </span>
+            <p className="text-xl font-bold text-slate-800">
+              <span className="text-sm text-slate-500 font-medium mr-1">NPR</span>
+              {formatCurrency(booking.totalAmount || booking.monthlyRent)}
             </p>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
-              <div className="space-y-2">
-                <p className="text-sm"><span className="font-semibold text-gray-500">Type:</span> {booking.property?.propertyType || 'House'}</p>
-                <p className="text-sm"><span className="font-semibold text-gray-500">Renter:</span> {booking.tenant?.fullName || booking.renter?.fullName}</p>
-                <p className="text-sm flex items-center gap-2">
-                  <span className="font-semibold text-gray-500">Contact:</span> 
-                  <span className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded text-xs font-medium">
-                    <Phone size={12} /> {booking.tenant?.phone || booking.renter?.phone || 'N/A'}
-                  </span>
-                </p>
+          </div>
+
+          <div className="space-y-3 mb-6">
+            <div className="flex items-center gap-3 p-2 bg-slate-50 rounded-xl border border-slate-100">
+              <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xs shrink-0">
+                {renter?.fullName?.[0] || <User size={14} />}
               </div>
-              
-              <div className="space-y-2">
-                <div className="flex flex-col gap-1 text-sm bg-gray-50 p-2 rounded-lg border border-gray-100">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500 flex items-center gap-1"><Calendar size={14} /> From:</span>
-                    <span className="font-medium">{formatDate(booking.moveInDate || booking.startDate)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500 flex items-center gap-1"><Calendar size={14} /> To:</span>
-                    <span className="font-medium">{formatDate(booking.moveOutDate || booking.endDate)}</span>
-                  </div>
-                </div>
-                <p className="text-sm flex items-center gap-1 font-bold text-green-600 bg-green-50 p-2 rounded-lg border border-green-100">
-                  <Wallet size={16} /> NPR {(booking.monthlyRent || booking.totalAmount || 0).toLocaleString()} <span className="text-xs font-normal text-green-700">/month</span>
-                </p>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-slate-900 truncate">{renter?.fullName || 'Unknown User'}</p>
+                <p className="text-[10px] text-slate-500 truncate">{renter?.email}</p>
+              </div>
+              <a href={`tel:${renter?.phone}`} className="ml-auto w-8 h-8 flex items-center justify-center rounded-lg bg-green-100 text-green-600 hover:bg-green-200 transition-colors">
+                <Phone size={14} />
+              </a>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
+              <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Start</span>
+                <span className="font-semibold">{formatDate(booking.startDate || booking.moveInDate)}</span>
+              </div>
+              <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">End</span>
+                <span className="font-semibold">{formatDate(booking.endDate || booking.moveOutDate)}</span>
               </div>
             </div>
           </div>
-        </div>
-        
-        {/* Accept/Decline buttons for pending bookings */}
-        {booking.status?.toLowerCase() === 'pending' && (
-          <div className="flex flex-col sm:flex-row gap-3 p-5 bg-gray-50 border-t border-gray-100">
+
+          <div className="flex items-center gap-3 mt-auto pt-4 border-t border-slate-100">
             <button 
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl font-semibold shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 active:scale-95"
-              onClick={() => handleBookingAction(booking.id, 'accept', 'property')}
+              onClick={() => setSelectedBooking({ ...booking, type })}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-200 transition-all hover:shadow-sm active:scale-95"
             >
-              <Check size={18} /> Accept Request
+              <Eye size={16} /> View
             </button>
-            <button 
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white text-red-600 border border-red-100 rounded-xl font-semibold shadow-sm hover:bg-red-50 hover:border-red-200 hover:-translate-y-0.5 transition-all duration-200 active:scale-95"
-              onClick={() => handleBookingAction(booking.id, 'decline', 'property')}
-            >
-              <X size={18} /> Decline
-            </button>
-          </div>
-        )}
-
-        <div className="px-5 py-3 bg-gray-50/80 border-t border-gray-100 text-xs text-gray-500 text-right">
-          Booked on {formatDate(booking.createdAt)}
-        </div>
-      </div>
-    ));
-  };
-
-  const renderBikeBookings = () => {
-    if (bookings.bikeBookings.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center p-16 text-center bg-white rounded-2xl border-2 border-dashed border-gray-200 text-gray-500">
-          <Bike size={48} className="mb-4 text-gray-300" />
-          <h3 className="text-xl font-bold text-gray-800 mb-2">No Bike Rentals</h3>
-          <p className="max-w-md mx-auto">You haven't rented any bikes yet.</p>
-        </div>
-      );
-    }
-
-    return bookings.bikeBookings.map((booking) => (
-      <div key={`bike-${booking.id}`} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-lg transition-all duration-300 group">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 bg-gray-50/50 border-b border-gray-100 gap-4">
-          <div className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1">
-            <Bike size={12} /> Bike Rental
-          </div>
-          <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${getStatusColor(booking.status)}`}>
-            {booking.status || 'PENDING'}
-          </div>
-        </div>
-        
-        <div className="p-5 flex flex-col md:flex-row gap-6">
-          <div className="md:w-48 h-48 md:h-auto flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 relative group-hover:scale-[1.02] transition-transform duration-300">
-            {booking.bike?.images?.[0] ? (
-              <img 
-                src={booking.bike.images[0].startsWith('/uploads') 
-                  ? `${SERVER_BASE_URL}${booking.bike.images[0]}` 
-                  : `${SERVER_BASE_URL}/uploads/bikes/${booking.bike.images[0]}`
-                }
-                alt={`${booking.bike.brand} ${booking.bike.model}`}
-                className="w-full h-full object-cover"
-                onError={(e) => { e.target.src = "https://via.placeholder.com/300?text=No+Image"; }}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full w-full text-gray-300">
-                <Bike size={40} />
-              </div>
-            )}
-            <div className="absolute inset-0 bg-black/5 group-hover:bg-transparent transition-colors"></div>
-          </div>
-          
-          <div className="flex-1 space-y-3">
-            <h3 className="text-xl font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">{booking.bike?.brand} {booking.bike?.model}</h3>
-            <p className="flex items-center gap-2 text-sm text-gray-600">
-              <MapPin size={16} className="text-indigo-500" />
-              {booking.bike?.location}
-            </p>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
-              <div className="space-y-2">
-                <p className="text-sm"><span className="font-semibold text-gray-500">Type:</span> {booking.bike?.type}</p>
-                <p className="text-sm"><span className="font-semibold text-gray-500">Vendor:</span> {booking.vendor?.businessName || booking.vendor?.fullName}</p>
-                <p className="text-sm flex items-center gap-2">
-                  <span className="font-semibold text-gray-500">Contact:</span> 
-                  <span className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded text-xs font-medium">
-                    <Phone size={12} /> {booking.vendor?.phone || 'N/A'}
-                  </span>
-                </p>
-              </div>
-              
-              <div className="space-y-2">
-                <div className="flex flex-col gap-1 text-sm bg-gray-50 p-2 rounded-lg border border-gray-100">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500 flex items-center gap-1"><Calendar size={14} /> From:</span>
-                    <span className="font-medium">{formatDate(booking.startDate)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500 flex items-center gap-1"><Calendar size={14} /> To:</span>
-                    <span className="font-medium">{formatDate(booking.endDate)}</span>
-                  </div>
-                </div>
-                {booking.totalAmount && (
-                  <p className="text-sm flex items-center gap-1 font-bold text-green-600 bg-green-50 p-2 rounded-lg border border-green-100">
-                    <Wallet size={16} /> NPR {booking.totalAmount.toLocaleString()}
-                  </p>
-                )}
-              </div>
-            </div>
+            {isPending && (
+              <>
+                <button 
+                  onClick={() => handleBookingAction(booking.id, 'accept', type)}
+                  className="w-10 h-10 flex items-center justify-center rounded-xl bg-green-50 text-green-600 border border-green-200 hover:bg-green-100 hover:scale-105 transition-all shadow-sm"
+                  title="Accept"
+                >
+                  <Check size={18} />
+                </button>
+                <button 
+                  onClick={() => handleBookingAction(booking.id, 'decline', type)}
+                  className="w-10 h-10 flex items-center justify-center rounded-xl bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 hover:scale-105 transition-all shadow-sm"
+                  title="Decline"
+                >
+                  <X size={18} />
+                </button>
+              </>
+            )}
           </div>
-        </div>
-
-        {/* Accept/Decline buttons for pending bike bookings */}
-        {booking.status?.toLowerCase() === 'pending' && (
-          <div className="flex flex-col sm:flex-row gap-3 p-5 bg-gray-50 border-t border-gray-100">
-            <button 
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl font-semibold shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 active:scale-95"
-              onClick={() => handleBookingAction(booking.id, 'accept', 'bike')}
-            >
-              <Check size={18} /> Accept Request
-            </button>
-            <button 
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white text-red-600 border border-red-100 rounded-xl font-semibold shadow-sm hover:bg-red-50 hover:border-red-200 hover:-translate-y-0.5 transition-all duration-200 active:scale-95"
-              onClick={() => handleBookingAction(booking.id, 'decline', 'bike')}
-            >
-              <X size={18} /> Decline
-            </button>
-          </div>
-        )}
-
-        <div className="px-5 py-3 bg-gray-50/80 border-t border-gray-100 text-xs text-gray-500 text-right">
-          Booked on {formatDate(booking.createdAt)}
         </div>
       </div>
-    ));
+    );
   };
 
-  const getAllBookings = () => {
-    const allBookings = [
-      ...bookings.propertyBookings.map(booking => ({ ...booking, type: 'property' })),
-      ...bookings.bikeBookings.map(booking => ({ ...booking, type: 'bike' }))
-    ];
+  const getFilteredBookings = () => {
+    const props = (bookings?.propertyBookings || []).map(b => ({ ...b, type: 'property' }));
+    const bikes = (bookings?.bikeBookings || []).map(b => ({ ...b, type: 'bike' }));
     
-    return allBookings.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  };
-
-  const renderAllBookings = () => {
-    const allBookings = getAllBookings();
+    let all = [];
+    if (activeBookingType === 'all') all = [...props, ...bikes];
+    else if (activeBookingType === 'properties') all = props;
+    else if (activeBookingType === 'bikes') all = bikes;
     
-    if (allBookings.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center p-16 text-center bg-white rounded-2xl border-2 border-dashed border-gray-200 text-gray-500">
-          <ClipboardList size={64} className="mb-4 text-gray-300" />
-          <h3 className="text-xl font-bold text-gray-800 mb-2">No Bookings</h3>
-          <p className="max-w-md mx-auto">You don't have any bookings yet. Start by listing properties or renting bikes!</p>
-        </div>
-      );
-    }
-
-    return allBookings.map((booking) => {
-      if (booking.type === 'property') {
-        return renderPropertyBookings().find(card => 
-          card.key === `property-${booking.id}`
-        );
-      } else {
-        return renderBikeBookings().find(card => 
-          card.key === `bike-${booking.id}`
-        );
-      }
-    });
+    return all.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
   };
+
+  const filteredBookings = getFilteredBookings();
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center p-16 text-center">
-        <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
+      <div className="flex flex-col items-center justify-center p-24 text-center">
+        <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
         <p className="text-gray-500 font-medium">Loading bookings...</p>
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-        <div className="flex flex-wrap gap-2 w-full md:w-auto">
-          <button 
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeBookingType === 'all' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-            onClick={() => setActiveBookingType('all')}
-          >
-            All Bookings ({getAllBookings().length})
-          </button>
-          <button 
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${activeBookingType === 'properties' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-            onClick={() => setActiveBookingType('properties')}
-          >
-            <Home size={16} /> Property Rentals ({bookings.propertyBookings.length})
-          </button>
-          <button 
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${activeBookingType === 'bikes' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-            onClick={() => setActiveBookingType('bikes')}
-          >
-            <Bike size={16} /> Bike Rentals ({bookings.bikeBookings.length})
-          </button>
+    <div className="w-full h-full relative">
+      {/* Header Controls */}
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-8 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+        <div className="flex p-1 bg-gray-100 rounded-xl w-full md:w-auto">
+           {['all', 'properties', 'bikes'].map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveBookingType(tab)}
+                className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold capitalize transition-all ${
+                  activeBookingType === tab 
+                    ? 'bg-white text-indigo-600 shadow-sm' 
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {tab}
+              </button>
+           ))}
         </div>
-        
         <button 
-          className="w-full md:w-auto px-4 py-2 rounded-lg text-sm font-semibold bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-indigo-600 transition-all flex items-center justify-center gap-2"
           onClick={fetchBookings}
+          className="w-full md:w-auto px-4 py-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 font-bold text-sm flex items-center justify-center gap-2 text-gray-600 transition-all"
         >
-          <RefreshCw size={16} />
-          Refresh
+          <RefreshCw size={16} /> Refresh
         </button>
       </div>
 
-      <div className="space-y-6">
-        {activeBookingType === 'all' && renderAllBookings()}
-        {activeBookingType === 'properties' && renderPropertyBookings()}
-        {activeBookingType === 'bikes' && renderBikeBookings()}
+      {/* Grid Layout */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredBookings.length === 0 ? (
+          <div className="col-span-full flex flex-col items-center justify-center p-20 text-center bg-white rounded-3xl border-2 border-dashed border-gray-200 text-gray-400">
+            <ClipboardList size={64} className="mb-6 opacity-50" />
+            <h3 className="text-2xl font-bold text-gray-800 mb-2">No Bookings Found</h3>
+            <p className="max-w-md mx-auto">You don't have any bookings in this category yet.</p>
+          </div>
+        ) : (
+          filteredBookings.map(booking => renderBookingCard(booking, booking.type))
+        )}
       </div>
+
+      {/* View Application Modal */}
+      {selectedBooking && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <h3 className="text-xl font-black text-slate-800">Application Details</h3>
+              <button onClick={() => setSelectedBooking(null)} className="p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-500">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-8 max-h-[80vh] overflow-y-auto">
+              {/* Header Info */}
+              <div className="flex items-start gap-4">
+                 <div className="w-20 h-20 rounded-xl bg-gray-100 overflow-hidden shrink-0 border border-gray-200">
+                    <img 
+                       src={selectedBooking.type === 'property' 
+                         ? `${SERVER_BASE_URL}/uploads/properties/${selectedBooking.property?.images?.[0]}`
+                         : `${SERVER_BASE_URL}/uploads/bikes/${selectedBooking.bike?.images?.[0]}`
+                       }
+                       className="w-full h-full object-cover"
+                       onError={(e) => { e.target.onerror = null; e.target.src = "https://via.placeholder.com/300?text=No+Image"; }}
+                    />
+                 </div>
+                 <div>
+                    <h4 className="text-xl font-bold text-slate-900 mb-1">
+                      {selectedBooking.type === 'property' ? selectedBooking.property?.title : `${selectedBooking.bike?.brand} ${selectedBooking.bike?.model}`}
+                    </h4>
+                    <p className="text-sm text-slate-500 font-medium">
+                       Application ID: #{selectedBooking.id.slice(0, 8).toUpperCase()}
+                    </p>
+                    <span className={`inline-block mt-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${getStatusColor(selectedBooking.status)}`}>
+                       {selectedBooking.status}
+                    </span>
+                 </div>
+              </div>
+
+              {/* Applicant Info */}
+              <div className="bg-slate-50 rounded-xl p-6 border border-slate-100">
+                 <h5 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4 border-b border-slate-200 pb-2">Applicant Information</h5>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                       <label className="text-xs font-bold text-slate-500 block mb-1">Full Name</label>
+                       <p className="font-bold text-slate-900 text-lg flex items-center gap-2">
+                          <User size={18} className="text-indigo-500" />
+                          {(selectedBooking.type === 'property' ? selectedBooking.renter : selectedBooking.lessor)?.fullName}
+                       </p>
+                    </div>
+                    <div>
+                       <label className="text-xs font-bold text-slate-500 block mb-1">Contact Phone</label>
+                       <a href={`tel:${(selectedBooking.type === 'property' ? selectedBooking.renter : selectedBooking.lessor)?.phone}`} className="font-bold text-indigo-600 text-lg flex items-center gap-2 hover:underline">
+                          <Phone size={18} />
+                          {(selectedBooking.type === 'property' ? selectedBooking.renter : selectedBooking.lessor)?.phone || 'N/A'}
+                       </a>
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 block mb-1">Email Address</label>
+                        <p className="font-medium text-slate-700">
+                           {(selectedBooking.type === 'property' ? selectedBooking.renter : selectedBooking.lessor)?.email || 'N/A'}
+                        </p>
+                    </div>
+                 </div>
+              </div>
+
+              {/* Booking Terms */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="bg-slate-50 rounded-xl p-6 border border-slate-100">
+                    <h5 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4 border-b border-slate-200 pb-2">Booking Terms</h5>
+                    <div className="space-y-4">
+                       <div className="flex justify-between items-center">
+                          <span className="text-sm font-bold text-slate-500">Start Date</span>
+                          <span className="text-sm font-bold text-slate-900">{formatDate(selectedBooking.startDate || selectedBooking.moveInDate)}</span>
+                       </div>
+                       <div className="flex justify-between items-center">
+                          <span className="text-sm font-bold text-slate-500">End Date</span>
+                          <span className="text-sm font-bold text-slate-900">{formatDate(selectedBooking.endDate || selectedBooking.moveOutDate)}</span>
+                       </div>
+                       <div className="flex justify-between items-center pt-2 border-t border-slate-200">
+                          <span className="text-sm font-bold text-slate-500">Total Amount</span>
+                          <span className="text-lg font-black text-indigo-600">NPR {formatCurrency(selectedBooking.totalAmount || selectedBooking.monthlyRent)}</span>
+                       </div>
+                    </div>
+                 </div>
+                 
+                 {/* ID Proof / Documents Area (Placeholder) */}
+                 <div className="bg-slate-50 rounded-xl p-6 border border-slate-100 flex flex-col items-center justify-center text-center">
+                    <ClipboardList size={32} className="text-slate-300 mb-2" />
+                    <p className="text-sm font-bold text-slate-400">Additional Documents</p>
+                    <p className="text-xs text-slate-400 mt-1">KYC Verified by Platform</p>
+                 </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
+               <button 
+                 onClick={() => setSelectedBooking(null)}
+                 className="px-6 py-3 bg-white border border-gray-200 text-gray-600 rounded-xl font-bold hover:bg-gray-50 hover:text-gray-800 transition-all"
+               >
+                 Close Details
+               </button>
+               {(selectedBooking.status?.toLowerCase() === 'pending' || selectedBooking.status?.toLowerCase() === 'available') && (
+                  <>
+                     <button
+                        onClick={() => handleBookingAction(selectedBooking.id, 'decline', selectedBooking.type)} 
+                        className="px-6 py-3 bg-red-50 border border-red-200 text-red-600 rounded-xl font-bold hover:bg-red-100 hover:scale-105 transition-all shadow-sm"
+                     >
+                        Reject Application
+                     </button>
+                     <button 
+                        onClick={() => handleBookingAction(selectedBooking.id, 'accept', selectedBooking.type)}
+                        className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 hover:scale-105 transition-all shadow-lg shadow-indigo-200"
+                     >
+                        Accept Application
+                     </button>
+                  </>
+               )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

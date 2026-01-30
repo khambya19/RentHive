@@ -4,6 +4,9 @@ import { useNotifications } from '../../hooks/useNotifications';
 import AdminNavBar from './AdminNavBar';
 import SuperAdmin from './SuperAdmin';
 import AdminNotifications from './AdminNotifications';
+import PropertiesTable from './PropertiesTable';
+import AutomobilesTable from './AutomobilesTable';
+import ReportsTable from './ReportsTable';
 import './AdminDashboard.css';
 import API_BASE_URL from '../../config/api';
 import axios from 'axios';
@@ -12,20 +15,33 @@ import {
   Menu, 
   X, 
   LayoutDashboard, 
-  Users, 
+  Briefcase, 
   Home, 
   Banknote, 
   Bell, 
   Settings, 
   LogOut, 
   Calendar, 
-  DollarSign 
+  DollarSign,
+  FileCheck,
+  Bike,
+  AlertTriangle,
+  Users,
+  MessageSquare
 } from 'lucide-react';
+import AdminChat from './AdminChat';
+
+import { useSearchParams, useNavigate } from 'react-router-dom';
 
 const AdminDashboard = () => {
   const { user, logout } = useAuth();
   const { notifications } = useNotifications();
-  const [activeTab, setActiveTab] = useState('overview');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  
+  // Derived state from URL or default to 'overview'
+  const activeTab = searchParams.get('tab') || 'overview';
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [stats, setStats] = useState({
@@ -35,6 +51,9 @@ const AdminDashboard = () => {
     totalRevenue: 0,
   });
 
+  const setActiveTab = (tab) => {
+    setSearchParams({ tab });
+  };
 
   useEffect(() => {
     fetchAdminStats();
@@ -77,7 +96,6 @@ const AdminDashboard = () => {
           </button>
         </div>
 
-        <nav className="sidebar-nav">
           <button 
             className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`}
             onClick={() => setActiveTab('overview')}
@@ -87,11 +105,19 @@ const AdminDashboard = () => {
           </button>
 
           <button 
+            className={`nav-item ${activeTab === 'owners' ? 'active' : ''}`}
+            onClick={() => setActiveTab('owners')}
+          >
+            <Briefcase size={20} />
+            {!sidebarCollapsed && <span>Owner</span>}
+          </button>
+
+          <button 
             className={`nav-item ${activeTab === 'users' ? 'active' : ''}`}
             onClick={() => setActiveTab('users')}
           >
             <Users size={20} />
-            {!sidebarCollapsed && <span>Users</span>}
+            {!sidebarCollapsed && <span>User</span>}
           </button>
 
           <button 
@@ -103,11 +129,35 @@ const AdminDashboard = () => {
           </button>
 
           <button 
-            className={`nav-item ${activeTab === 'payments' ? 'active' : ''}`}
-            onClick={() => setActiveTab('payments')}
+            className={`nav-item ${activeTab === 'automobiles' ? 'active' : ''}`}
+            onClick={() => setActiveTab('automobiles')}
           >
-            <Banknote size={20} />
-            {!sidebarCollapsed && <span>Payments</span>}
+            <Bike size={20} />
+            {!sidebarCollapsed && <span>Automobiles</span>}
+          </button>
+
+          <button 
+            className={`nav-item ${activeTab === 'reports' ? 'active' : ''}`}
+            onClick={() => setActiveTab('reports')}
+          >
+            <AlertTriangle size={20} />
+            {!sidebarCollapsed && <span>Report</span>}
+          </button>
+
+          <button 
+            className={`nav-item ${activeTab === 'kyc' ? 'active' : ''}`}
+            onClick={() => setActiveTab('kyc')}
+          >
+            <FileCheck size={20} />
+            {!sidebarCollapsed && <span>KYC Requests</span>}
+          </button>
+
+          <button 
+            className={`nav-item ${activeTab === 'chat' ? 'active' : ''}`}
+            onClick={() => setActiveTab('chat')}
+          >
+            <MessageSquare size={20} />
+            {!sidebarCollapsed && <span>Support Chat</span>}
           </button>
 
           <button 
@@ -115,9 +165,8 @@ const AdminDashboard = () => {
             onClick={() => setActiveTab('notifications')}
           >
             <Bell size={20} />
-            {!sidebarCollapsed && <span>Notifications</span>}
+            {!sidebarCollapsed && <span>Notification</span>}
           </button>
-        </nav>
 
         <div className="sidebar-footer">
           <button 
@@ -141,9 +190,12 @@ const AdminDashboard = () => {
         <div className="dashboard-topbar">
           <h1 className="page-title">
             {activeTab === 'overview' && 'Admin Overview'}
-            {activeTab === 'users' && 'User Management'}
+            {activeTab === 'owners' && 'Owner Management'}
+            {activeTab === 'users' && 'User (Tenant) Management'}
             {activeTab === 'properties' && 'Property Management'}
-            {activeTab === 'payments' && 'Payment Management'}
+            {activeTab === 'automobiles' && 'Automobile Management'}
+            {activeTab === 'reports' && 'Reports & Issues'}
+            {activeTab === 'kyc' && 'KYC Verification Requests'}
             {activeTab === 'notifications' && 'Notifications'}
           </h1>
 
@@ -218,9 +270,13 @@ const AdminDashboard = () => {
             </>
           )}
 
-          {activeTab === 'users' && <SuperAdmin />}
-          {activeTab === 'properties' && <div className="content-placeholder">Property Management - Coming Soon</div>}
-          {activeTab === 'payments' && <div className="content-placeholder">Payment Management - Coming Soon</div>}
+          {activeTab === 'owners' && <SuperAdmin initialRoleFilter="owner" />}
+          {activeTab === 'users' && <SuperAdmin initialRoleFilter="renter" />}
+          {activeTab === 'properties' && <PropertiesTable />}
+          {activeTab === 'automobiles' && <AutomobilesTable />}
+          {activeTab === 'reports' && <ReportsTable />}
+          {activeTab === 'kyc' && <SuperAdmin initialKycFilter="pending" />}
+          {activeTab === 'chat' && <AdminChat />}
           {activeTab === 'notifications' && <AdminNotifications />}
         </div>
       </main>

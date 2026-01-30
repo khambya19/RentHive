@@ -17,8 +17,14 @@ const Report = sequelize.define('Report', {
     },
     onDelete: 'CASCADE'
   },
+  reporterType: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'user',
+    comment: 'Type of user who reported (user, vendor)'
+  },
   listingType: {
-    type: DataTypes.ENUM('property', 'bike'),
+    type: DataTypes.ENUM('property', 'bike', 'automobile'),
     allowNull: false,
     field: 'listing_type'
   },
@@ -26,6 +32,11 @@ const Report = sequelize.define('Report', {
     type: DataTypes.INTEGER,
     allowNull: false,
     field: 'listing_id'
+  },
+  ownerId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: 'ID of the owner of the reported listing (for quick filtering)'
   },
   reason: {
     type: DataTypes.STRING(100),
@@ -38,6 +49,11 @@ const Report = sequelize.define('Report', {
   status: {
     type: DataTypes.ENUM('pending', 'reviewed', 'resolved', 'dismissed'),
     defaultValue: 'pending'
+  },
+  adminNotes: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    comment: 'Notes from admin/owner about the report'
   }
 }, {
   tableName: 'reports',

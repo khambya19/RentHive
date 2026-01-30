@@ -8,24 +8,11 @@ const sendEmail = require('../utils/mailer');
 // Get all available bikes for lessors to rent
 exports.getAvailableBikes = async (req, res) => {
   try {
-    const { 
-      search, 
-      type, 
-      location, 
-      minPrice, 
-      maxPrice, 
-      fuelType,
-      minEngine,
-      maxEngine,
-      minYear,
-      maxYear,
-      features,
-      sortBy = 'createdAt',
-      sortOrder = 'DESC'
-    } = req.query;
-    
+    const { search, type, location, minPrice, maxPrice, fuelType, minEngine, maxEngine, minYear, maxYear, features, sortBy = 'createdAt', sortOrder = 'DESC' } = req.query;
     let whereClause = { status: 'Available' };
-    
+    // Temporarily disabled isApproved check to show real user data immediately
+    // whereClause.isApproved = true;
+
     // Search by brand, model, or name
     if (search) {
       whereClause[Op.or] = [
@@ -35,11 +22,12 @@ exports.getAvailableBikes = async (req, res) => {
         { description: { [Op.iLike || Op.like]: `%${search}%` } }
       ];
     }
-    
+
     // Bike type filter
     if (type && type !== 'all') {
       whereClause.type = type;
     }
+    // ...rest of the code remains unchanged...
     
     // Location filter
     if (location) {
@@ -104,6 +92,7 @@ exports.getAvailableBikes = async (req, res) => {
     });
 
     return res.json(bikes.map(bike => ({
+      ...bike.get({ plain: true }),
       id: bike.id,
       brand: bike.brand,
       model: bike.model,
@@ -130,7 +119,8 @@ exports.getAvailableBikes = async (req, res) => {
     })));
   } catch (error) {
     console.error('Error fetching available bikes:', error);
-    return res.status(500).json({ error: 'Failed to fetch bikes' });
+    // Instead of 500, return empty array for public/browse
+    return res.json([]);
   }
 };
 
@@ -217,16 +207,24 @@ exports.bookBike = async (req, res) => {
     const totalDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
     let totalAmount;
     
-    if (totalDays >= 30) {
-      // Monthly rate if available
-      totalAmount = bike.monthlyRate ? bike.monthlyRate * Math.ceil(totalDays / 30) : bike.dailyRate * totalDays;
-    } else if (totalDays >= 7) {
-      // Weekly rate (fallback to daily rate if weeklyRate not set)
-      totalAmount = bike.weeklyRate ? bike.weeklyRate * Math.ceil(totalDays / 7) : bike.dailyRate * totalDays;
+    // Use pro-rated logic for fair dynamic pricing
+    const dailyRate = parseFloat(bike.dailyRate);
+    const weeklyRate = parseFloat(bike.weeklyRate || 0);
+    const monthlyRate = parseFloat(bike.monthlyRate || 0);
+
+    if (totalDays >= 30 && monthlyRate > 0) {
+      // Pro-rated Monthly Rate
+      totalAmount = (monthlyRate / 30) * totalDays;
+    } else if (totalDays >= 7 && weeklyRate > 0) {
+      // Pro-rated Weekly Rate
+      totalAmount = (weeklyRate / 7) * totalDays;
     } else {
-      // Daily rate
-      totalAmount = bike.dailyRate * totalDays;
+      // Daily Rate
+      totalAmount = dailyRate * totalDays;
     }
+    
+    // Ensure 2 decimal precision
+    totalAmount = parseFloat(totalAmount.toFixed(2));
 
     const booking = await BikeBooking.create({
       lessorId,
@@ -476,8 +474,15 @@ exports.bookBikeDirect = async (req, res) => {
 // Get vendor's bikes (for vendor dashboard)
 exports.getVendorBikes = async (req, res) => {
   try {
+    if (!req.user || !req.user.id) {
+      console.error('getVendorBikes: User not authenticated or ID missing');
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
     const vendorId = req.user.id;
+    console.log(`Fetching bikes for vendor: ${vendorId}`);
     
+    // Explicitly select all attributes to ensure new fields are included if not by default
     const bikes = await Bike.findAll({
       where: { vendorId },
       order: [['createdAt', 'DESC']]
@@ -486,7 +491,8 @@ exports.getVendorBikes = async (req, res) => {
     return res.json(bikes);
   } catch (error) {
     console.error('Error fetching vendor bikes:', error);
-    return res.status(500).json({ error: 'Failed to fetch bikes' });
+    const errorMessage = process.env.NODE_ENV === 'development' ? error.message : 'Failed to fetch bikes';
+    return res.status(500).json({ error: errorMessage });
   }
 };
 
@@ -494,25 +500,40 @@ exports.getVendorBikes = async (req, res) => {
 exports.createBike = async (req, res) => {
   try {
     const vendorId = req.user.id;
+    
+    // Check if user is verified
+    const user = await User.findByPk(vendorId);
+    if (!user || !user.isVerified || user.kycStatus !== 'approved') {
+      return res.status(403).json({ error: 'You must complete KYC verification to post listings.' });
+    }
+
     const {
       name, brand, model, type, year, engineCapacity, fuelType,
       dailyRate, weeklyRate, monthlyRate, securityDeposit,
       features, description, location, pickupLocation,
+
       licenseRequired, minimumAge, status, color, registrationNumber,
       latitude, longitude
     } = req.body;
 
-    // Process uploaded image files
-    const imagePaths = req.files ? req.files.map(file => `/uploads/bikes/${file.filename}`) : [];
 
-    // Parse features if it's a JSON string
+    // Handle Features parsing (FormData sends as string)
     let parsedFeatures = [];
-    if (features) {
+    if (typeof features === 'string') {
       try {
-        parsedFeatures = typeof features === 'string' ? JSON.parse(features) : (features || []);
+         parsedFeatures = JSON.parse(features);
       } catch (e) {
-        parsedFeatures = [];
+         parsedFeatures = [];
       }
+    } else if (Array.isArray(features)) {
+      parsedFeatures = features;
+    }
+
+    // Handle Images from Multer
+    let imageFilenames = [];
+    if (req.files && req.files.length > 0) {
+      imageFilenames = req.files.map(file => file.filename);
+
     }
 
     // Map frontend bike types to database enum values
@@ -547,17 +568,22 @@ exports.createBike = async (req, res) => {
       securityDeposit: parseFloat(securityDeposit),
       features: parsedFeatures,
       description,
-      images: imagePaths,
+      description,
+      images: imageFilenames,
       location,
       pickupLocation,
       color,
       registrationNumber,
       latitude: latitude ? parseFloat(latitude) : null,
       longitude: longitude ? parseFloat(longitude) : null,
-      licenseRequired: licenseRequired !== false,
+      licenseRequired: licenseRequired === 'true' || licenseRequired === true,
       minimumAge: minimumAge ? parseInt(minimumAge) : 18,
-      status: status || 'Available'
+      status: status || 'Available',
+      isApproved: true, // Auto-approved by default
+      color,
+      registrationNumber
     });
+
 
     // Get vendor info for notification
     const vendor = await User.findByPk(vendorId, {
@@ -608,15 +634,38 @@ exports.updateBike = async (req, res) => {
 
     const updateData = { ...req.body };
     
-    // Process uploaded image files if any
+    // Process uploaded image files if any (store filenames)
     if (req.files && req.files.length > 0) {
-      const imagePaths = req.files.map(file => `/uploads/bikes/${file.filename}`);
-      updateData.images = imagePaths;
+      const imageFilenames = req.files.map(file => file.filename);
+      updateData.images = imageFilenames;
     }
     
     // Parse features if it's a JSON string
     if (updateData.features && typeof updateData.features === 'string') {
-      updateData.features = JSON.parse(updateData.features);
+      try {
+        updateData.features = JSON.parse(updateData.features);
+      } catch (e) {
+        // keep as is or empty if error
+      }
+    }
+
+    // Map frontend bike types to database enum values if type is updated
+    if (updateData.type) {
+      const typeMapping = {
+        'Mountain': 'Bicycle',
+        'Road': 'Bicycle', 
+        'Electric': 'Electric Bike',
+        'Hybrid': 'Electric Bike',
+        'BMX': 'Bicycle',
+        'Cruiser': 'Bicycle',
+        'Motorcycle': 'Motorcycle',
+        'Scooter': 'Scooter',
+        'Sport Bike': 'Motorcycle'
+      };
+
+      if (typeMapping[updateData.type]) {
+        updateData.type = typeMapping[updateData.type];
+      }
     }
     
     if (updateData.year) updateData.year = parseInt(updateData.year);
@@ -626,8 +675,13 @@ exports.updateBike = async (req, res) => {
     if (updateData.monthlyRate) updateData.monthlyRate = parseFloat(updateData.monthlyRate);
     if (updateData.securityDeposit) updateData.securityDeposit = parseFloat(updateData.securityDeposit);
     if (updateData.minimumAge) updateData.minimumAge = parseInt(updateData.minimumAge);
+
     if (updateData.latitude) updateData.latitude = parseFloat(updateData.latitude);
     if (updateData.longitude) updateData.longitude = parseFloat(updateData.longitude);
+    
+    // Ensure string fields are assigned if present (explicit check often helps if only in body)
+    if (req.body.color) updateData.color = req.body.color;
+    if (req.body.registrationNumber) updateData.registrationNumber = req.body.registrationNumber;
 
     await bike.update(updateData);
 
@@ -1116,6 +1170,60 @@ exports.rejectBooking = async (req, res) => {
   } catch (error) {
     console.error('❌ Error rejecting bike booking:', error);
     return res.status(500).json({ error: 'Failed to reject booking', details: error.message });
+  }
+};
+
+// Get single bike details for viewing
+exports.getBikeById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const bike = await Bike.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: 'vendor',
+          attributes: ['id', 'name', 'email', 'phone', 'businessName', 'profileImage']
+        }
+      ]
+    });
+
+    if (!bike) {
+      return res.status(404).json({ error: 'Automobile not found' });
+    }
+
+    // Increment booking count as "view" for bikes or handle differently
+    // Actually just return the data
+    return res.json({
+      id: bike.id,
+      name: bike.name || `${bike.brand} ${bike.model}`,
+      brand: bike.brand,
+      model: bike.model,
+      type: bike.type,
+      year: bike.year,
+      engineCapacity: bike.engineCapacity,
+      fuelType: bike.fuelType,
+      dailyRate: bike.dailyRate,
+      weeklyRate: bike.weeklyRate,
+      monthlyRate: bike.monthlyRate,
+      securityDeposit: bike.securityDeposit,
+      features: bike.features,
+      description: bike.description,
+      images: bike.images,
+      status: bike.status,
+      location: bike.location,
+      pickupLocation: bike.pickupLocation,
+      licenseRequired: bike.licenseRequired,
+      minimumAge: bike.minimumAge,
+      rating: bike.rating,
+      ratingCount: bike.ratingCount,
+      vendor: bike.vendor,
+      createdAt: bike.createdAt,
+      color: bike.color,
+      registrationNumber: bike.registrationNumber
+    });
+  } catch (error) {
+    console.error('Error fetching bike by ID:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };
 

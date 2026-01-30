@@ -4,38 +4,48 @@ const Property = require('../models/Property');
 const Bike = require('../models/Bike');
 const { Op } = require('sequelize');
 
-// Submit a report
+// Submit a report (Universal)
 exports.submitReport = async (req, res) => {
   try {
     const reporterId = req.user.id;
-    const { listingType, listingId, reason, description } = req.body;
+    const reporterType = req.user.role || 'user';
+    
+    // Accept both formats
+    const listingType = req.body.listingType || req.body.reportedType;
+    const listingId = req.body.listingId || req.body.reportedId;
+    const { reason, description } = req.body;
 
     // Validate input
     if (!listingType || !listingId || !reason) {
       return res.status(400).json({ error: 'Listing type, listing ID, and reason are required' });
     }
 
-    if (!['property', 'bike'].includes(listingType)) {
+    const normalizedType = listingType.toLowerCase() === 'automobile' ? 'bike' : listingType.toLowerCase();
+
+    if (!['property', 'bike'].includes(normalizedType)) {
       return res.status(400).json({ error: 'Invalid listing type. Must be "property" or "bike"' });
     }
 
-    // Check if listing exists
+    // Check if listing exists and find owner
     let listing;
-    if (listingType === 'property') {
+    let ownerId = null;
+    if (normalizedType === 'property') {
       listing = await Property.findByPk(listingId);
+      if (listing) ownerId = listing.vendorId;
     } else {
       listing = await Bike.findByPk(listingId);
+      if (listing) ownerId = listing.vendorId;
     }
 
     if (!listing) {
-      return res.status(404).json({ error: `${listingType} not found` });
+      return res.status(404).json({ error: `${normalizedType} not found` });
     }
 
     // Check if user has already reported this listing
     const existingReport = await Report.findOne({
       where: {
         reporterId,
-        listingType,
+        listingType: normalizedType,
         listingId
       }
     });
@@ -47,8 +57,10 @@ exports.submitReport = async (req, res) => {
     // Create report
     const report = await Report.create({
       reporterId,
-      listingType,
+      reporterType,
+      listingType: normalizedType,
       listingId,
+      ownerId,
       reason,
       description: description || null,
       status: 'pending'
@@ -56,20 +68,16 @@ exports.submitReport = async (req, res) => {
 
     return res.status(201).json({
       message: 'Report submitted successfully. We will review it shortly.',
-      report: {
-        id: report.id,
-        listingType: report.listingType,
-        listingId: report.listingId,
-        reason: report.reason,
-        status: report.status,
-        createdAt: report.createdAt
-      }
+      report
     });
   } catch (error) {
     console.error('Error submitting report:', error);
     return res.status(500).json({ error: 'Failed to submit report' });
   }
 };
+
+// Aliases for compatibility
+exports.createReport = exports.submitReport;
 
 // Get user's submitted reports
 exports.getUserReports = async (req, res) => {
@@ -78,14 +86,46 @@ exports.getUserReports = async (req, res) => {
 
     const reports = await Report.findAll({
       where: { reporterId },
-      order: [['createdAt', 'DESC']],
-      attributes: ['id', 'listingType', 'listingId', 'reason', 'description', 'status', 'createdAt', 'updatedAt']
+      order: [['createdAt', 'DESC']]
     });
 
     return res.json(reports);
   } catch (error) {
     console.error('Error fetching user reports:', error);
     return res.status(500).json({ error: 'Failed to fetch reports' });
+  }
+};
+
+// Get reports for vendor's listings (Owner Dashboard)
+exports.getVendorReports = async (req, res) => {
+  try {
+    const vendorId = req.user.id;
+
+    const reports = await Report.findAll({
+      where: { ownerId: vendorId },
+      order: [['createdAt', 'DESC']]
+    });
+
+    // Enrich with entity details
+    const enrichedReports = await Promise.all(reports.map(async (report) => {
+      const reportData = report.toJSON();
+      
+      // Get reported entity name
+      if (reportData.listingType === 'property') {
+        const property = await Property.findByPk(reportData.listingId, { attributes: ['title'] });
+        reportData.entityName = property?.title || 'Unknown Property';
+      } else {
+        const bike = await Bike.findByPk(reportData.listingId, { attributes: ['name', 'brand', 'model'] });
+        reportData.entityName = bike?.name || `${bike?.brand} ${bike?.model}` || 'Unknown Vehicle';
+      }
+
+      return reportData;
+    }));
+
+    res.json(enrichedReports);
+  } catch (error) {
+    console.error('Error fetching vendor reports:', error);
+    res.status(500).json({ error: 'Failed to fetch reports' });
   }
 };
 
@@ -117,22 +157,28 @@ exports.getAllReports = async (req, res) => {
   }
 };
 
-// Update report status (admin only)
+// Update report status
 exports.updateReportStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
-
-    if (!['pending', 'reviewed', 'resolved', 'dismissed'].includes(status)) {
-      return res.status(400).json({ error: 'Invalid status' });
-    }
+    const { status, adminNotes } = req.body;
+    const userId = req.user.id;
+    const userRole = req.user.role;
 
     const report = await Report.findByPk(id);
     if (!report) {
       return res.status(404).json({ error: 'Report not found' });
     }
 
-    await report.update({ status });
+    // Permission check: admin can update any, vendor can only update reports on their listings
+    if (userRole !== 'admin' && report.ownerId !== userId) {
+      return res.status(403).json({ error: 'Unauthorized to update this report' });
+    }
+
+    const updateData = { status };
+    if (adminNotes) updateData.adminNotes = adminNotes;
+
+    await report.update(updateData);
 
     return res.json({
       message: 'Report status updated successfully',

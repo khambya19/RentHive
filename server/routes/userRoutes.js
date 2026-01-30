@@ -1,27 +1,35 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../controller/userController');
-const { protect } = require('../middleware/auth');
-const { profileUpload } = require('../config/upload');
+const { protect, superAdminOnly } = require('../middleware/auth');
+const { profileUpload } = require('../config/upload'); // Assuming this exists for general uploads
 
-// SUPER ADMIN: User management
-const { superAdminOnly } = require('../middleware/auth');
-router.get('/admin/users', protect, superAdminOnly, userController.getAllUsers); // List users
-router.get('/admin/users/:id', protect, superAdminOnly, userController.getUserById); // View user
-router.patch('/admin/users/:id/block', protect, superAdminOnly, userController.toggleBlockUser); // Block/unblock
-router.delete('/admin/users/:id', protect, superAdminOnly, userController.softDeleteUser); // Soft delete
-router.post('/admin/users/:id/reset-password', protect, superAdminOnly, userController.resetUserPassword); // Reset password
+// Route for User Profile Update
+router.put('/profile', protect, userController.updateProfile);
 
-// Get user statistics
+// Route for Saving/Unsaving Listings
+router.get('/saved-listings', protect, userController.getSavedListings);
+router.post('/save-listing', protect, userController.saveListing);
+router.post('/unsave-listing', protect, userController.unsaveListing);
+
+// Route for Password Change
+router.put('/change-password', protect, userController.changePassword);
+
+// Route for KYC Document Upload
+router.post('/kyc-upload', protect, profileUpload.single('kycDocument'), userController.uploadKyc);
+
+// --- Existing Admin Routes (kept for compatibility if used via /api/users/admin/...) ---
+router.get('/admin/users', protect, superAdminOnly, userController.getAllUsers); 
+router.get('/admin/users/:id', protect, superAdminOnly, userController.getUserById);
+router.patch('/admin/users/:id/block', protect, superAdminOnly, userController.toggleBlockUser); 
+router.delete('/admin/users/:id', protect, superAdminOnly, userController.softDeleteUser);
+router.post('/admin/users/:id/reset-password', protect, superAdminOnly, userController.resetUserPassword);
+
+// --- Public/Protected Getters ---
 router.get('/stats', userController.getVendorStats);
-
-// Get user's booking applications (protected route)
 router.get('/my-applications', protect, userController.getMyApplications);
-
-// Upload profile picture (protected route)
-router.post('/upload-profile', protect, profileUpload.single('profilePicture'), userController.uploadProfilePicture);
-
-// Get single user by ID
-router.get('/:id', userController.getVendorById);
+router.get('/my-rentals', protect, userController.getMyRentals);
+router.post('/upload-photo', protect, profileUpload.single('profilePic'), userController.uploadProfilePicture); // Use 'profilePic' to match frontend FormData
+router.get('/vendor/:id', userController.getVendorById);
 
 module.exports = router;

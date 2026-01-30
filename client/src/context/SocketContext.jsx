@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import React, {
   createContext,
   useContext,
@@ -9,6 +8,8 @@ import React, {
 } from 'react';
 import { io } from 'socket.io-client';
 import axios from 'axios';
+import API_BASE_URL, { SERVER_BASE_URL } from '../config/api';
+import { useAuth } from './AuthContext';
 
 const SocketContext = createContext(null);
 
@@ -21,155 +22,145 @@ export const useSocket = () => {
 };
 
 export const SocketProvider = ({ children }) => {
+  const { user: authUser } = useAuth();
   const socketRef = useRef(null);
   const [socket, setSocket] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  // Sync currentUser with authUser - STABILIZED to prevent loops
+  useEffect(() => {
+    if (authUser?.id) {
+      // Only update if the ID or Role has actually changed to prevent provider loops
+      setCurrentUser(prev => {
+        if (prev?.id === authUser.id && prev?.role === (authUser.role || authUser.type)) {
+          return prev;
+        }
+        return { id: authUser.id, role: authUser.role || authUser.type };
+      });
+    } else {
+      setCurrentUser(null);
+    }
+  }, [authUser?.id, authUser?.role, authUser?.type]);
 
   // Initialize socket once
-
   useEffect(() => {
-    const url = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5050';
-    const socketInstance = io(url, {
-      transports: ['polling', 'websocket'],
+    if (socketRef.current) return; // Prevent duplicate connections
+    
+    const socketInstance = io(SERVER_BASE_URL, {
+      transports: ['websocket', 'polling'],
       upgrade: true,
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 5,
       timeout: 10000,
-      autoConnect: true, // Auto-connect on initialization
+      autoConnect: true,
     });
 
     socketRef.current = socketInstance;
     setSocket(socketInstance);
 
     socketInstance.on('connect', () => {
-      // console.log('✅ Socket connected:', socketInstance.id);
       setIsConnected(true);
     });
 
-    socketInstance.on('disconnect', (_reason) => {
-      // console.log('❌ Socket disconnected:', _reason);
+    socketInstance.on('disconnect', () => {
       setIsConnected(false);
     });
 
-    socketInstance.on('connect_error', (_err) => {
-      // console.warn('⚠️ Socket connection error:', err.message);
+    socketInstance.on('connect_error', () => {
       setIsConnected(false);
     });
 
     // Real-time new notification
     socketInstance.on('new-notification', (notification) => {
-      // console.log('🔔 Real-time notification received:', notification);
       setNotifications((prev) => [notification, ...prev]);
       setUnreadCount((prev) => prev + 1);
 
-      // Browser notification (optional)
       if ('Notification' in window && Notification.permission === 'granted') {
         new Notification(notification.title, {
           body: notification.message,
           icon: '/favicon.ico',
-          badge: '/favicon.ico',
-          tag: `notif-${notification.id}`,
         });
       }
     });
 
-    // Cleanup on unmount
     return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current = null;
-      }
+      // Don't disconnect in development StrictMode
+      // Socket will persist across component remounts
     };
-  }, []); // ← only once on mount
+  }, []);
 
-  // Register user when currentUserId changes (and socket is ready)
   useEffect(() => {
-    if (!currentUserId || !socket || !isConnected) return;
+    if (!currentUser?.id || !socket || !isConnected) return;
+    socket.emit('register', { userId: currentUser.id, role: currentUser.role });
+    fetchUserNotifications(currentUser.id);
+  }, [currentUser, socket, isConnected]);
 
-    // console.log('👤 Registering user:', currentUserId);
-    socket.emit('register', currentUserId);
+  const registerUser = useCallback((userData) => {
+    if (!userData) return;
+    
+    const newId = typeof userData === 'object' ? userData.userId || userData.id : userData;
+    const newRole = typeof userData === 'object' ? userData.role : null;
 
-    // Fetch initial notifications
-    fetchUserNotifications(currentUserId);
-  }, [currentUserId, socket, isConnected]);
-
-  // ── Helper functions ─────────────────────────────────────────────
-
-
-
-  const registerUser = useCallback((userId) => {
-    if (!userId) return;
-    setCurrentUserId(userId);
-    // The actual emit happens in the useEffect above
+    setCurrentUser(prev => {
+      if (prev?.id === newId && prev?.role === newRole) {
+        return prev;
+      }
+      return { id: newId, role: newRole };
+    });
   }, []);
 
   const fetchUserNotifications = async (userId) => {
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5050/api';
-      const res = await axios.get(
-        `${apiUrl}/notifications/user/${userId}`
-      );
+      const res = await axios.get(`${API_BASE_URL}/notifications/user/${userId}`);
       if (res.data.success) {
         setNotifications(res.data.data.notifications || []);
         setUnreadCount(res.data.data.unreadCount || 0);
-        // console.log(`📥 Loaded ${res.data.data.notifications?.length || 0} notifications`);
       }
     } catch (err) {
-      // console.error('❌ Failed to fetch notifications:', err);
+      console.error('Failed to fetch notifications:', err);
     }
   };
 
   const markNotificationAsRead = async (notificationId) => {
-    if (!currentUserId) return;
+    if (!currentUser?.id) return;
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5050/api';
-      const res = await axios.patch(
-        `${apiUrl}/notifications/${notificationId}/read`,
-        { userId: currentUserId }
-      );
+      const res = await axios.patch(`${API_BASE_URL}/notifications/${notificationId}/read`, { userId: currentUser.id });
       if (res.data.success) {
         setNotifications((prev) =>
           prev.map((n) =>
-            n.id === notificationId ? { ...n, is_read: true } : n
+            n.id === notificationId
+              ? { ...n, is_read: true }
+              : n
           )
         );
         setUnreadCount((prev) => Math.max(0, prev - 1));
-        // console.log('✅ Marked as read:', notificationId);
       }
     } catch (err) {
-      // console.error('❌ Mark as read failed:', err);
+      console.error('Mark as read failed:', err);
     }
   };
 
   const markAllAsRead = async () => {
-    if (!currentUserId) return;
+    if (!currentUser?.id) return;
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5050/api';
-      const res = await axios.patch(
-        `${apiUrl}/notifications/user/${currentUserId}/read-all`
-      );
+      const res = await axios.patch(`${API_BASE_URL}/notifications/user/${currentUser.id}/read-all`);
       if (res.data.success) {
         setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
         setUnreadCount(0);
-        // console.log('✅ All notifications marked as read');
       }
     } catch (err) {
-      // console.error('❌ Mark all failed:', err);
+      console.error('Mark all failed:', err);
     }
   };
 
   const deleteNotification = async (notificationId) => {
-    if (!currentUserId) return;
+    if (!currentUser?.id) return;
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5050/api';
-      const res = await axios.delete(
-        `${apiUrl}/notifications/${notificationId}`,
-        { data: { userId: currentUserId } }
-      );
+      const res = await axios.delete(`${API_BASE_URL}/notifications/${notificationId}`, { data: { userId: currentUser.id } });
       if (res.data.success) {
         setNotifications((prev) => {
           const removed = prev.find((n) => n.id === notificationId);
@@ -178,10 +169,9 @@ export const SocketProvider = ({ children }) => {
           }
           return prev.filter((n) => n.id !== notificationId);
         });
-        // console.log('🗑️ Notification deleted:', notificationId);
       }
     } catch (err) {
-      // console.error('❌ Delete failed:', err);
+      console.error('Delete failed:', err);
     }
   };
 
@@ -194,7 +184,8 @@ export const SocketProvider = ({ children }) => {
     markNotificationAsRead,
     markAllAsRead,
     deleteNotification,
-    currentUserId,
+    currentUserId: currentUser?.id,
+    currentUser,
   };
 
   return (

@@ -20,6 +20,7 @@ router.delete('/vendor/:id', bikeController.deleteBike); // Delete bike
 
 router.get('/vendor/bookings', bikeController.getVendorBookings); // Get vendor's bookings
 router.put('/vendor/bookings/:id/status', bikeController.updateBookingStatus); // Update booking status
+router.patch('/bookings/:id/status', bikeController.updateBookingStatus); // Add PATCH support specific for owner dashboard actions
 
 // Approve/Reject bike bookings
 router.patch('/bookings/:bookingId/approve', bikeController.approveBooking);
@@ -31,5 +32,8 @@ router.get('/customers', bikeController.getVendorCustomers); // Get vendor custo
 
 // Upload bike images
 router.post('/upload-images', bikeUpload.array('images', 10), bikeController.uploadBikeImages);
+
+// Get single bike by ID - MUST BE LAST to avoid shadowing other routes
+router.get('/:id', bikeController.getBikeById);
 
 module.exports = router;

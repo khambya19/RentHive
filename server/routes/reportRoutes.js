@@ -12,10 +12,14 @@ router.post('/', reportController.submitReport);
 // Get user's submitted reports
 router.get('/my-reports', reportController.getUserReports);
 
-// Get all reports (admin/vendor - you can add role check middleware later)
+// Get reports for vendor's listings (Owner Dashboard)
+router.get('/vendor', reportController.getVendorReports);
+
+// Get all reports (admin/vendor)
 router.get('/all', reportController.getAllReports);
 
-// Update report status (admin only - you can add role check middleware later)
-router.put('/:id/status', reportController.updateReportStatus);
+// Update report status
+router.put('/:id', reportController.updateReportStatus);
+router.put('/:id/status', reportController.updateReportStatus); // Support both styles
 
 module.exports = router;

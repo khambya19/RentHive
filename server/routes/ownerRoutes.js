@@ -15,54 +15,89 @@ router.use(protect);
 router.get('/stats', async (req, res) => {
   try {
     const ownerId = req.user.id;
-    console.log(' Fetching owner stats for user ID:', ownerId);
+    console.log('📊 Fetching owner stats for user ID:', ownerId);
 
     // Get properties owned by this owner
     const totalProperties = await Property.count({ 
       where: { vendorId: ownerId } 
     });
-    console.log(' Total properties:', totalProperties);
+    console.log('🏠 Total properties:', totalProperties);
     
     const availableProperties = await Property.count({ 
       where: { vendorId: ownerId, status: 'Available' } 
     });
-    console.log(' Available properties:', availableProperties);
+    console.log('✅ Available properties:', availableProperties);
+
+    // Get bikes owned by this owner
+    const totalBikes = await Bike.count({ 
+      where: { vendorId: ownerId } 
+    });
+    console.log('🚲 Total bikes:', totalBikes);
+    
+    const availableBikes = await Bike.count({ 
+      where: { vendorId: ownerId, status: 'Available' } 
+    });
+    console.log('✅ Available bikes:', availableBikes);
+
+    // Calculate total listings (properties + bikes)
+    const totalListings = totalProperties + totalBikes;
+    const availableListings = availableProperties + availableBikes;
+    console.log('📋 Total listings (properties + bikes):', totalListings);
+    console.log('✅ Total available:', availableListings);
 
     // Get property bookings (where lessor is the property owner)
     const totalBookings = await Booking.count({ 
       where: { vendorId: ownerId } 
     });
-    console.log(' Total bookings:', totalBookings);
+    console.log('📅 Total property bookings:', totalBookings);
 
     // Get bike rentals (where owner is the bike vendor)
     const bikeRentals = await BikeBooking.count({ 
       where: { vendorId: ownerId } 
     });
-    console.log(' Bike rentals:', bikeRentals);
+    console.log('🏍️ Total bike rentals:', bikeRentals);
 
     // Calculate monthly revenue from properties (current month)
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
-    const monthlyRevenue = await Booking.sum('monthlyRent', {
+    const propertyRevenue = await Booking.sum('monthlyRent', {
       where: {
         vendorId: ownerId,
         status: ['Completed', 'Active'],
         createdAt: { [Op.gte]: startOfMonth }
       }
     }) || 0;
-    console.log(' Monthly revenue:', monthlyRevenue);
+
+    // Calculate monthly revenue from bike rentals (current month)
+    const bikeRevenue = await BikeBooking.sum('totalAmount', {
+      where: {
+        vendorId: ownerId,
+        status: ['Completed', 'Active'],
+        createdAt: { [Op.gte]: startOfMonth }
+      }
+    }) || 0;
+
+    const monthlyRevenue = parseFloat(propertyRevenue) + parseFloat(bikeRevenue);
+    console.log('💰 Monthly revenue (properties + bikes):', monthlyRevenue);
 
     return res.json({
-      totalProperties,
-      availableProperties,
+      totalProperties: totalListings,  // Now includes bikes
+      availableProperties: availableListings,  // Now includes available bikes
       totalBookings,
       monthlyRevenue: parseFloat(monthlyRevenue),
-      bikeRentals
+      bikeRentals,
+      // Additional detailed stats
+      breakdown: {
+        properties: totalProperties,
+        bikes: totalBikes,
+        availableProperties,
+        availableBikes
+      }
     });
   } catch (error) {
-    console.error(' Error fetching owner stats:', error.message);
+    console.error('❌ Error fetching owner stats:', error.message);
     console.error('Full error:', error);
     return res.status(500).json({ error: 'Failed to fetch dashboard stats', details: error.message });
   }

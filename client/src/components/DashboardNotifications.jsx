@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { Check, AlertCircle, Info, Home, X } from 'lucide-react';
 import './DashboardNotifications.css';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5050/api';
+import API_BASE_URL from '../config/api';
 
 const DashboardNotifications = ({ notifications, onRemove }) => {
   const [processingBooking, setProcessingBooking] = useState(null);

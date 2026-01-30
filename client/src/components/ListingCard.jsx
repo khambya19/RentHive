@@ -1,14 +1,14 @@
 import React from 'react';
 // import './ListingCard.css'; // Deprecated
 import { Home, Bike, MapPin, BedDouble, Bath, Ruler, Calendar, Fuel, Gauge, ArrowRight } from 'lucide-react';
+import { SERVER_BASE_URL } from '../config/api';
 
 const ListingCard = ({ item, onClick }) => {
   const isProperty = item.type === 'property';
-  const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5050';
   const folder = isProperty ? 'properties' : 'bikes';
   
   const imageUrl = item.images?.[0] 
-    ? `${baseUrl}/uploads/${folder}/${item.images[0]}`
+    ? `${SERVER_BASE_URL}/uploads/${folder}/${item.images[0]}`
     : null;
 
   return (

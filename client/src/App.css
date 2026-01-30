@@ -1,9 +1,6 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}
+/* Global CSS Reset for Dashboard-specific layouts */
+
+/* Dashboard Layout Resets removed to rely on Component Styles */
 
 .logo {
   height: 6em;

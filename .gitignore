@@ -91,11 +91,6 @@ PAYMENT_SYSTEM_GUIDE.md
 PAYMENT_SYSTEM_README.md
 
 # Scripts and test files
-server/scripts/check*.js
-server/scripts/test*.js
-server/scripts/delete*.js
-server/scripts/*Test*.js
-server/routes/testRoutes.js
+server/scripts/
 **/*test*.js
 **/test/
-server/check-property.js

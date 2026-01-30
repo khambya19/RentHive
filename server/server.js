@@ -19,6 +19,7 @@ const Bike = require('./models/Bike');
 const BikeBooking = require('./models/BikeBooking');
 const Payment = require('./models/Payment');
 const Message = require('./models/Message');
+const Report = require('./models/Report');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const propertyRoutes = require('./routes/propertyRoutes');
@@ -27,6 +28,7 @@ const ownerRoutes = require('./routes/ownerRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const publicRoutes = require('./routes/publicRoutes');
 const messageRoutes = require('./routes/messageRoutes');
+const reportRoutes = require('./routes/reportRoutes');
 
 
 
@@ -58,6 +60,7 @@ app.use('/api/bikes', bikeRoutes);
 app.use('/api/owners', ownerRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/reports', reportRoutes);
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -151,6 +154,10 @@ io.on('connection', (socket) => {
           Message.belongsTo(Bike, { foreignKey: 'bikeId', as: 'bike' });
           User.hasMany(Message, { foreignKey: 'senderId', as: 'sentMessages' });
           User.hasMany(Message, { foreignKey: 'receiverId', as: 'receivedMessages' });
+
+          // Reports
+          Report.belongsTo(User, { foreignKey: 'reporterId', as: 'reporter' });
+          User.hasMany(Report, { foreignKey: 'reporterId', as: 'reports' });
 
           // Sync DB (safe mode - no force/alter unless you really need it)
           await sequelize.sync(); // ← safe sync, won't drop tables

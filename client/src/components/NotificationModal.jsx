@@ -9,16 +9,18 @@ const NotificationModal = ({ open, onClose, notification }) => {
   
   const handleViewDetails = () => {
     if (notification.link) {
-      navigate(notification.link);
-      onClose();
-    }
-  };
-  
-  return (
-    <ModalPortal>
-      <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/30 backdrop-blur-sm">
-        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 relative animate-fadeIn">
-          <button
+      // Parse URL to extract tab parameter
+      const url = new URL(notification.link, window.location.origin);
+      const tab = url.searchParams.get('tab');
+      
+      if (tab) {
+        // Navigate to the dashboard and store the tab to open
+        sessionStorage.setItem('dashboardTab', tab);
+        navigate(url.pathname);
+      } else {
+        navigate(notification.link);
+      }
+      onClose(
             className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 text-2xl font-bold"
             onClick={onClose}
             aria-label="Close"

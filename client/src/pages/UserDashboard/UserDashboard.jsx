@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Overview from './components/Overview';
@@ -14,10 +14,37 @@ import UserMessages from './components/UserMessages';
 import './UserDashboard.css';
 
 const UserDashboard = () => {
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(() => {
+    // Initialize from sessionStorage
+    const storedTab = sessionStorage.getItem('dashboardTab');
+    ;
   const [modalProperty, setModalProperty] = useState(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Listen for tab changes from sessionStorage (for notifications)
+  useEffect(() => {
+    const checkTabChange = () => {
+      const storedTab = sessionStorage.getItem('dashboardTab');
+      if (storedTab) {
+        setActiveTab(storedTab);
+        
+    };
+    
+    // Check immediately
+    checkTabChange();
+    
+    // Also listen for storage events (in case notification is clicked from another tab/window)
+    window.addEventListener('storage', checkTabChange);
+    
+    // Check periodically (as a fallback since storage event doesn't fire in same tab)
+    const interval = setInterval(checkTabChange, 100);
+    
+    return () => {
+      window.removeEventListener('storage', checkTabChange);
+      clearInterval(interval);
+    };
+  }, []);
 
   // Handler for opening property modal from Browse
   const handleViewProperty = (property) => {

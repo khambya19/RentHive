@@ -43,9 +43,37 @@ const OwnerDashboard = () => {
   const [searchParams] = useSearchParams();
   const { user, logout } = useAuth();
   const { notifications, removeNotification, showSuccess, showError } = useNotifications();
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(() => {
+    // Initialize from sessionStorage
+    const storedTab = sessionStorage.getItem('dashboardTab');
+    ;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // New state for mobile menu
+  
+  // Listen for tab changes from sessionStorage (for notifications)
+  useEffect(() => {
+    const checkTabChange = () => {
+      const storedTab = sessionStorage.getItem('dashboardTab');
+      if (storedTab) {
+        setActiveTab(storedTab);
+        
+    };
+    
+    // Check immediately
+    checkTabChange();
+    
+    // Also listen for storage events (in case notification is clicked from another tab/window)
+    window.addEventListener('storage', checkTabChange);
+    
+    // Check periodically (as a fallback since storage event doesn't fire in same tab)
+    const interval = setInterval(checkTabChange, 100);
+    
+    return () => {
+      window.removeEventListener('storage', checkTabChange);
+      clearInterval(interval);
+    };
+  }, []);
+  
   const [stats, setStats] = useState({
     totalProperties: 0,
     availableProperties: 0,

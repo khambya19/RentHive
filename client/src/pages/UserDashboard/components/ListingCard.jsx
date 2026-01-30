@@ -4,10 +4,18 @@ import { Home, Bike, MapPin, BedDouble, Bath, Ruler, Calendar, Fuel, Gauge, Arro
 const ListingCard = ({ item, onClick }) => {
   const isProperty = item.type === 'property';
   const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5050';
-  const folder = isProperty ? 'properties' : 'bikes';
-  const imageUrl = item.images?.[0]
-    ? `${baseUrl}/uploads/${folder}/${item.images[0]}`
-    : null;
+  
+  // Handle image path - check if it already includes /uploads prefix
+  let imageUrl = null;
+  if (item.images?.[0]) {
+    const imagePath = item.images[0];
+    if (imagePath.startsWith('/uploads')) {
+      imageUrl = `${baseUrl}${imagePath}`;
+    } else {
+      const folder = isProperty ? 'properties' : 'bikes';
+      imageUrl = `${baseUrl}/uploads/${folder}/${imagePath}`;
+    }
+  }
 
   return (
     <div

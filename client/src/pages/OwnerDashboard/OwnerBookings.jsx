@@ -13,6 +13,54 @@ const OwnerBookings = ({ showSuccess, showError }) => {
   const [loading, setLoading] = useState(true);
   const [activeBookingType, setActiveBookingType] = useState('all');
 
+  const fetchBookings = useCallback(async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        showError('Error', 'No authentication token found');
+        setLoading(false);
+        return;
+      }
+
+      const headers = { Authorization: `Bearer ${token}` };
+
+      const [ownersRes, bikeRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/owners/bookings`, { headers }),
+        fetch(`${API_BASE_URL}/bikes/vendor/bookings`, { headers })
+      ]);
+
+      let propertyBookings = [];
+      let bikeBookings = [];
+
+      if (ownersRes.ok) {
+        const data = await ownersRes.json();
+        propertyBookings = data.propertyBookings || [];
+        // Use bike bookings from /owners/bookings if available, otherwise fetch separately
+        if (data.bikeBookings && data.bikeBookings.length > 0) {
+          bikeBookings = data.bikeBookings;
+        }
+      } else {
+        console.error('Failed to fetch owner bookings:', await ownersRes.text());
+      }
+
+      // Only fetch bike bookings separately if not already included
+      if (bikeRes.ok && bikeBookings.length === 0) {
+        const data = await bikeRes.json();
+        bikeBookings = data || [];
+      } else if (!bikeRes.ok) {
+        console.error('Failed to fetch bike bookings:', await bikeRes.text());
+      }
+
+      setBookings({ propertyBookings, bikeBookings });
+    } catch (error) {
+      console.error('Error fetching bookings:', error);
+      showError('Error', 'Failed to load bookings');
+    } finally {
+      setLoading(false);
+    }
+  }, [showError]);
+
   useEffect(() => {
     fetchBookings();
   }, [fetchBookings]);
@@ -46,54 +94,17 @@ const OwnerBookings = ({ showSuccess, showError }) => {
     }
   }, [socket, showSuccess, showError, fetchBookings]);
 
-  const fetchBookings = useCallback(async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('token');
-      
-      if (!token) {
-        showError('Authentication Error', 'Please login again');
-        return;
-      }
-
-      // console.log('Fetching bookings from /api/owners/all-bookings');
-      const response = await fetch(`${API_BASE_URL}/owners/all-bookings`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      // console.log('Response status:', response.status);
-
-      if (response.ok) {
-        const data = await response.json();
-        // console.log('Bookings data received:', data);
-        setBookings(data);
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        // console.error('Failed to fetch bookings:', response.status, errorData);
-        showError('Failed to fetch bookings', errorData.details || errorData.error || 'Please try refreshing the page');
-      }
-    } catch (error) {
-      // console.error('Error fetching bookings:', error);
-      showError('Error loading bookings', error.message || 'Please check your connection and try again');
-    } finally {
-      setLoading(false);
-    }
-  }, [showError]);
-
   const handleBookingAction = async (bookingId, action, bookingType) => {
     try {
       const token = localStorage.getItem('token');
       const endpoint = bookingType === 'property' 
         ? `${API_BASE_URL}/properties/bookings/${bookingId}/status`
-        : `${API_BASE_URL}/bikes/bookings/${bookingId}/status`;
+        : `${API_BASE_URL}/bikes/vendor/bookings/${bookingId}/status`;
 
       const status = action === 'accept' ? 'Approved' : 'Rejected';
 
       const response = await fetch(endpoint, {
-        method: 'PATCH',
+        method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -270,7 +281,10 @@ const OwnerBookings = ({ showSuccess, showError }) => {
           <div className="md:w-48 h-48 md:h-auto flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 relative group-hover:scale-[1.02] transition-transform duration-300">
             {booking.bike?.images?.[0] ? (
               <img 
-                src={`${SERVER_BASE_URL}/uploads/bikes/${booking.bike.images[0]}`} 
+                src={booking.bike.images[0].startsWith('/uploads') 
+                  ? `${SERVER_BASE_URL}${booking.bike.images[0]}` 
+                  : `${SERVER_BASE_URL}/uploads/bikes/${booking.bike.images[0]}`
+                }
                 alt={`${booking.bike.brand} ${booking.bike.model}`}
                 className="w-full h-full object-cover"
                 onError={(e) => { e.target.src = "https://via.placeholder.com/300?text=No+Image"; }}
@@ -322,6 +336,24 @@ const OwnerBookings = ({ showSuccess, showError }) => {
             </div>
           </div>
         </div>
+
+        {/* Accept/Decline buttons for pending bike bookings */}
+        {booking.status?.toLowerCase() === 'pending' && (
+          <div className="flex flex-col sm:flex-row gap-3 p-5 bg-gray-50 border-t border-gray-100">
+            <button 
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl font-semibold shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 active:scale-95"
+              onClick={() => handleBookingAction(booking.id, 'accept', 'bike')}
+            >
+              <Check size={18} /> Accept Request
+            </button>
+            <button 
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white text-red-600 border border-red-100 rounded-xl font-semibold shadow-sm hover:bg-red-50 hover:border-red-200 hover:-translate-y-0.5 transition-all duration-200 active:scale-95"
+              onClick={() => handleBookingAction(booking.id, 'decline', 'bike')}
+            >
+              <X size={18} /> Decline
+            </button>
+          </div>
+        )}
 
         <div className="px-5 py-3 bg-gray-50/80 border-t border-gray-100 text-xs text-gray-500 text-right">
           Booked on {formatDate(booking.createdAt)}

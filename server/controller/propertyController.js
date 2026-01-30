@@ -5,6 +5,7 @@ const Inquiry = require('../models/Inquiry');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { Op } = require('sequelize');
+const sendEmail = require('../utils/mailer');
 
 // Get all available properties for browsing (tenant/lessor)
 exports.getAvailableProperties = async (req, res) => {
@@ -468,17 +469,72 @@ exports.updateBookingStatus = async (req, res) => {
     if (notificationTitle) {
       try {
         const notification = await Notification.create({
-          userId: booking.tenantId,
+          user_id: booking.tenantId,
           title: notificationTitle,
           message: notificationMessage,
           type: 'info',
-          isBroadcast: false,
+          is_broadcast: false,
           link: `/tenant/dashboard?tab=applications`
         });
 
         console.log(`📧 STATUS UPDATE (${status}): Sending notification to TENANT (tenantId: ${booking.tenantId})`);
         console.log(`   Owner ID who ${status.toLowerCase()}: ${vendorId}`);
         console.log(`   This notification should ONLY go to tenant, NOT owner`);
+        
+        // Send email if booking is approved
+        if (status === 'Approved') {
+          try {
+            const tenant = await User.findByPk(booking.tenantId);
+            if (tenant && tenant.email) {
+              const moveInDate = new Date(booking.moveInDate).toLocaleDateString('en-US', {
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric'
+              });
+              const moveOutDate = booking.moveOutDate 
+                ? new Date(booking.moveOutDate).toLocaleDateString('en-US', {
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric'
+                  })
+                : 'Not specified';
+              
+              const emailHtml = `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <h2 style="color: #4F46E5;">🎉 Your Booking Has Been Approved!</h2>
+                  <p>Dear ${tenant.name},</p>
+                  <p>Great news! Your booking request has been approved by the property owner.</p>
+                  
+                  <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                    <h3 style="margin-top: 0; color: #1F2937;">Property Details</h3>
+                    <p><strong>Property:</strong> ${property.title}</p>
+                    <p><strong>Location:</strong> ${property.location || 'N/A'}</p>
+                    <p><strong>Monthly Rent:</strong> NPR ${parseInt(booking.monthlyRent).toLocaleString()}</p>
+                    <p><strong>Move-in Date:</strong> ${moveInDate}</p>
+                    <p><strong>Move-out Date:</strong> ${moveOutDate}</p>
+                  </div>
+                  
+                  <p>Please log in to your dashboard to view more details and complete the next steps.</p>
+                  <a href="http://localhost:5173/user/dashboard?tab=rentals" style="display: inline-block; background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">View My Bookings</a>
+                  
+                  <p style="color: #6B7280; font-size: 14px; margin-top: 30px;">Best regards,<br>RentHive Team</p>
+                </div>
+              `;
+              
+              await sendEmail({
+                to: tenant.email,
+                subject: `🎉 Booking Approved - ${property.title}`,
+                html: emailHtml,
+                text: `Your booking for ${property.title} has been approved! Move-in: ${moveInDate}, Monthly Rent: NPR ${parseInt(booking.monthlyRent).toLocaleString()}`
+              });
+              
+              console.log(`✅ Approval email sent to ${tenant.email}`);
+            }
+          } catch (emailError) {
+            console.error('Error sending approval email:', emailError);
+            // Don't fail the approval if email fails
+          }
+        }
         
         if (io && connectedUsers) {
           const socketId = connectedUsers.get(booking.tenantId.toString());
@@ -596,8 +652,6 @@ exports.bookProperty = async (req, res) => {
 
     // Send notification to property owner
     try {
-      const { io, connectedUsers } = require('../server');
-      
       const moveInFormatted = new Date(moveInDate).toLocaleDateString('en-US', {
         month: 'long',
         day: 'numeric',
@@ -615,37 +669,44 @@ exports.bookProperty = async (req, res) => {
       const notificationTitle = '🏠 New Property Booking Request';
       const notificationMessage = `${tenant.name} wants to rent your property "${property.title}" from ${moveInFormatted}${moveOutDate ? ` to ${moveOutFormatted}` : ''}. Monthly rent: NPR ${parseInt(property.rentPrice).toLocaleString()}`;
 
-      // Create notification
+      // Create notification in database
       const notification = await Notification.create({
-        userId: property.vendorId,
+        user_id: property.vendorId,
         title: notificationTitle,
         message: notificationMessage,
         type: 'info',
-        isBroadcast: false,
-        link: `/owner/dashboard?tab=bookings`
+        is_broadcast: false,
+        link: `/owner/dashboard?tab=bookings`,
+        metadata: JSON.stringify({
+          bookingId: booking.id,
+          propertyId: property.id,
+          tenantId: tenant.id,
+          requiresAction: true
+        })
       });
 
       console.log('✅ Notification created:', notification.id);
-      console.log(`📧 BOOKING REQUEST: Sending notification to OWNER (vendorId: ${property.vendorId})`);
+      console.log(`📧 BOOKING REQUEST: Notification saved for OWNER (vendorId: ${property.vendorId})`);
       console.log(`   Tenant ID who booked: ${tenantId}`);
       console.log(`   This notification should ONLY go to owner, NOT tenant`);
 
-      // Emit real-time notification
-      if (io && connectedUsers) {
-        const socketId = connectedUsers.get(property.vendorId.toString());
-        if (socketId) {
-          io.to(socketId).emit('new-notification', {
-            id: notification.id,
-            title: notification.title,
-            message: notification.message,
-            type: notification.type,
-            link: notification.link,
-            is_read: false,
-            created_at: notification.created_at,
-            is_broadcast: false
-          });
-          console.log(`✅ Booking request notification sent to owner ${property.vendorId}`);
-        }
+      // Emit real-time notification via Socket.IO
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user_${property.vendorId}`).emit('new-notification', {
+          id: notification.id,
+          title: notification.title,
+          message: notification.message,
+          type: notification.type,
+          link: notification.link,
+          is_read: false,
+          created_at: notification.created_at,
+          is_broadcast: false,
+          metadata: notification.metadata
+        });
+        console.log(`✅ Real-time notification sent to owner ${property.vendorId}`);
+      } else {
+        console.log('⚠️ Socket.IO not available, notification saved to database only');
       }
     } catch (notificationError) {
       console.error('Error sending notification:', notificationError);

@@ -52,7 +52,8 @@ const Bike = sequelize.define('Bike', {
   },
   weeklyRate: {
     type: DataTypes.DECIMAL(10, 2),
-    allowNull: false
+    allowNull: true,
+    defaultValue: null
   },
   monthlyRate: {
     type: DataTypes.DECIMAL(10, 2),

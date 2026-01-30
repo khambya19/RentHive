@@ -22,10 +22,12 @@ import {
 } from 'lucide-react';
 
 
-const PropertyModal = ({ property, onClose, isSaved = false, onToggleSave, onReport, onReview }) => {
+const PropertyModal = ({ property, onClose, isSaved = false, onToggleSave, onReport, onReview, onContactOwner }) => {
   const [showLightbox, setShowLightbox] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [booking, setBooking] = useState(false);
+  
   // Save button handler
   const handleSave = async () => {
     if (saving) return;
@@ -44,14 +46,75 @@ const PropertyModal = ({ property, onClose, isSaved = false, onToggleSave, onRep
     if (onReview) onReview(property);
   };
 
+  // Contact Owner handler
+  const handleContactOwner = () => {
+    if (onContactOwner) onContactOwner(property);
+  };
+
+  // Book Now handler
+  const handleBookNow = async () => {
+    if (booking) return;
+    
+    setBooking(true);
+    try {
+      const token = localStorage.getItem('token');
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5050/api';
+      
+      const isProperty = property.type === 'property';
+      const endpoint = isProperty 
+        ? `${API_BASE_URL}/properties/book`
+        : `${API_BASE_URL}/bikes/book`;
+      
+      const bookingData = isProperty 
+        ? {
+            propertyId: property.id,
+            moveInDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 7 days from now
+            message: `I'm interested in booking this property.`
+          }
+        : {
+            bikeId: property.id,
+            vendorId: property.vendorId || property.vendor?.id,
+            startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            message: `I'm interested in booking this bike.`
+          };
+      
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(bookingData)
+      });
+
+      if (response.ok) {
+        alert('Booking request sent successfully! The owner will contact you soon.');
+        onClose();
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to send booking request. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error booking:', error);
+      alert('Failed to send booking request. Please try again.');
+    } finally {
+      setBooking(false);
+    }
+  };
+
   if (!property) return null;
 
   const isProperty = property.type === 'property';
   const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5050';
   
-  // Fix image path logic
+  // Fix image path logic - handle both formats
   const getImageUrl = (img) => {
     if (!img) return null;
+    // Check if path already includes /uploads prefix
+    if (img.startsWith('/uploads')) {
+      return `${baseUrl}${img}`;
+    }
     const folder = isProperty ? 'properties' : 'bikes';
     return `${baseUrl}/uploads/${folder}/${img}`;
   };
@@ -75,7 +138,7 @@ const PropertyModal = ({ property, onClose, isSaved = false, onToggleSave, onRep
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-[1000] p-0 sm:p-0 m-0" onClick={onClose}>
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-[9999] p-0 sm:p-0 m-0" onClick={onClose}>
       <div className="rounded-2xl shadow-2xl w-full max-w-3xl md:max-w-5xl max-h-[95vh] overflow-y-auto relative m-0" style={{ background: '#f4fbfd' }} onClick={e => e.stopPropagation()}>
         
         {/* Close Button */}
@@ -349,15 +412,22 @@ const PropertyModal = ({ property, onClose, isSaved = false, onToggleSave, onRep
 
 
               <div className="space-y-3">
-                <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center shadow-lg shadow-blue-200">
+                <button 
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={handleBookNow}
+                  disabled={booking}
+                >
                   <Calendar className="w-5 h-5 mr-2" />
-                  Book Now
+                  {booking ? 'Sending Request...' : 'Book Now'}
                 </button>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <button className="flex items-center justify-center bg-gray-50 hover:bg-gray-100 text-gray-700 font-semibold py-3 px-4 rounded-xl border border-gray-200 transition-colors">
-                    <MessageCircle className="w-5 h-5 mr-2 text-blue-500" />
-                    Chat
+                  <button 
+                    className="flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold py-3 px-4 rounded-xl border border-blue-200 transition-colors"
+                    onClick={handleContactOwner}
+                  >
+                    <MessageCircle className="w-5 h-5 mr-2" />
+                    Contact
                   </button>
                   <button
                     className="flex items-center justify-center bg-gray-50 hover:bg-red-50 text-red-600 font-semibold py-3 px-4 rounded-xl border border-red-200 transition-colors"

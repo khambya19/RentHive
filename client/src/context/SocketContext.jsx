@@ -134,7 +134,7 @@ export const SocketProvider = ({ children }) => {
       if (res.data.success) {
         setNotifications((prev) =>
           prev.map((n) =>
-            n.id === notificationId ? { ...n, isRead: true } : n
+            n.id === notificationId ? { ...n, is_read: true } : n
           )
         );
         setUnreadCount((prev) => Math.max(0, prev - 1));
@@ -153,7 +153,7 @@ export const SocketProvider = ({ children }) => {
         `${apiUrl}/notifications/user/${currentUserId}/read-all`
       );
       if (res.data.success) {
-        setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+        setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
         setUnreadCount(0);
         // console.log('✅ All notifications marked as read');
       }
@@ -173,7 +173,7 @@ export const SocketProvider = ({ children }) => {
       if (res.data.success) {
         setNotifications((prev) => {
           const removed = prev.find((n) => n.id === notificationId);
-          if (removed && !removed.isRead) {
+          if (removed && !removed.is_read) {
             setUnreadCount((c) => Math.max(0, c - 1));
           }
           return prev.filter((n) => n.id !== notificationId);

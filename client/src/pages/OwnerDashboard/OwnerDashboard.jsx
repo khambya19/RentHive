@@ -10,6 +10,7 @@ import OwnerBookings from "./OwnerBookings";
 import UnifiedPostingForm from "./UnifiedPostingForm";
 import AllListings from "./AllListings";
 import Settings from "../Settings/Settings";
+import Messages from "./Messages";
 import API_BASE_URL from '../../config/api';
 import { 
   LayoutDashboard, 
@@ -202,7 +203,7 @@ const OwnerDashboard = () => {
   }
 
   return (
-    <div className="owner-dashboard flex h-screen overflow-hidden" style={{ background: '#aed8e0' }}>
+    <div className="owner-dashboard flex h-screen overflow-hidden bg-white">
       {/* Dashboard Notifications */}
       <DashboardNotifications 
         notifications={notifications} 
@@ -220,7 +221,7 @@ const OwnerDashboard = () => {
       {/* Sidebar - Mobile: Fixed Slide-over, Desktop: Static/Sticky */}
       <aside 
         className={`
-          sidebar fixed inset-y-0 left-0 z-30 text-white transition-transform duration-300 ease-in-out w-72 bg-[#465A66]
+          sidebar fixed inset-y-0 left-0 z-30 text-white transition-all duration-300 ease-in-out w-72 bg-[#465A66]
           ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:relative lg:translate-x-0
           ${sidebarCollapsed ? 'lg:w-20' : 'lg:w-72'}
@@ -327,7 +328,7 @@ const OwnerDashboard = () => {
         </div>
       </aside>
 
-      <main className="main-content flex-1 flex flex-col h-screen overflow-hidden relative">
+      <main className="main-content flex-1 flex flex-col h-screen overflow-hidden relative transition-all duration-300 bg-white">
         <div className="content-header bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm z-10">
           <div className="header-left flex items-center gap-4">
              {/* Mobile Menu Toggle */}
@@ -369,13 +370,7 @@ const OwnerDashboard = () => {
           {activeTab === 'listings' && <AllListings showSuccess={showSuccess} showError={showError} />}
           {activeTab === 'bookings' && <OwnerBookings showSuccess={showSuccess} showError={showError} />}
           {activeTab === 'payments' && <PaymentManagement />}
-          {activeTab === 'messages' && (
-            <div className="placeholder flex flex-col items-center justify-center h-full text-gray-500">
-              <Construction size={48} className="mb-4 text-gray-400" />
-              <h3 className="text-xl font-semibold">Messages Feature</h3>
-              <p>Coming Soon</p>
-            </div>
-          )}
+          {activeTab === 'messages' && <Messages />}
           {activeTab === 'add-listing' && <UnifiedPostingForm showSuccess={showSuccess} showError={showError} />}
           {activeTab === 'settings' && <Settings />}
         </div>

@@ -270,7 +270,7 @@ const UnifiedPostingForm = ({ showSuccess, showError }) => {
           </button>
           <h2 className="text-2xl font-bold text-gray-900">List a Property</h2>
         </div>
-        <PropertyManagement inlineMode={true} />
+        <PropertyManagement inlineMode={true} showSuccess={showSuccess} showError={showError} />
       </div>
     );
   }

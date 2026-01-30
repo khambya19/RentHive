@@ -14,7 +14,8 @@ import {
   ChevronRight,
   Hexagon,
   Heart,
-  Flag
+  Flag,
+  MessageSquare
 } from 'lucide-react';
 
 const Sidebar = ({ activeTab, setActiveTab, collapsed, mobileMenuOpen, setMobileMenuOpen }) => {
@@ -26,14 +27,14 @@ const Sidebar = ({ activeTab, setActiveTab, collapsed, mobileMenuOpen, setMobile
       {/* Mobile Overlay */}
       {mobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-[99] lg:hidden backdrop-blur-sm"
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm"
           onClick={() => setMobileMenuOpen(false)}
         />
       )}
 
       <aside 
         className={`
-          sidebar fixed inset-y-0 left-0 z-[100] text-white transition-transform duration-300 ease-in-out bg-[#465A66] flex flex-col
+          sidebar fixed inset-y-0 left-0 z-50 text-white transition-transform duration-300 ease-in-out bg-[#465A66] flex flex-col
           ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:relative lg:translate-x-0
           ${collapsed ? 'w-64 sm:w-20' : 'w-64 sm:w-72'}
@@ -118,6 +119,14 @@ const Sidebar = ({ activeTab, setActiveTab, collapsed, mobileMenuOpen, setMobile
         >
           <Key size={20} />
           {!collapsed && <span className="font-medium">My Rentals</span>}
+        </button>
+
+        <button 
+          className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'messages' ? 'text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:text-white'}`} style={activeTab === 'messages' ? { background: 'rgba(248,250,252,0.10)' } : {}} 
+          onClick={() => setActiveTab('messages')}
+        >
+          <MessageSquare size={20} />
+          {!collapsed && <span className="font-medium">Messages</span>}
         </button>
 
         <button 

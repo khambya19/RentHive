@@ -18,6 +18,7 @@ const Inquiry = require('./models/Inquiry');
 const Bike = require('./models/Bike');
 const BikeBooking = require('./models/BikeBooking');
 const Payment = require('./models/Payment');
+const Message = require('./models/Message');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const propertyRoutes = require('./routes/propertyRoutes');
@@ -25,6 +26,7 @@ const bikeRoutes = require('./routes/bikeRoutes');
 const ownerRoutes = require('./routes/ownerRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const publicRoutes = require('./routes/publicRoutes');
+const messageRoutes = require('./routes/messageRoutes');
 
 
 
@@ -33,7 +35,7 @@ const app = express();
 // Enable CORS for all origins (adjust as needed for production)
 app.use(cors({
   origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 }));
@@ -55,6 +57,7 @@ app.use('/api/properties', propertyRoutes);
 app.use('/api/bikes', bikeRoutes);
 app.use('/api/owners', ownerRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/messages', messageRoutes);
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -63,6 +66,9 @@ const io = new Server(server, {
     methods: ['GET', 'POST'],
   },
 });
+
+// Make io accessible in routes/controllers
+app.set('io', io);
 
 const connectedUsers = new Map();
 
@@ -137,6 +143,14 @@ io.on('connection', (socket) => {
           Payment.belongsTo(User, { foreignKey: 'tenantId', as: 'tenant' });
           Payment.belongsTo(User, { foreignKey: 'ownerId', as: 'owner' });
           Booking.hasMany(Payment, { foreignKey: 'bookingId' });
+
+          // Messages
+          Message.belongsTo(User, { foreignKey: 'senderId', as: 'sender' });
+          Message.belongsTo(User, { foreignKey: 'receiverId', as: 'receiver' });
+          Message.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
+          Message.belongsTo(Bike, { foreignKey: 'bikeId', as: 'bike' });
+          User.hasMany(Message, { foreignKey: 'senderId', as: 'sentMessages' });
+          User.hasMany(Message, { foreignKey: 'receiverId', as: 'receivedMessages' });
 
           // Sync DB (safe mode - no force/alter unless you really need it)
           await sequelize.sync(); // ← safe sync, won't drop tables

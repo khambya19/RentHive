@@ -98,6 +98,84 @@ router.get('/bike-bookings', async (req, res) => {
 });
 
 // Get all bookings for owner (property bookings + bike rentals from their bikes)
+router.get('/bookings', async (req, res) => {
+  try {
+    const ownerId = req.user.id;
+    console.log(' Fetching all bookings for owner ID:', ownerId);
+
+    // Get property bookings where owner is the property owner
+    const propertyBookings = await Booking.findAll({
+      where: { vendorId: ownerId },
+      include: [
+        {
+          model: User,
+          as: 'tenant',
+          attributes: ['id', 'name', 'phone', 'email']
+        },
+        {
+          model: Property,
+          as: 'property',
+          attributes: ['id', 'title', 'address', 'city', 'propertyType', 'images']
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+    console.log(` Found ${propertyBookings.length} property bookings`);
+
+    // Transform property bookings to match frontend expectations
+    const transformedPropertyBookings = propertyBookings.map(booking => ({
+      id: booking.id,
+      startDate: booking.moveInDate,
+      endDate: booking.moveOutDate,
+      totalAmount: booking.monthlyRent,
+      status: booking.status,
+      message: booking.message,
+      createdAt: booking.createdAt,
+      renter: booking.tenant ? {
+        fullName: booking.tenant.name,
+        phone: booking.tenant.phone,
+        email: booking.tenant.email
+      } : null,
+      property: booking.property ? {
+        title: booking.property.title,
+        location: `${booking.property.address}, ${booking.property.city}`,
+        propertyType: booking.property.propertyType,
+        images: booking.property.images
+      } : null
+    }));
+
+    // Get bike bookings where this owner is the bike vendor (the one who posted the bike)
+    const bikeBookings = await BikeBooking.findAll({
+      where: { vendorId: ownerId },
+      include: [
+        {
+          model: User,
+          as: 'lessor',
+          attributes: ['id', 'name', 'phone', 'email']
+        },
+        {
+          model: Bike,
+          as: 'bike',
+          attributes: ['id', 'brand', 'model', 'type', 'images', 'location']
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+    console.log(` Found ${bikeBookings.length} bike bookings`);
+
+    return res.json({
+      propertyBookings: transformedPropertyBookings,
+      bikeBookings
+    });
+  } catch (error) {
+    console.error('❌ Error fetching all owner bookings:', error);
+    console.error('Error details:', error.message);
+    console.error('Stack:', error.stack);
+    return res.status(500).json({ error: 'Failed to fetch all bookings', details: error.message });
+  }
+});
+
+// Alias route for backward compatibility
 router.get('/all-bookings', async (req, res) => {
   try {
     const ownerId = req.user.id;

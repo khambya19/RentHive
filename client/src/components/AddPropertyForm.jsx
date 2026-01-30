@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import PropertyLocationMap from './PropertyLocationMap';
 import API_BASE_URL from '../config/api';
+import { useAuth } from '../context/AuthContext';
 import { 
   MapPin, 
   Check, 
@@ -11,12 +12,14 @@ import {
   ChevronRight, 
   CheckCircle,
   X,
-  Home
+  Home,
+  DollarSign
 } from 'lucide-react';
 
 const AddPropertyForm = ({ onSubmit, initialData = null }) => {
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
-  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(initialData?.latitude && initialData?.longitude ? { lat: initialData.latitude, lng: initialData.longitude } : null);
   const [selectedLocation, setSelectedLocation] = useState(initialData?.latitude && initialData?.longitude ? { lat: initialData.latitude, lng: initialData.longitude } : null);
   const [locationSearchQuery, setLocationSearchQuery] = useState('');
   const [imagePreviews, setImagePreviews] = useState([]);
@@ -116,9 +119,9 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
     additionalDocuments: [],
     
     // Contact
-    contactName: initialData?.contactName || '',
-    contactEmail: initialData?.contactEmail || '',
-    contactPhone: initialData?.contactPhone || '',
+    contactName: initialData?.contactName || user?.name || '',
+    contactEmail: initialData?.contactEmail || user?.email || '',
+    contactPhone: initialData?.contactPhone || user?.phone || '',
   });
 
   const totalSteps = 6;
@@ -140,11 +143,12 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
 
   const handleLocationSelect = (location) => {
     setSelectedLocation(location);
-    setFormData(prev => ({
-      ...prev,
-      latitude: location.lat,
-      longitude: location.lng
-    }));
+        setFormData(prev => ({
+          ...prev,
+          latitude: location.lat,
+          longitude: location.lng,
+          leaseTerms: undefined // Removed leaseTerms as requested
+        }));
   };
 
   const clearLocation = () => {
@@ -204,13 +208,27 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
   };
 
   const validateForm = () => {
-    const requiredFields = [
-      'title', 'propertyType', 'listingType', 'price', 
-      'area', 'propertyCondition', 'address', 'city', 
-      'country', 'bedrooms', 'bathrooms'
-    ];
+    const requiredFieldsMap = {
+      title: 'Property Title',
+      propertyType: 'Property Type',
+      listingType: 'Listing Type',
+      price: 'Price',
+      area: 'Area (sq ft)',
+      propertyCondition: 'Property Condition',
+      address: 'Address',
+      city: 'City',
+      country: 'Country',
+      bedrooms: 'Bedrooms',
+      bathrooms: 'Bathrooms'
+    };
 
-    const missingFields = requiredFields.filter(field => !formData[field]);
+    const missingFields = [];
+    for (const [field, label] of Object.entries(requiredFieldsMap)) {
+      if (!formData[field] || formData[field] === '' || formData[field] === 0) {
+        missingFields.push(label);
+      }
+    }
+
     if (missingFields.length > 0) {
       alert(`Please fill in all required fields. Missing: ${missingFields.join(', ')}`);
       return false;
@@ -271,10 +289,39 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
       }
     }
 
+    // Upload floor plan if any
+    let floorPlanFilename = null;
+    if (formData.floorPlan) {
+      try {
+        const fpFormData = new FormData();
+        fpFormData.append('images', formData.floorPlan); // Reuse existing endpoint
+
+        const token = localStorage.getItem('token');
+        const uploadResponse = await fetch(`${API_BASE_URL}/properties/upload-images`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: fpFormData
+        });
+
+        if (uploadResponse.ok) {
+          const uploadData = await uploadResponse.json();
+          if (uploadData.images && uploadData.images.length > 0) {
+            floorPlanFilename = uploadData.images[0];
+          }
+        }
+      } catch (error) {
+        console.error('Error uploading floor plan:', error);
+        // Continue without floor plan if fail, or alert user
+      }
+    }
+
     // Prepare data
     const propertyData = {
       title: formData.title,
       propertyType: formData.propertyType,
+      listingType: formData.listingType,
       address: formData.address,
       city: formData.city,
       bedrooms: formData.bedrooms,
@@ -285,8 +332,31 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
       amenities: formData.combinedFeatures,
       description: formData.description,
       images: uploadedImageFilenames,
+      floorPlan: floorPlanFilename,
+      virtualTourLink: formData.virtualTourLink,
       latitude: formData.latitude,
-      longitude: formData.longitude
+      longitude: formData.longitude,
+      // Additional Details
+      propertyCondition: formData.propertyCondition,
+      yearBuilt: formData.yearBuilt,
+      lotSize: formData.lotSize,
+      lotSizeUnit: formData.lotSizeUnit,
+      garageSpaces: formData.garageSpaces,
+      // Financials
+      hoaFees: formData.hoaFees,
+      hoaFeesFrequency: formData.hoaFeesFrequency,
+      // Rental Specifics
+      furnished: formData.furnished,
+      petPolicy: formData.petPolicy,
+      petDetails: formData.petDetails,
+      leaseTerms: formData.leaseTerms,
+      // JSON Fields
+      appliancesIncluded: formData.appliancesIncluded,
+      heatingSystem: formData.heatingSystem,
+      coolingSystem: formData.coolingSystem,
+      exteriorMaterial: formData.exteriorMaterial,
+      view: formData.view,
+      parkingType: formData.parkingType
     };
 
     onSubmit(propertyData);
@@ -306,18 +376,18 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
       ></div>
 
       {[1, 2, 3, 4, 5, 6].map(step => (
-        <div key={step} className="flex flex-col items-center group">
+        <div key={step} className="flex flex-col items-center group relative z-10">
           <div 
-            className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 border-2 bg-white
+            className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg transition-all duration-300 border-[3px] 
               ${currentStep === step 
-                ? 'bg-blue-600 border-blue-600 text-white shadow-lg scale-110 ring-4 ring-blue-100' 
+                ? 'bg-blue-600 border-blue-600 text-white shadow-xl scale-110 ring-4 ring-blue-50' 
                 : currentStep > step 
                   ? 'bg-green-500 border-green-500 text-white' 
-                  : 'border-gray-200 text-gray-400 group-hover:border-gray-300'}`}
+                  : 'bg-white border-gray-200 text-gray-400 group-hover:border-gray-300'}`}
           >
-            {currentStep > step ? <Check size={20} /> : step}
+            {currentStep > step ? <Check size={24} strokeWidth={3} /> : step}
           </div>
-          <span className={`text-xs mt-2 font-medium hidden sm:block ${currentStep === step ? 'text-blue-600' : 'text-gray-500'}`}>
+          <span className={`text-xs mt-3 font-bold uppercase tracking-wider hidden sm:block transition-colors duration-300 ${currentStep === step ? 'text-blue-700' : 'text-gray-500'}`}>
             {getStepLabel(step)}
           </span>
         </div>
@@ -384,9 +454,10 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
     );
   };
 
-  const inputClass = "w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all placeholder-gray-400 text-gray-800 bg-white shadow-sm";
-  const labelClass = "block text-sm font-semibold text-gray-700 mb-2";
-  const sectionTitleClass = "text-xl font-bold text-gray-900 mb-6 pb-2 border-b border-gray-100 flex items-center gap-2";
+  const inputClass = "w-full px-4 py-3.5 rounded-xl border border-gray-200 bg-gray-50/50 text-gray-900 placeholder-gray-400 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-200 font-medium shadow-sm hover:border-gray-300";
+  const selectClass = "w-full px-4 py-3.5 rounded-xl border border-gray-200 bg-gray-50/50 text-gray-900 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-200 font-medium shadow-sm hover:border-gray-300 appearance-none cursor-pointer";
+  const labelClass = "block text-sm font-bold text-gray-700 mb-2 text-left tracking-wide";
+  const sectionTitleClass = "text-2xl font-bold text-gray-900 mb-8 pb-4 border-b border-gray-100 flex items-center gap-3";
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -422,9 +493,9 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                     value={formData.propertyType}
                     onChange={(e) => handleInputChange('propertyType', e.target.value)}
                     required
-                    className={inputClass}
+                    className={selectClass}
                   >
-                    {['Apartment', 'House', 'Condo', 'Townhouse', 'Villa', 'Land', 'Commercial', 'Office', 'Warehouse', 'Other'].map(type => (
+                    {['Apartment', 'Room', 'House', 'Villa', 'Studio', 'Townhouse', 'Land', 'Office', 'Warehouse', 'Other'].map(type => (
                       <option key={type} value={type}>{type}</option>
                     ))}
                   </select>
@@ -436,50 +507,15 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                     value={formData.listingType}
                     onChange={(e) => handleInputChange('listingType', e.target.value)}
                     required
-                    className={inputClass}
+                    className={selectClass}
                   >
-                    <option value="For Sale">For Sale</option>
                     <option value="For Rent">For Rent</option>
                     <option value="Lease">Lease</option>
                   </select>
                 </div>
               </div>
+              
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <div>
-                  <label className={labelClass}>Price <span className="text-red-500">*</span></label>
-                  <input
-                    type="number"
-                    value={formData.price}
-                    onChange={(e) => handleInputChange('price', e.target.value)}
-                    placeholder="e.g., 25000"
-                    required
-                    className={inputClass}
-                  />
-                </div>
-
-                <div>
-                  <label className={labelClass}>Area <span className="text-red-500">*</span></label>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      value={formData.area}
-                      onChange={(e) => handleInputChange('area', e.target.value)}
-                      placeholder="e.g., 1200"
-                      required
-                      className={`${inputClass} flex-1`}
-                    />
-                    <select
-                      value={formData.areaUnit}
-                      onChange={(e) => handleInputChange('areaUnit', e.target.value)}
-                      className={`${inputClass} w-24`}
-                    >
-                      <option value="sq ft">sq ft</option>
-                      <option value="m²">m²</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
 
               <div className="mb-6">
                 <label className={labelClass}>Property Condition <span className="text-red-500">*</span></label>
@@ -487,7 +523,7 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                   value={formData.propertyCondition}
                   onChange={(e) => handleInputChange('propertyCondition', e.target.value)}
                   required
-                  className={inputClass}
+                  className={selectClass}
                 >
                   <option value="New Construction">New Construction</option>
                   <option value="Move-in Ready">Move-in Ready</option>
@@ -646,9 +682,9 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                     value={formData.bedrooms}
                     onChange={(e) => handleInputChange('bedrooms', parseInt(e.target.value))}
                     required
-                    className={inputClass}
+                    className={selectClass}
                   >
-                    {[0, 1, 2, 3, 4, 5, 6, 7, 8].map(num => (
+                    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
                       <option key={num} value={num}>{num}</option>
                     ))}
                   </select>
@@ -660,7 +696,7 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                     value={formData.bathrooms}
                     onChange={(e) => handleInputChange('bathrooms', parseInt(e.target.value))}
                     required
-                    className={inputClass}
+                    className={selectClass}
                   >
                     {[0, 1, 2, 3, 4, 5, 6].map(num => (
                       <option key={num} value={num}>{num}</option>
@@ -673,7 +709,7 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                   <select
                     value={formData.halfBathrooms}
                     onChange={(e) => handleInputChange('halfBathrooms', parseInt(e.target.value))}
-                    className={inputClass}
+                    className={selectClass}
                   >
                     {[0, 1, 2, 3].map(num => (
                       <option key={num} value={num}>{num}</option>
@@ -682,7 +718,28 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div>
+                  <label className={labelClass}>Area <span className="text-red-500">*</span></label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={formData.area}
+                      onChange={(e) => handleInputChange('area', e.target.value)}
+                      placeholder="e.g., 1200"
+                      required
+                      className={`${inputClass} flex-1 min-w-0`}
+                    />
+                    <select
+                      value={formData.areaUnit}
+                      onChange={(e) => handleInputChange('areaUnit', e.target.value)}
+                      className={`${selectClass} w-32`}
+                    >
+                      <option value="sq ft">sq ft</option>
+                      <option value="m²">m²</option>
+                    </select>
+                  </div>
+                </div>
                 <div>
                   <label className={labelClass}>Year Built</label>
                   <input
@@ -709,7 +766,7 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                     <select
                       value={formData.lotSizeUnit}
                       onChange={(e) => handleInputChange('lotSizeUnit', e.target.value)}
-                      className={`${inputClass} w-24`}
+                      className={`${selectClass} w-32`}
                     >
                       <option value="sq ft">sq ft</option>
                       <option value="m²">m²</option>
@@ -725,7 +782,7 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                   <select
                     value={formData.garageSpaces}
                     onChange={(e) => handleInputChange('garageSpaces', e.target.value)}
-                    className={inputClass}
+                    className={selectClass}
                   >
                     <option value="0">0</option>
                     <option value="1">1</option>
@@ -754,7 +811,7 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                     <select
                       value={formData.fireplaceType}
                       onChange={(e) => handleInputChange('fireplaceType', e.target.value)}
-                      className={inputClass}
+                      className={selectClass}
                     >
                       <option value="Wood">Open Balcony</option>
                       <option value="Gas">Covered Balcony</option>
@@ -876,53 +933,6 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                 Pricing & Financial Details
               </h2>
 
-              <div className="mb-6">
-                <label className={labelClass}>Annual Property Taxes (NPR)</label>
-                <input
-                  type="number"
-                  value={formData.propertyTaxes}
-                  onChange={(e) => handleInputChange('propertyTaxes', e.target.value)}
-                  placeholder="e.g., 25000"
-                  className={inputClass}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <div>
-                  <label className={labelClass}>Maintenance Fees (NPR)</label>
-                  <input
-                    type="number"
-                    value={formData.hoaFees}
-                    onChange={(e) => handleInputChange('hoaFees', e.target.value)}
-                    placeholder="e.g., 2000"
-                    className={inputClass}
-                  />
-                </div>
-
-                <div>
-                  <label className={labelClass}>Payment Frequency</label>
-                  <select
-                    value={formData.hoaFeesFrequency}
-                    onChange={(e) => handleInputChange('hoaFeesFrequency', e.target.value)}
-                    className={inputClass}
-                  >
-                    <option value="Monthly">Monthly</option>
-                    <option value="Quarterly">Quarterly</option>
-                    <option value="Yearly">Yearly</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <label className={labelClass}>Other Monthly Expenses (NPR)</label>
-                <input
-                  type="number"
-                  value={formData.maintenanceFees}
-                  onChange={(e) => handleInputChange('maintenanceFees', e.target.value)}
-                  placeholder="Water, electricity, internet, etc."
-                  className={inputClass}
-                />
-              </div>
 
               {/* Rental Specific Fields */}
               {formData.listingType === 'For Rent' && (
@@ -937,7 +947,7 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                         value={formData.monthlyRent}
                         onChange={(e) => handleInputChange('monthlyRent', e.target.value)}
                         placeholder="e.g., 25000"
-                        required={formData.listingType === 'For Rent'}
+                        required
                         className={inputClass}
                       />
                     </div>
@@ -960,7 +970,7 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                       <select
                         value={formData.leaseTerms}
                         onChange={(e) => handleInputChange('leaseTerms', e.target.value)}
-                        className={inputClass}
+                        className={selectClass}
                       >
                         <option value="1 Month">1 Month</option>
                         <option value="3 Months">3 Months</option>
@@ -977,7 +987,7 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                       <select
                         value={formData.furnished}
                         onChange={(e) => handleInputChange('furnished', e.target.value)}
-                        className={inputClass}
+                        className={selectClass}
                       >
                         <option value="Unfurnished">Unfurnished</option>
                         <option value="Semi-Furnished">Semi-Furnished</option>
@@ -992,7 +1002,7 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                       <select
                         value={formData.petPolicy}
                         onChange={(e) => handleInputChange('petPolicy', e.target.value)}
-                        className={inputClass}
+                        className={selectClass}
                       >
                         <option value="No">No Pets Allowed</option>
                         <option value="Yes">Pets Allowed</option>
@@ -1024,7 +1034,7 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                   <select
                     value={formData.solarPanels}
                     onChange={(e) => handleInputChange('solarPanels', e.target.value)}
-                    className={inputClass}
+                    className={selectClass}
                   >
                     <option value="No">No</option>
                     <option value="Solar Panels">Solar Panels</option>
@@ -1038,7 +1048,7 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                   <select
                     value={formData.energyEfficient}
                     onChange={(e) => handleInputChange('energyEfficient', e.target.value)}
-                    className={inputClass}
+                    className={selectClass}
                   >
                     <option value="No">No</option>
                     <option value="Inverter">Inverter</option>
@@ -1114,7 +1124,8 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                   onChange={(e) => handleInputChange('contactName', e.target.value)}
                   placeholder="Your name or agent name"
                   required
-                  className={inputClass}
+                  readOnly
+                  className={`${inputClass} bg-gray-100 cursor-not-allowed`}
                 />
               </div>
 
@@ -1127,7 +1138,8 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                     onChange={(e) => handleInputChange('contactEmail', e.target.value)}
                     placeholder="email@example.com"
                     required
-                    className={inputClass}
+                    readOnly
+                    className={`${inputClass} bg-gray-100 cursor-not-allowed`}
                   />
                 </div>
 
@@ -1139,7 +1151,8 @@ const AddPropertyForm = ({ onSubmit, initialData = null }) => {
                     onChange={(e) => handleInputChange('contactPhone', e.target.value)}
                     placeholder="+977-9801234567"
                     required
-                    className={inputClass}
+                    readOnly
+                    className={`${inputClass} bg-gray-100 cursor-not-allowed`}
                   />
                 </div>
               </div>

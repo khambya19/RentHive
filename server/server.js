@@ -18,6 +18,10 @@ const Inquiry = require('./models/Inquiry');
 const Bike = require('./models/Bike');
 const BikeBooking = require('./models/BikeBooking');
 const Payment = require('./models/Payment');
+const Report = require('./models/Report');
+const Message = require('./models/Message');
+const BookingApplication = require('./models/BookingApplication');
+const adminRoutes = require('./routes/adminRoutes');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const propertyRoutes = require('./routes/propertyRoutes');
@@ -25,6 +29,8 @@ const bikeRoutes = require('./routes/bikeRoutes');
 const ownerRoutes = require('./routes/ownerRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const publicRoutes = require('./routes/publicRoutes');
+const reportRoutes = require('./routes/reportRoutes');
+const bookingRoutes = require('./routes/bookingRoutes');
 
 
 
@@ -33,7 +39,7 @@ const app = express();
 // Enable CORS for all origins (adjust as needed for production)
 app.use(cors({
   origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 }));
@@ -49,12 +55,16 @@ app.use('/uploads/profiles', express.static(path.join(__dirname, 'uploads/profil
 app.use('/api/public', publicRoutes);
 
 // Protected routes
+app.use('/api/admin', adminRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/properties', propertyRoutes);
 app.use('/api/bikes', bikeRoutes);
 app.use('/api/owners', ownerRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/bookings', bookingRoutes);
+app.use('/api/chat', require('./routes/chatRoutes'));
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -69,7 +79,11 @@ const connectedUsers = new Map();
 io.on('connection', (socket) => {
   console.log('✅ Client connected:', socket.id);
 
-  socket.on('register', (userId) => {
+  socket.on('register', (userData) => {
+    // Handle both old (just ID) and new (object with role) formats
+    const userId = typeof userData === 'object' ? userData.userId : userData;
+    const role = typeof userData === 'object' ? userData.role : null;
+
     if (!userId) {
       console.warn('⚠️ Register attempt without userId from socket:', socket.id);
       return;
@@ -82,9 +96,29 @@ io.on('connection', (socket) => {
     }
     socket.userId = userIdStr;
     socket.join(`user_${userIdStr}`);
+
+    // Join admin room if super_admin
+    if (role === 'super_admin') {
+      socket.join('admins');
+      console.log(`🛡️ Admin ${userId} joined the admins room`);
+    }
+
     connectedUsers.set(userIdStr, socket.id);
     console.log(`👤 User ${userId} registered to socket ${socket.id}`);
     console.log(`📊 Total connected users: ${connectedUsers.size}`);
+  });
+
+  socket.on('join_chat', (room) => {
+    socket.join(room);
+    console.log(`User ${socket.id} joined chat room: ${room}`);
+  });
+
+  socket.on('send_message', (data) => {
+    // data = { senderId, receiverId, content, ... }
+    // Emit to receiver's room
+    // Receiver room could be 'user_' + receiverId
+    io.to(`user_${data.receiverId}`).emit('receive_message', data);
+    // Also emit back to sender (optional, or just handle locally)
   });
 
   socket.on('disconnect', () => {
@@ -135,12 +169,25 @@ io.on('connection', (socket) => {
           // Payments
           Payment.belongsTo(Booking, { foreignKey: 'bookingId' });
           Payment.belongsTo(User, { foreignKey: 'tenantId', as: 'tenant' });
+
+          // Booking Applications
+          User.hasMany(BookingApplication, { foreignKey: 'userId', as: 'applications' });
+          BookingApplication.belongsTo(User, { foreignKey: 'userId', as: 'applicant' });
           Payment.belongsTo(User, { foreignKey: 'ownerId', as: 'owner' });
           Booking.hasMany(Payment, { foreignKey: 'bookingId' });
 
+          // Report associations
+          Report.belongsTo(User, { foreignKey: 'reporterId', as: 'reporter' });
+
+          // Message associations
+          User.hasMany(Message, { foreignKey: 'senderId', as: 'sentMessages' });
+          User.hasMany(Message, { foreignKey: 'receiverId', as: 'receivedMessages' });
+          Message.belongsTo(User, { foreignKey: 'senderId', as: 'sender' });
+          Message.belongsTo(User, { foreignKey: 'receiverId', as: 'receiver' });
+
           // Sync DB (safe mode - no force/alter unless you really need it)
-          await sequelize.sync(); // ← safe sync, won't drop tables
-          console.log('✅ Database synced');
+          await sequelize.sync({ alter: true }); // ← Updated to alter tables for new schema changes
+          console.log('✅ Database synced (schema updated)');
 
           // Payment scheduler
           const paymentScheduler = require('./services/paymentScheduler');
@@ -183,3 +230,5 @@ process.on('uncaughtException', (error) => console.error('❌ Uncaught Exception
 process.on('exit', (code) => {
   console.log(`Process exiting with code: ${code}`);
 });
+
+module.exports = { app, server, io };

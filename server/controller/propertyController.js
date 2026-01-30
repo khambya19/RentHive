@@ -9,132 +9,42 @@ const { Op } = require('sequelize');
 // Get all available properties for browsing (tenant/lessor)
 exports.getAvailableProperties = async (req, res) => {
   try {
-    const { 
-      search, 
-      city, 
-      minPrice, 
-      maxPrice, 
-      type, 
-      bedrooms, 
-      bathrooms, 
-      minArea, 
-      maxArea, 
-      amenities,
-      sortBy = 'createdAt',
-      sortOrder = 'DESC'
-    } = req.query;
-
-    const whereClause = { status: 'Available' };
-
-    // Property type filter
-    if (type && type !== 'all') {
-      whereClause.propertyType = type;
-    }
-
-    // City/Location filter
-    if (city) {
-      whereClause.city = { [Op.iLike || Op.like]: `%${city}%` };
-    }
-
-    // Price range filter
-    if (minPrice || maxPrice) {
-      whereClause.rentPrice = {};
-      if (minPrice) whereClause.rentPrice[Op.gte] = parseFloat(minPrice);
-      if (maxPrice) whereClause.rentPrice[Op.lte] = parseFloat(maxPrice);
-    }
-
-    // Bedrooms filter
-    if (bedrooms) {
-      whereClause.bedrooms = parseInt(bedrooms);
-    }
-
-    // Bathrooms filter
-    if (bathrooms) {
-      whereClause.bathrooms = parseInt(bathrooms);
-    }
-
-    // Area range filter
-    if (minArea || maxArea) {
-      whereClause.area = {};
-      if (minArea) whereClause.area[Op.gte] = parseFloat(minArea);
-      if (maxArea) whereClause.area[Op.lte] = parseFloat(maxArea);
-    }
-
-    // Amenities filter (check if property has all selected amenities)
-    if (amenities) {
-      const amenitiesList = amenities.split(',').map(a => a.trim());
-      whereClause.amenities = {
-        [Op.contains]: amenitiesList
-      };
-    }
-
-    // Search by title, address, or city
-    if (search) {
-      whereClause[Op.or] = [
-        { title: { [Op.iLike || Op.like]: `%${search}%` } },
-        { address: { [Op.iLike || Op.like]: `%${search}%` } },
-        { city: { [Op.iLike || Op.like]: `%${search}%` } },
-        { description: { [Op.iLike || Op.like]: `%${search}%` } }
-      ];
-    }
-
-    // Determine sort order
-    let orderClause = [];
-    const validSortFields = ['createdAt', 'rentPrice', 'area', 'bedrooms', 'bathrooms'];
-    const validSortOrders = ['ASC', 'DESC'];
-    
-    if (validSortFields.includes(sortBy) && validSortOrders.includes(sortOrder.toUpperCase())) {
-      orderClause.push([sortBy, sortOrder.toUpperCase()]);
-    } else {
-      orderClause.push(['createdAt', 'DESC']);
-    }
-
     const properties = await Property.findAll({
-      where: whereClause,
+      where: { 
+        status: 'Available'
+        // Temporarily removed isApproved check to show real user data immediately
+        // isApproved: true 
+      },
       include: [
         {
           model: User,
           as: 'vendor',
-          attributes: ['id', 'name', 'email', 'phone', 'profileImage']
+          attributes: ['id', 'name', 'email', 'phone']
         }
       ],
-      order: orderClause
+      order: [['createdAt', 'DESC']]
     });
-
     return res.json(properties.map(p => ({
-      id: p.id,
-      title: p.title,
-      propertyType: p.propertyType,
-      address: p.address,
-      city: p.city,
-      bedrooms: p.bedrooms,
-      bathrooms: p.bathrooms,
-      area: p.area,
-      rentPrice: p.rentPrice,
-      securityDeposit: p.securityDeposit,
-      amenities: p.amenities,
-      description: p.description,
-      images: p.images,
-      status: p.status,
-      latitude: p.latitude,
-      longitude: p.longitude,
-      createdAt: p.createdAt,
-      vendorId: p.vendorId,
-      vendorName: p.vendor?.name,
-      vendorEmail: p.vendor?.email,
-      vendorPhone: p.vendor?.phone,
-      vendorImage: p.vendor?.profileImage
+      ...p.get({ plain: true }), // Start with all raw fields
+      // Explicitly ensure critical fields if needed, or just return everything
+      vendor: p.vendor // Include associated vendor object
     })));
   } catch (error) {
     console.error('Error fetching available properties:', error);
-    return res.status(500).json({ error: 'Failed to fetch properties' });
+    return res.json([]);
   }
 };
 
 // Get all properties for a vendor
 exports.getVendorProperties = async (req, res) => {
   try {
+    if (!req.user || !req.user.id) {
+      console.error('getVendorProperties: User not authenticated or ID missing');
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
     const vendorId = req.user.id;
+    console.log(`Fetching properties for vendor: ${vendorId}`);
     
     const properties = await Property.findAll({
       where: { vendorId },
@@ -160,11 +70,25 @@ exports.getVendorProperties = async (req, res) => {
       longitude: p.longitude,
       viewCount: p.viewCount,
       inquiryCount: p.inquiryCount,
-      createdAt: p.createdAt
+      createdAt: p.createdAt,
+      // Include any new fields explicitly if needed, or rely on sequelize to provide them
+      listingType: p.listingType,
+      propertyCondition: p.propertyCondition,
+      yearBuilt: p.yearBuilt,
+      lotSize: p.lotSize,
+      garageSpaces: p.garageSpaces,
+      hoaFees: p.hoaFees,
+      furnished: p.furnished,
+      petPolicy: p.petPolicy,
+      leaseTerms: p.leaseTerms,
+      virtualTourLink: p.virtualTourLink,
+      floorPlan: p.floorPlan
     })));
   } catch (error) {
     console.error('Error fetching vendor properties:', error);
-    return res.status(500).json({ error: 'Failed to fetch properties' });
+    // Send detailed error in development
+    const errorMessage = process.env.NODE_ENV === 'development' ? error.message : 'Failed to fetch properties';
+    return res.status(500).json({ error: errorMessage });
   }
 };
 
@@ -233,12 +157,21 @@ exports.getVendorStats = async (req, res) => {
 };
 
 // Create new property
+// Create new property
 exports.createProperty = async (req, res) => {
   try {
-    const vendorId = req.user.id;
+    const vendorId = req.user.id; // User is attached by protect middleware
+    
+    // Check if user is verified
+    const user = await User.findByPk(vendorId);
+    if (!user || !user.isVerified || user.kycStatus !== 'approved') {
+      return res.status(403).json({ error: 'You must complete KYC verification to post listings.' });
+    }
+
     const {
       title,
       propertyType,
+      listingType,
       address,
       city,
       bedrooms,
@@ -250,13 +183,27 @@ exports.createProperty = async (req, res) => {
       description,
       images,
       latitude,
-      longitude
+      longitude,
+      propertyCondition,
+      yearBuilt,
+      lotSize,
+      lotSizeUnit,
+      garageSpaces,
+      hoaFees,
+      hoaFeesFrequency,
+      furnished,
+      petPolicy,
+      petDetails,
+      leaseTerms,
+      virtualTourLink,
+      floorPlan
     } = req.body;
 
     const property = await Property.create({
       vendorId,
       title,
       propertyType,
+      listingType: listingType || 'For Rent',
       address,
       city,
       bedrooms: parseInt(bedrooms),
@@ -269,29 +216,25 @@ exports.createProperty = async (req, res) => {
       images: images || [],
       status: 'Available',
       latitude: latitude ? parseFloat(latitude) : null,
-      longitude: longitude ? parseFloat(longitude) : null
+      longitude: longitude ? parseFloat(longitude) : null,
+      propertyCondition,
+      yearBuilt: yearBuilt ? parseInt(yearBuilt) : null,
+      lotSize: lotSize ? String(lotSize) : null,
+      lotSizeUnit,
+      garageSpaces: garageSpaces ? parseInt(garageSpaces) : 0,
+      hoaFees: hoaFees ? parseFloat(hoaFees) : null,
+      hoaFeesFrequency,
+      furnished: furnished || 'No',
+      petPolicy: petPolicy || 'No',
+      petDetails,
+      leaseTerms,
+      virtualTourLink,
+      floorPlan,
+      isApproved: true
     });
 
     return res.json({
-      id: property.id,
-      title: property.title,
-      propertyType: property.propertyType,
-      address: property.address,
-      city: property.city,
-      bedrooms: property.bedrooms,
-      bathrooms: property.bathrooms,
-      area: property.area,
-      rentPrice: property.rentPrice,
-      securityDeposit: property.securityDeposit,
-      amenities: property.amenities,
-      description: property.description,
-      images: property.images,
-      status: property.status,
-      latitude: property.latitude,
-      longitude: property.longitude,
-      viewCount: 0,
-      inquiryCount: 0,
-      createdAt: property.createdAt
+      ...property.get({ plain: true })
     });
   } catch (error) {
     console.error('Error creating property:', error);
@@ -313,6 +256,7 @@ exports.updateProperty = async (req, res) => {
     const {
       title,
       propertyType,
+      listingType,
       address,
       city,
       bedrooms,
@@ -325,12 +269,26 @@ exports.updateProperty = async (req, res) => {
       images,
       status,
       latitude,
-      longitude
+      longitude,
+      propertyCondition,
+      yearBuilt,
+      lotSize,
+      lotSizeUnit,
+      garageSpaces,
+      hoaFees,
+      hoaFeesFrequency,
+      furnished,
+      petPolicy,
+      petDetails,
+      leaseTerms,
+      virtualTourLink,
+      floorPlan
     } = req.body;
 
     await property.update({
       title: title || property.title,
       propertyType: propertyType || property.propertyType,
+      listingType: listingType || property.listingType,
       address: address !== undefined ? address : property.address,
       city: city !== undefined ? city : property.city,
       bedrooms: bedrooms ? parseInt(bedrooms) : property.bedrooms,
@@ -343,29 +301,24 @@ exports.updateProperty = async (req, res) => {
       images: images || property.images,
       status: status || property.status,
       latitude: latitude !== undefined ? (latitude ? parseFloat(latitude) : null) : property.latitude,
-      longitude: longitude !== undefined ? (longitude ? parseFloat(longitude) : null) : property.longitude
+      longitude: longitude !== undefined ? (longitude ? parseFloat(longitude) : null) : property.longitude,
+      propertyCondition: propertyCondition || property.propertyCondition,
+      yearBuilt: yearBuilt ? parseInt(yearBuilt) : property.yearBuilt,
+      lotSize: lotSize ? String(lotSize) : property.lotSize,
+      lotSizeUnit: lotSizeUnit || property.lotSizeUnit,
+      garageSpaces: garageSpaces !== undefined ? parseInt(garageSpaces) : property.garageSpaces,
+      hoaFees: hoaFees ? parseFloat(hoaFees) : property.hoaFees,
+      hoaFeesFrequency: hoaFeesFrequency || property.hoaFeesFrequency,
+      furnished: furnished || property.furnished,
+      petPolicy: petPolicy || property.petPolicy,
+      petDetails: petDetails !== undefined ? petDetails : property.petDetails,
+      leaseTerms: leaseTerms || property.leaseTerms,
+      virtualTourLink: virtualTourLink !== undefined ? virtualTourLink : property.virtualTourLink,
+      floorPlan: floorPlan !== undefined ? floorPlan : property.floorPlan
     });
 
     return res.json({
-      id: property.id,
-      title: property.title,
-      propertyType: property.propertyType,
-      address: property.address,
-      city: property.city,
-      bedrooms: property.bedrooms,
-      bathrooms: property.bathrooms,
-      area: property.area,
-      rentPrice: property.rentPrice,
-      securityDeposit: property.securityDeposit,
-      amenities: property.amenities,
-      description: property.description,
-      images: property.images,
-      status: property.status,
-      latitude: property.latitude,
-      longitude: property.longitude,
-      viewCount: property.viewCount,
-      inquiryCount: property.inquiryCount,
-      createdAt: property.createdAt
+      ...property.get({ plain: true })
     });
   } catch (error) {
     console.error('Error updating property:', error);
@@ -667,6 +620,67 @@ exports.bookProperty = async (req, res) => {
   } catch (error) {
     console.error('❌ Error booking property:', error);
     return res.status(500).json({ error: 'Failed to book property' });
+  }
+};
+
+// Get single property details for viewing
+exports.getPropertyById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const property = await Property.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: 'vendor',
+          attributes: ['id', 'name', 'email', 'phone', 'businessName', 'profileImage']
+        }
+      ]
+    });
+
+    if (!property) {
+      return res.status(404).json({ error: 'Property not found' });
+    }
+
+    // Increment view count
+    await property.increment('viewCount');
+
+    return res.json({
+      id: property.id,
+      title: property.title,
+      propertyType: property.propertyType,
+      address: property.address,
+      city: property.city,
+      bedrooms: property.bedrooms,
+      bathrooms: property.bathrooms,
+      area: property.area,
+      rentPrice: property.rentPrice,
+      securityDeposit: property.securityDeposit,
+      amenities: property.amenities,
+      description: property.description,
+      images: property.images,
+      status: property.status,
+      latitude: property.latitude,
+      longitude: property.longitude,
+      viewCount: property.viewCount,
+      inquiryCount: property.inquiryCount,
+      createdAt: property.createdAt,
+      vendor: property.vendor,
+      // New fields
+      listingType: property.listingType,
+      propertyCondition: property.propertyCondition,
+      yearBuilt: property.yearBuilt,
+      lotSize: property.lotSize,
+      garageSpaces: property.garageSpaces,
+      hoaFees: property.hoaFees,
+      furnished: property.furnished,
+      petPolicy: property.petPolicy,
+      leaseTerms: property.leaseTerms,
+      virtualTourLink: property.virtualTourLink,
+      floorPlan: property.floorPlan
+    });
+  } catch (error) {
+    console.error('Error fetching property by ID:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };
 

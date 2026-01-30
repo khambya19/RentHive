@@ -28,6 +28,7 @@ router.post('/check-email', auth.checkEmail);
 router.post('/resend-otp', auth.resendOtp);
 router.post('/verify-otp', auth.verifyOtp);
 router.post('/login', auth.login);
+router.get('/me', protect, auth.getMe);
 router.post('/forgot-password', auth.forgotPassword);
 router.post('/reset-password', auth.resetPassword);
 

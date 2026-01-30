@@ -13,6 +13,9 @@ router.get('/available', propertyController.getAvailableProperties);
 // Book a property (for tenants/lessors)
 router.post('/book', propertyController.bookProperty);
 
+// Get single property by ID
+router.get('/:id', propertyController.getPropertyById);
+
 // Get vendor's properties
 router.get('/', propertyController.getVendorProperties);
 

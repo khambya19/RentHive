@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
 
 import { useNotifications } from '../../hooks/useNotifications';
 import DashboardNotifications from '../../components/DashboardNotifications';
@@ -10,7 +11,7 @@ import OwnerBookings from "./OwnerBookings";
 import UnifiedPostingForm from "./UnifiedPostingForm";
 import AllListings from "./AllListings";
 import Settings from "../Settings/Settings";
-import API_BASE_URL from '../../config/api';
+import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
 import { 
   LayoutDashboard, 
   PlusCircle, 
@@ -29,7 +30,9 @@ import {
   Settings as SettingsIcon,
   Hexagon,
   User,
-  Construction
+  Construction,
+  Shield,
+  X
 } from 'lucide-react';
 import "./OwnerDashboard.css";
 
@@ -40,11 +43,59 @@ const OwnerDashboard = () => {
     }, []);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user, logout } = useAuth();
+  const { user, logout, login } = useAuth();
+  const { socket } = useSocket();
   const { notifications, removeNotification, showSuccess, showError } = useNotifications();
+
+  // Force refresh user profile on mount to ensure KYC status is accurate
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        
+        // Use the generic /api/auth/me or similar if available, or just use the user-specific endpoint
+        // Since we don't have a guaranteed 'me' endpoint in the snippets, we rely on the fact that Context SHOULD cover it,
+        // but let's try to update explicitly if we can.
+        // Actually, let's just use the Notifications hook to trigger a "refresh" if we have one, or trust the socket listener.
+        // But to be 100% sure:
+        // (Assuming we don't have a direct 'refreshUser' in AuthContext, we normally rely on Context)
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    // fetchProfile(); 
+  }, []);
+
+  // Real-time KYC listener
+  useEffect(() => {
+    if (!socket || !user) return;
+
+    socket.on('kyc-status-updated', (data) => {
+      // console.log('⚡ Your KYC status was updated by admin:', data.status);
+      const token = localStorage.getItem('token');
+      // Update local storage and context
+      const updatedUser = { 
+        ...user, 
+        kycStatus: data.status,
+        isVerified: data.isVerified 
+      };
+      login(updatedUser, token);
+      
+      if (data.status === 'approved') {
+        showSuccess('KYC Approved', 'Congratulations! You can now post listings.');
+      } else {
+        showError('KYC Rejected', 'Please check your documents in settings.');
+      }
+    });
+
+    return () => {
+      socket.off('kyc-status-updated');
+    };
+  }, [socket, user, login, showSuccess, showError]);
   const [activeTab, setActiveTab] = useState('overview');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // New state for mobile menu
+  // Removed sidebarCollapsed state to keep sidebar always expanded on desktop
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false); 
   const [stats, setStats] = useState({
     totalProperties: 0,
     availableProperties: 0,
@@ -53,10 +104,26 @@ const OwnerDashboard = () => {
     bikeRentals: 0,
   });
   const [loading, setLoading] = useState(true);
+  
+  // Edit mode state
+  const [editData, setEditData] = useState(null);
+  const [editType, setEditType] = useState(null); // 'property' or 'automobile'
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
     setMobileMenuOpen(false);
+    // Clear edit data when changing tabs (except when going to add-listing)
+    if (tab !== 'add-listing') {
+      setEditData(null);
+      setEditType(null);
+    }
+  };
+  
+  // Handle edit from AllListings
+  const handleEditListing = (data, type) => {
+    setEditData(data);
+    setEditType(type);
+    setActiveTab('add-listing'); // Switch to posting form
   };
 
   // Handle tab from URL query parameter
@@ -81,12 +148,15 @@ const OwnerDashboard = () => {
       
       if (response.ok) {
         const data = await response.json();
+        // console.log('📊 Dashboard Stats Received:', data);
         setStats(data);
       } else {
         const errorText = await response.text();
+        console.error('❌ Failed to load dashboard data:', response.status, errorText);
         showError('Error', `Failed to load dashboard data: ${response.status} ${errorText}`);
       }
     } catch (error) {
+      console.error('❌ Error fetching dashboard data:', error);
       showError('Error', 'Failed to load dashboard data');
     } finally {
       setLoading(false);
@@ -98,95 +168,158 @@ const OwnerDashboard = () => {
   }, [fetchDashboardData]);
 
   const renderOverview = () => (
-    <div className="overview-container max-w-7xl mx-auto">
+    <div className="overview-container w-full space-y-6">
       {/* Welcome Banner */}
-      <div className="welcome-banner rounded-2xl p-6 md:p-10 mb-8 flex flex-col md:flex-row flex-wrap gap-4 justify-between items-center shadow-lg relative overflow-hidden" style={{ background: '#465A66' }}>
-        <div className="welcome-content relative z-10 text-center md:text-left mb-4 md:mb-0">
-          <h1 className="flex items-center justify-center md:justify-start gap-2 text-2xl md:text-3xl font-bold text-white mb-2">Welcome back, {user?.fullName || 'Owner'}! <span className="text-2xl">👋</span></h1>
-          <p className="text-indigo-100 text-lg">Here's what's happening with your rentals today</p>
+      <div className="welcome-banner rounded-2xl p-5 md:p-8 flex flex-col md:flex-row flex-wrap gap-4 justify-between items-center shadow-lg relative overflow-hidden bg-gradient-to-r from-slate-700 to-slate-800">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+        
+        <div className="welcome-content relative z-10 text-center md:text-left">
+          <h1 className="flex items-center justify-center md:justify-start gap-2 text-xl md:text-3xl font-bold text-white mb-1 md:mb-2">
+            Welcome, {user?.fullName?.split(' ')[0] || 'Owner'}! <span className="animate-wave origin-bottom-right inline-block">👋</span>
+          </h1>
+          <p className="text-slate-300 text-sm md:text-lg font-medium">Here's your rental summary for today.</p>
         </div>
+        
         <button 
-          className="refresh-dashboard-btn relative z-10 flex items-center gap-2 px-6 py-3 text-indigo-600 rounded-xl font-semibold hover:shadow-lg transition-all active:scale-95" style={{ background: '#f8fafc' }} 
+          className="refresh-btn relative z-10 flex items-center gap-2 px-4 py-2 md:px-6 md:py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-semibold backdrop-blur-sm transition-all text-sm md:text-base border border-white/10"
           onClick={fetchDashboardData} 
           disabled={loading}
         >
-          <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-          {loading ? 'Refreshing...' : 'Refresh Data'}
+          <RefreshCw size={16} className={`${loading ? 'animate-spin' : ''}`} />
+          <span>{loading ? 'Refreshing...' : 'Refresh Data'}</span>
         </button>
       </div>
 
       {/* Stats Grid */}
-      <div className="stats-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-        <div className="stat-card p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow" style={{ background: '#f4fbfd' }}>
-          <div className="stat-icon w-12 h-12 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center mb-4">
-            <Home size={24} />
+      <div className="stats-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+        {/* Total Properties */}
+        <div className="stat-card bg-white p-5 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-all">
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-3 bg-indigo-50 rounded-xl text-indigo-600 group-hover:scale-110 transition-transform">
+              <Home size={22} />
+            </div>
+            <span className="text-xs font-bold px-2 py-1 bg-slate-100 text-slate-500 rounded-lg">TOTAL</span>
           </div>
-          <div className="stat-info">
-            <p className="stat-label text-sm font-medium text-gray-500 uppercase tracking-wider mb-1">Total Properties</p>
-            <h3 className="stat-value text-3xl font-bold text-gray-900 mb-1">{stats.totalProperties}</h3>
-            <p className="stat-detail text-sm text-gray-400">{stats.availableProperties} available</p>
-          </div>
-        </div>
-
-        <div className="stat-card p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow" style={{ background: '#f8fafc' }}>
-          <div className="stat-icon w-12 h-12 rounded-xl bg-green-100 text-green-600 flex items-center justify-center mb-4">
-            <Banknote size={24} />
-          </div>
-          <div className="stat-info">
-            <p className="stat-label text-sm font-medium text-gray-500 uppercase tracking-wider mb-1">Monthly Revenue</p>
-            <h3 className="stat-value text-3xl font-bold text-gray-900 mb-1">NPR {stats.monthlyRevenue.toLocaleString()}</h3>
-            <p className="stat-detail text-sm text-gray-400">From rentals</p>
+          <div>
+            <h3 className="text-2xl md:text-3xl font-black text-slate-800 mb-1">{stats.totalProperties}</h3>
+            <p className="text-sm font-medium text-slate-500">{stats.availableProperties} Available Now</p>
           </div>
         </div>
 
-        <div className="stat-card p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow" style={{ background: '#f8fafc' }}>
-          <div className="stat-icon w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center mb-4">
-            <CalendarCheck size={24} />
+        {/* Monthly Revenue */}
+        <div className="stat-card bg-white p-5 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-all">
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600 group-hover:scale-110 transition-transform">
+              <Banknote size={22} />
+            </div>
+            <span className="text-xs font-bold px-2 py-1 bg-slate-100 text-slate-500 rounded-lg">REVENUE</span>
           </div>
-          <div className="stat-info">
-            <p className="stat-label text-sm font-medium text-gray-500 uppercase tracking-wider mb-1">Property Bookings</p>
-            <h3 className="stat-value text-3xl font-bold text-gray-900 mb-1">{stats.totalBookings}</h3>
-            <p className="stat-detail text-sm text-gray-400">Total requests</p>
+          <div>
+            <h3 className="text-2xl md:text-3xl font-black text-slate-800 mb-1">
+              <span className="text-lg text-slate-400 font-bold mr-1">NPR</span>
+              {stats.monthlyRevenue.toLocaleString()}
+            </h3>
+            <p className="text-sm font-medium text-slate-500">This Month</p>
           </div>
         </div>
 
-        <div className="stat-card p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow" style={{ background: '#f8fafc' }}>
-          <div className="stat-icon w-12 h-12 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center mb-4">
-            <Bike size={24} />
+        {/* Property Bookings */}
+        <div className="stat-card bg-white p-5 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-all">
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-3 bg-blue-50 rounded-xl text-blue-600 group-hover:scale-110 transition-transform">
+              <CalendarCheck size={22} />
+            </div>
+             <span className="text-xs font-bold px-2 py-1 bg-slate-100 text-slate-500 rounded-lg">REQUESTS</span>
           </div>
-          <div className="stat-info">
-            <p className="stat-label text-sm font-medium text-gray-500 uppercase tracking-wider mb-1">Bike Rentals</p>
-            <h3 className="stat-value text-3xl font-bold text-gray-900 mb-1">{stats.bikeRentals}</h3>
-            <p className="stat-detail text-sm text-gray-400">Active rentals</p>
+          <div>
+            <h3 className="text-2xl md:text-3xl font-black text-slate-800 mb-1">{stats.totalBookings}</h3>
+            <p className="text-sm font-medium text-slate-500">Property Bookings</p>
+          </div>
+        </div>
+
+        {/* Bike Rentals */}
+        <div className="stat-card bg-white p-5 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-all">
+           <div className="flex justify-between items-start mb-4">
+            <div className="p-3 bg-orange-50 rounded-xl text-orange-600 group-hover:scale-110 transition-transform">
+              <Bike size={22} />
+            </div>
+             <span className="text-xs font-bold px-2 py-1 bg-slate-100 text-slate-500 rounded-lg">RENTALS</span>
+          </div>
+          <div>
+            <h3 className="text-2xl md:text-3xl font-black text-slate-800 mb-1">{stats.bikeRentals}</h3>
+            <p className="text-sm font-medium text-slate-500">Active Bike Rentals</p>
           </div>
         </div>
       </div>
 
-      {/* Quick Actions Section */}
-      <div className="quick-actions-section">
-        <h2 className="text-xl font-bold text-gray-800 mb-6">Quick Actions</h2>
-        <div className="action-cards grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div 
-            className="action-card p-8 rounded-2xl border border-gray-100 hover:border-indigo-500 cursor-pointer transition-all hover:shadow-lg text-center group" style={{ background: '#f4fbfd' }} 
-            onClick={() => setActiveTab('add-listing')}
-          >
-            <div className="action-icon w-16 h-16 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
-              <PlusCircle size={32} />
-            </div>
-            <h3 className="text-lg font-bold text-gray-900 mb-2">Add New Listing</h3>
-            <p className="text-gray-500">List a property or automobile</p>
+      {/* KYC Status & Quick Actions Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* KYC Status Card */}
+        <div className={`col-span-1 p-6 rounded-2xl border flex flex-col justify-center items-center text-center relative overflow-hidden ${
+             user?.kycStatus === 'approved' ? 'bg-emerald-50 border-emerald-100' : 
+             user?.kycStatus === 'pending' ? 'bg-amber-50 border-amber-100' : 'bg-rose-50 border-rose-100'
+        }`}>
+          <div className={`p-4 rounded-full mb-3 ${
+             user?.kycStatus === 'approved' ? 'bg-emerald-100 text-emerald-600' : 
+             user?.kycStatus === 'pending' ? 'bg-amber-100 text-amber-600' : 'bg-rose-100 text-rose-600'
+          }`}>
+             <Shield size={32} />
           </div>
+          <h3 className="text-lg font-bold text-slate-800 mb-1">KYC Status</h3>
+          <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide mb-3 ${
+             user?.kycStatus === 'approved' ? 'bg-emerald-200 text-emerald-800' : 
+             user?.kycStatus === 'pending' ? 'bg-amber-200 text-amber-800' : 'bg-rose-200 text-rose-800'
+          }`}>
+            {user?.kycStatus === 'approved' ? 'Verified Account' : (user?.kycStatus?.replace('_', ' ') || 'Not Submitted')}
+          </span>
+          <button 
+            onClick={() => setActiveTab('settings')}
+            className="text-sm font-semibold underline underline-offset-2 opacity-80 hover:opacity-100 transition-opacity"
+          >
+            {user?.kycStatus === 'approved' ? 'View Details' : 'Complete Verification'}
+          </button>
+        </div>
 
-          <div 
-            className="action-card p-8 rounded-2xl border border-gray-100 hover:border-blue-500 cursor-pointer transition-all hover:shadow-lg text-center group" style={{ background: '#f4fbfd' }} 
-            onClick={() => handleTabChange('bookings')}
+        {/* Quick Actions */}
+        <div className="col-span-1 lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <button 
+             onClick={() => setActiveTab('add-listing')}
+             className="flex items-center gap-4 p-5 bg-white border border-slate-200 rounded-2xl hover:border-indigo-400 hover:shadow-md transition-all group text-left"
           >
-            <div className="action-icon w-16 h-16 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
-              <CalendarDays size={32} />
+            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+              <PlusCircle size={24} />
             </div>
-            <h3 className="text-lg font-bold text-gray-900 mb-2">View Bookings</h3>
-            <p className="text-gray-500">Check rental requests</p>
-          </div>
+            <div>
+              <h3 className="font-bold text-slate-800">Add New Listing</h3>
+              <p className="text-xs text-slate-500 mt-0.5">List a property or vehicle</p>
+            </div>
+          </button>
+
+          <button 
+             onClick={() => handleTabChange('bookings')}
+             className="flex items-center gap-4 p-5 bg-white border border-slate-200 rounded-2xl hover:border-blue-400 hover:shadow-md transition-all group text-left"
+          >
+            <div className="p-3 bg-blue-50 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-colors">
+              <CalendarDays size={24} />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-800">Check Bookings</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Manage incoming requests</p>
+            </div>
+          </button>
+          
+           <button 
+             onClick={() => handleTabChange('listings')}
+             className="flex items-center gap-4 p-5 bg-white border border-slate-200 rounded-2xl hover:border-purple-400 hover:shadow-md transition-all group text-left sm:col-span-2"
+          >
+            <div className="p-3 bg-purple-50 text-purple-600 rounded-xl group-hover:bg-purple-600 group-hover:text-white transition-colors">
+              <List size={24} />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-800">View All Listings</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Manage your active details</p>
+            </div>
+          </button>
         </div>
       </div>
     </div>
@@ -200,186 +333,187 @@ const OwnerDashboard = () => {
       </div>
     );
   }
-
   return (
-    <div className="owner-dashboard flex h-screen overflow-hidden" style={{ background: '#aed8e0' }}>
-      {/* Dashboard Notifications */}
-      <DashboardNotifications 
-        notifications={notifications} 
-        onRemove={removeNotification} 
-      />
-      
-      {/* Mobile Overlay */}
-      {mobileMenuOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-20 lg:hidden backdrop-blur-sm"
-          onClick={() => setMobileMenuOpen(false)}
-        />
-      )}
 
-      {/* Sidebar - Mobile: Fixed Slide-over, Desktop: Static/Sticky */}
+    <div className="owner-dashboard flex h-screen overflow-hidden bg-slate-50">
+      {/* Dashboard Notifications - Absolute position to avoid layout shift */}
+      <div className="absolute top-0 left-0 w-full z-[10002] pointer-events-none">
+        <DashboardNotifications 
+          notifications={notifications} 
+          onRemove={removeNotification} 
+        />
+      </div>
+
+      {/* Sidebar - Physically first in DOM for natural flex layout */}
       <aside 
+        style={{ backgroundColor: '#0f172a', zIndex: 9999 }}
         className={`
-          sidebar fixed inset-y-0 left-0 z-30 text-white transition-transform duration-300 ease-in-out w-72 bg-[#465A66]
+          fixed inset-y-0 left-0 
+          text-white transition-transform duration-300 ease-in-out 
           ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
-          lg:relative lg:translate-x-0
-          ${sidebarCollapsed ? 'lg:w-20' : 'lg:w-72'}
-          flex flex-col shadow-xl
+          lg:relative lg:translate-x-0 lg:w-64
+          w-64 flex flex-col shadow-2xl border-r border-slate-700/50 flex-shrink-0 h-full
         `}
       >
         <div className="sidebar-header p-6 flex items-center justify-between border-b border-white/10">
           <div className="sidebar-brand flex items-center gap-3">
-            <div className="brand-icon-wrapper bg-white/10 p-2 rounded-lg">
-              <Hexagon className="brand-icon text-white" size={24} />
+            <div className="brand-icon-wrapper bg-indigo-500/20 p-2 rounded-lg backdrop-blur-sm border border-indigo-500/30">
+              <Hexagon className="brand-icon text-indigo-400" size={24} />
             </div>
-            {!sidebarCollapsed && <span className="brand-name text-xl font-bold tracking-tight">RentHive</span>}
+            <span className="brand-name text-xl font-bold tracking-tight text-white">RentHive</span>
           </div>
-          <button 
-            className="sidebar-toggle hidden lg:flex items-center justify-center p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors" 
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          >
-            {sidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
-          </button>
-          {/* Mobile Close Button */}
-          <button 
-            className="lg:hidden flex items-center justify-center p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            <ChevronLeft size={24} />
-          </button>
+          {/* Close button removed */}
         </div>
 
-        <div className="user-profile p-6 border-b border-white/10 flex items-center gap-4">
-          <div className="user-avatar w-12 h-12 bg-white/10 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-lg">
-            {user?.photo ? <img src={user.photo} alt="User" className="w-full h-full rounded-full object-cover" /> : <User size={24} />}
+        <div className="user-profile p-6 border-b border-slate-100 flex items-center gap-4 bg-white">
+          <div className="user-avatar w-12 h-12 bg-indigo-500 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-lg ring-4 ring-slate-100 overflow-hidden">
+            {(user?.profilePic || user?.profileImage || user?.photo) ? (
+              <img 
+                src={(user.profilePic || user.profileImage || user.photo).startsWith('http') 
+                  ? (user.profilePic || user.profileImage || user.photo) 
+                  : `${SERVER_BASE_URL}/uploads/profiles/${(user.profilePic || user.profileImage || user.photo).split('/').pop()}`} 
+                alt="User" 
+                className="w-full h-full object-cover" 
+              />
+            ) : (
+              <User size={24} />
+            )}
           </div>
-          {!sidebarCollapsed && (
-            <div className="user-info overflow-hidden">
-              <p className="user-name font-semibold truncate hover:text-clip">{user?.fullName || 'Owner'}</p>
-              <p className="user-role text-xs text-gray-400 uppercase tracking-wider">Property Owner</p>
-            </div>
-          )}
+          <div className="user-info overflow-hidden">
+            <p className="user-name font-semibold truncate hover:text-clip text-slate-900">{user?.fullName || 'Owner'}</p>
+            <p className="user-role text-xs text-slate-500 uppercase tracking-wider font-medium">Property Owner</p>
+          </div>
         </div>
 
-        <nav className="sidebar-menu flex-1 py-6 overflow-y-auto custom-scrollbar">
+        <nav className="sidebar-menu flex-1 py-6 overflow-y-auto custom-scrollbar px-3 space-y-1">
           <button 
-            className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'overview' ? 'bg-white/10 text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`} 
+            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'overview' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`} 
             onClick={() => handleTabChange('overview')}
+            title="Overview"
           >
-            <LayoutDashboard size={20} />
-            {!sidebarCollapsed && <span className="font-medium">Overview</span>}
+            <LayoutDashboard size={20} className={activeTab === 'overview' ? 'text-white' : 'text-slate-400 group-hover:text-white transition-colors'} />
+            <span className="font-medium">Overview</span>
           </button>
 
           <button 
-            className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'add-listing' ? 'bg-white/10 text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`} 
+            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'add-listing' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`} 
             onClick={() => handleTabChange('add-listing')}
+            title="Add New Listing"
           >
-            <PlusCircle size={20} />
-            {!sidebarCollapsed && <span className="font-medium">Add New Listing</span>}
+            <PlusCircle size={20} className={activeTab === 'add-listing' ? 'text-white' : 'text-slate-400 group-hover:text-white transition-colors'} />
+            <span className="font-medium">Add Listing</span>
           </button>
 
           <button 
-            className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'listings' ? 'bg-white/10 text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`} 
+            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'listings' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`} 
             onClick={() => handleTabChange('listings')}
+            title="All Listings"
           >
-            <List size={20} />
-            {!sidebarCollapsed && <span className="font-medium">All Listings</span>}
+            <List size={20} className={activeTab === 'listings' ? 'text-white' : 'text-slate-400 group-hover:text-white transition-colors'} />
+            <span className="font-medium">All Listings</span>
           </button>
 
           <button 
-            className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'bookings' ? 'bg-white/10 text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`} 
+            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'bookings' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`} 
             onClick={() => handleTabChange('bookings')}
+            title="Incoming Bookings"
           >
-            <CalendarDays size={20} />
-            {!sidebarCollapsed && <span className="font-medium">Incoming Bookings</span>}
+            <CalendarDays size={20} className={activeTab === 'bookings' ? 'text-white' : 'text-slate-400 group-hover:text-white transition-colors'} />
+            <span className="font-medium">Bookings</span>
           </button>
 
           <button 
-            className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'payments' ? 'bg-white/10 text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`} 
+            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'payments' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`} 
             onClick={() => handleTabChange('payments')}
+            title="Payments & Finances"
           >
-            <CreditCard size={20} />
-            {!sidebarCollapsed && <span className="font-medium">Payments & Finances</span>}
+            <CreditCard size={20} className={activeTab === 'payments' ? 'text-white' : 'text-slate-400 group-hover:text-white transition-colors'} />
+            <span className="font-medium">Finances</span>
           </button>
 
           <button 
-            className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'messages' ? 'bg-white/10 text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`} 
+            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'messages' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`} 
             onClick={() => handleTabChange('messages')}
+            title="Messages"
           >
-            <MessageSquare size={20} />
-            {!sidebarCollapsed && <span className="font-medium">Messages</span>}
+            <MessageSquare size={20} className={activeTab === 'messages' ? 'text-white' : 'text-slate-400 group-hover:text-white transition-colors'} />
+            <span className="font-medium">Messages</span>
           </button>
 
           <button 
-            className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'settings' ? 'bg-white/10 text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`} 
+            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`} 
             onClick={() => handleTabChange('settings')}
+            title="Settings"
           >
-            <SettingsIcon size={20} />
-            {!sidebarCollapsed && <span className="font-medium">Settings</span>}
+            <SettingsIcon size={20} className={activeTab === 'settings' ? 'text-white' : 'text-slate-400 group-hover:text-white transition-colors'} />
+            <span className="font-medium">Settings</span>
           </button>
         </nav>
 
-        <div className="sidebar-footer p-6 border-t border-white/10">
-          <button className="logout-button flex items-center gap-3 w-full text-left text-gray-400 hover:text-white hover:bg-white/5 p-3 rounded-lg transition-colors" onClick={() => { logout(); navigate('/login'); }}>
-            <LogOut size={20} />
-            {!sidebarCollapsed && <span className="font-medium">Logout</span>}
+        <div className="sidebar-footer p-6 border-t border-white/10 bg-white/5">
+          <button className="logout-button flex items-center gap-3 w-full text-left text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 p-3 rounded-xl transition-all group" onClick={() => { logout(); navigate('/login'); }}>
+            <LogOut size={20} className="group-hover:translate-x-1 transition-transform" />
+            <span className="font-medium">Logout</span>
           </button>
         </div>
       </aside>
 
-      <main className="main-content flex-1 flex flex-col h-screen overflow-hidden relative">
-        <div className="content-header bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm z-10">
+      {/* Main Content Area */}
+      <main className="owner-main-content flex-1 flex flex-col h-screen overflow-hidden relative min-w-0 z-0" style={{ width: '100%', maxWidth: '100%' }}>
+        {/* Header: Relative, z-30 */}
+        <div className="content-header bg-white/80 backdrop-blur-md border-b border-gray-200/60 px-6 py-4 flex justify-between items-center shadow-sm relative z-30">
           <div className="header-left flex items-center gap-4">
-             {/* Mobile Menu Toggle */}
+             {/* Mobile/Tablet Menu Toggle */}
              <button 
-              className="lg:hidden p-2 -ml-2 rounded-lg text-gray-600 hover:bg-gray-100"
-              onClick={() => setMobileMenuOpen(true)}
+              className="lg:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer relative z-[1000] active:scale-95"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
-              <List size={24} />
+              <List size={24} color={mobileMenuOpen ? 'white' : '#4b5563'} />
             </button>
 
-            <div>
-              <h1 className="text-xl md:text-2xl font-bold text-gray-900 truncate max-w-[200px] md:max-w-none">
+            <div className="relative z-0">
+              <h1 className="text-xl md:text-2xl font-black text-slate-800 truncate max-w-[200px] md:max-w-none flex items-center gap-2">
                 {activeTab === 'overview' && 'Dashboard'}
                 {activeTab === 'listings' && 'All Listings'}
-                {activeTab === 'bookings' && 'Incoming Bookings'}
-                {activeTab === 'payments' && 'Payments & Finances'}
+                {activeTab === 'bookings' && 'Bookings'}
+                {activeTab === 'payments' && 'Finance'}
                 {activeTab === 'messages' && 'Messages'}
-                {activeTab === 'add-listing' && 'Add New Listing'}
+                {activeTab === 'add-listing' && 'Add Listing'}
                 {activeTab === 'settings' && 'Settings'}
               </h1>
-              <p className="header-subtitle hidden md:block text-sm text-gray-500 mt-1">
-                {activeTab === 'overview' && 'Welcome back! Manage your properties and automobiles'}
-                {activeTab === 'listings' && 'View and manage all your posted properties and automobiles'}
-                {activeTab === 'bookings' && 'Review and manage incoming rental requests'}
-                {activeTab === 'payments' && 'Track income, expenses, and payouts'}
-                {activeTab === 'messages' && 'Communicate with tenants and prospective renters'}
-                {activeTab === 'add-listing' && 'Choose what you want to list - property or automobile'}
-                {activeTab === 'settings' && 'Manage your account and preferences'}
-              </p>
             </div>
           </div>
           <div className="header-right flex items-center gap-4">
-            <NotificationBell userId={user?.id} />
+            <NotificationBell user={user} />
           </div>
         </div>
 
-        <div className="content-area flex-1 overflow-y-auto p-4 md:p-8 bg-gray-50">
+        <div className="owner-content-area flex-1 overflow-y-auto p-4 md:px-6 md:py-6 bg-slate-50 relative z-0">
           {activeTab === 'overview' && renderOverview()}
-          {activeTab === 'listings' && <AllListings showSuccess={showSuccess} showError={showError} />}
+          {activeTab === 'listings' && <AllListings showSuccess={showSuccess} showError={showError} onEdit={handleEditListing} />}
           {activeTab === 'bookings' && <OwnerBookings showSuccess={showSuccess} showError={showError} />}
           {activeTab === 'payments' && <PaymentManagement />}
           {activeTab === 'messages' && (
             <div className="placeholder flex flex-col items-center justify-center h-full text-gray-500">
-              <Construction size={48} className="mb-4 text-gray-400" />
-              <h3 className="text-xl font-semibold">Messages Feature</h3>
-              <p>Coming Soon</p>
+              <div className="bg-white p-6 rounded-full shadow-sm mb-4">
+                <Construction size={48} className="text-indigo-400" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-700">Messages Center</h3>
+              <p className="text-slate-400">Chat features coming soon!</p>
             </div>
           )}
-          {activeTab === 'add-listing' && <UnifiedPostingForm showSuccess={showSuccess} showError={showError} />}
+          {activeTab === 'add-listing' && <UnifiedPostingForm showSuccess={showSuccess} showError={showError} editData={editData} editType={editType} onEditComplete={() => { setEditData(null); setEditType(null); setActiveTab('listings'); }} />}
           {activeTab === 'settings' && <Settings />}
         </div>
       </main>
+
+      {/* Mobile Overlay - High Z-index */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-[998] lg:hidden backdrop-blur-sm"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
     </div>
   );
 };

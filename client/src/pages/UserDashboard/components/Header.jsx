@@ -3,7 +3,7 @@ import NotificationBell from '../../../components/NotificationBell';
 import { useAuth } from '../../../context/AuthContext';
 import { List } from 'lucide-react';
 
-const Header = ({ activeTab, setMobileMenuOpen }) => {
+const Header = ({ activeTab, setMobileMenuOpen, mobileMenuOpen }) => {
   const { user } = useAuth();
 
   const getTitle = () => {
@@ -31,23 +31,23 @@ const Header = ({ activeTab, setMobileMenuOpen }) => {
   };
 
   return (
-    <div className="content-header border-b border-gray-200 px-8 py-4 flex justify-between items-center shadow-sm z-10 w-full" style={{ background: '#f4fbfd' }}>
+    <div className="content-header bg-white/80 backdrop-blur-md border-b border-gray-200/60 px-6 py-4 flex justify-between items-center shadow-sm relative z-30">
       <div className="header-left flex items-center gap-4">
-        {/* Mobile Menu Toggle */}
+        {/* Mobile/Tablet Menu Toggle */}
         <button 
-          className="lg:hidden p-2 -ml-2 rounded-lg text-gray-600 hover:bg-gray-100"
-          onClick={() => setMobileMenuOpen(true)}
+          className="xl:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer relative z-[1000] active:scale-95"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
         >
           <List size={24} />
         </button>
         
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-gray-900 truncate max-w-[200px] md:max-w-none">{getTitle()}</h1>
-          <p className="header-subtitle hidden md:block text-sm text-gray-500 mt-1">{getSubtitle()}</p>
+          <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-slate-800 truncate">{getTitle()}</h1>
+          <p className="header-subtitle hidden md:block text-sm text-slate-500 mt-0.5">{getSubtitle()}</p>
         </div>
       </div>
       <div className="header-right flex items-center gap-4">
-        <NotificationBell userId={user?.id} />
+        <NotificationBell user={user} />
       </div>
     </div>
   );

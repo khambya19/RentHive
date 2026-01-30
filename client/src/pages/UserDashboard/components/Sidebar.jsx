@@ -2,6 +2,7 @@
 import React from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { SERVER_BASE_URL } from '../../../config/api';
 import { 
   LayoutDashboard, 
   Search, 
@@ -10,14 +11,14 @@ import {
   CreditCard, 
   Settings as SettingsIcon, 
   LogOut, 
-  ChevronLeft, 
-  ChevronRight,
   Hexagon,
   Heart,
-  Flag
+  Flag,
+  User,
+  MessageSquare
 } from 'lucide-react';
 
-const Sidebar = ({ activeTab, setActiveTab, collapsed, mobileMenuOpen, setMobileMenuOpen }) => {
+const Sidebar = ({ activeTab, setActiveTab, collapsed, mobileMenuOpen, setMobileMenuOpen, savedCount = 0, applicationsCount = 0 }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -26,133 +27,157 @@ const Sidebar = ({ activeTab, setActiveTab, collapsed, mobileMenuOpen, setMobile
       {/* Mobile Overlay */}
       {mobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-[99] lg:hidden backdrop-blur-sm"
+          className="fixed inset-0 bg-black/50 z-[9998] lg:hidden backdrop-blur-sm"
           onClick={() => setMobileMenuOpen(false)}
         />
       )}
 
       <aside 
+        style={{ backgroundColor: '#0f172a', zIndex: 9999 }}
         className={`
-          sidebar fixed inset-y-0 left-0 z-[100] text-white transition-transform duration-300 ease-in-out bg-[#465A66] flex flex-col
+          fixed inset-y-0 left-0 
+          text-white transition-all duration-300 ease-in-out 
           ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
-          lg:relative lg:translate-x-0
-          ${collapsed ? 'w-64 sm:w-20' : 'w-64 sm:w-72'}
+          
+          /* MD: FIXED Sidebar - Icon only by default, expands OVER content */
+          md:translate-x-0 md:fixed md:inset-y-0 md:left-0 md:z-[9999]
+          ${mobileMenuOpen ? 'md:w-64' : 'md:w-20'}
+
+          /* XL: RELATIVE Sidebar - Pushes content, always expanded */
+          xl:relative xl:w-64 xl:translate-x-0 xl:z-auto
+
+          flex flex-col shadow-2xl border-r border-slate-700/50 flex-shrink-0 h-full overflow-hidden
         `}
-        style={{ minWidth: collapsed ? 80 : 288, maxWidth: 288 }}
       >
-      <div className="sidebar-header p-6 flex items-center justify-between border-b border-white/10">
-        <div className="sidebar-brand flex items-center gap-3">
-          <div className="brand-icon-wrapper p-2 rounded-lg" style={{ background: 'rgba(244,251,253,0.10)' }}>
-            <Hexagon className="brand-icon text-white" size={24} />
+        <div className="sidebar-header p-6 flex items-center justify-center xl:justify-between border-b border-white/10 h-20">
+          <div className="sidebar-brand flex items-center gap-3">
+            <div className="brand-icon-wrapper bg-indigo-500/20 p-2 rounded-lg backdrop-blur-sm border border-indigo-500/30 shrink-0">
+              <Hexagon className="brand-icon text-indigo-400" size={24} />
+            </div>
+            <span className={`brand-name text-xl font-bold tracking-tight text-white md:hidden xl:block ${mobileMenuOpen ? '!block' : ''}`}>RentHive</span>
           </div>
-          {!collapsed && <span className="brand-name text-xl font-bold tracking-tight">RentHive</span>}
         </div>
-        
-        {/* Mobile Close Button */}
-        <button 
-          className="lg:hidden p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
-          onClick={() => setMobileMenuOpen(false)}
-        >
-          <ChevronLeft size={24} />
-        </button>
-      </div>
 
-      <div className="user-profile p-6 border-b border-white/10 flex items-center gap-4">
-        <div className="user-avatar w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-lg" style={{ background: 'rgba(244,251,253,0.10)' }}>
-          {user?.photo ? <img src={user.photo} alt="User" className="w-full h-full rounded-full object-cover" /> : (user?.fullName?.[0] || 'U')}
-        </div>
-        {!collapsed && (
-          <div className="user-info overflow-hidden">
-            <p className="user-name font-semibold truncate hover:text-clip">{user?.fullName || 'User'}</p>
-            <p className="user-role text-xs text-gray-400 uppercase tracking-wider">Tenant</p>
+        <div className={`user-profile p-4 xl:p-6 border-b border-slate-100 flex items-center gap-4 bg-white md:justify-center xl:justify-start h-24 xl:h-auto ${mobileMenuOpen ? '!justify-start !px-6' : ''}`}>
+          <div className="user-avatar w-10 h-10 xl:w-12 xl:h-12 bg-indigo-500 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-lg ring-4 ring-slate-100 overflow-hidden">
+            {(user?.profilePic || user?.profileImage || user?.photo) ? (
+              <img 
+                src={(user.profilePic || user.profileImage || user.photo).startsWith('http') 
+                  ? (user.profilePic || user.profileImage || user.photo) 
+                  : `${SERVER_BASE_URL}/uploads/profiles/${(user.profilePic || user.profileImage || user.photo).split('/').pop()}`} 
+                alt="User" 
+                className="w-full h-full object-cover" 
+              />
+            ) : (
+              <User size={24} />
+            )}
           </div>
-        )}
-      </div>
+          <div className={`user-info overflow-hidden md:hidden xl:block ${mobileMenuOpen ? '!block' : ''}`}>
+            <p className="user-name font-semibold truncate hover:text-clip text-slate-900">{user?.fullName || 'Tenant'}</p>
+            <p className="user-role text-xs text-slate-500 uppercase tracking-wider font-medium">Tenant</p>
+          </div>
+        </div>
 
-      <nav className="sidebar-menu flex-1 py-6 overflow-y-auto custom-scrollbar">
-        <button 
-          className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'overview' ? 'text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:text-white'}`} style={activeTab === 'overview' ? { background: 'rgba(248,250,252,0.10)' } : {}} 
-          onClick={() => setActiveTab('overview')}
-        >
-          <LayoutDashboard size={20} />
-          {!collapsed && <span className="font-medium">Overview</span>}
-        </button>
+        <nav className="sidebar-menu flex-1 py-6 overflow-y-auto custom-scrollbar px-3 space-y-1">
+          <button 
+            className={`menu-item flex items-center gap-3 px-3 xl:px-4 py-3 w-full text-left transition-all rounded-xl group relative ${activeTab === 'overview' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-300 hover:bg-white/10 hover:text-white'} ${mobileMenuOpen ? 'justify-start' : 'justify-center xl:justify-start'}`}
+            onClick={() => setActiveTab('overview')}
+            title="Overview"
+          >
+            <LayoutDashboard size={20} className={`shrink-0 ${activeTab === 'overview' ? 'text-white' : 'text-slate-300 group-hover:text-white transition-colors'}`} />
+            <span className={`font-medium md:hidden xl:block whitespace-nowrap ${mobileMenuOpen ? '!block' : ''}`}>Overview</span>
+          </button>
 
-        <button 
-          className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'browse' ? 'text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:text-white'}`} style={activeTab === 'browse' ? { background: 'rgba(248,250,252,0.10)' } : {}} 
-          onClick={() => setActiveTab('browse')}
-        >
-          <Search size={20} />
-          {!collapsed && <span className="font-medium">Browse Properties</span>}
-        </button>
+          <button 
+            className={`menu-item flex items-center gap-3 px-3 xl:px-4 py-3 w-full text-left transition-all rounded-xl group relative ${activeTab === 'browse' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-300 hover:bg-white/10 hover:text-white'} ${mobileMenuOpen ? 'justify-start' : 'justify-center xl:justify-start'}`}
+            onClick={() => setActiveTab('browse')}
+            title="Browse Properties"
+          >
+            <Search size={20} className={`shrink-0 ${activeTab === 'browse' ? 'text-white' : 'text-slate-300 group-hover:text-white transition-colors'}`} />
+            <span className={`font-medium md:hidden xl:block whitespace-nowrap ${mobileMenuOpen ? '!block' : ''}`}>Browse</span>
+          </button>
 
-        <button 
-          className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'applications' ? 'text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:text-white'}`} style={activeTab === 'applications' ? { background: 'rgba(248,250,252,0.10)' } : {}} 
-          onClick={() => setActiveTab('applications')}
-        >
-          <FileText size={20} />
-          {!collapsed && <span className="font-medium">My Applications</span>}
-        </button>
+          <button 
+            className={`menu-item flex items-center gap-3 px-3 xl:px-4 py-3 w-full text-left transition-all rounded-xl group relative ${activeTab === 'applications' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-300 hover:bg-white/10 hover:text-white'} ${mobileMenuOpen ? 'justify-start' : 'justify-center xl:justify-start'}`}
+            onClick={() => setActiveTab('applications')}
+            title="My Applications"
+          >
+            <FileText size={20} className={`shrink-0 ${activeTab === 'applications' ? 'text-white' : 'text-slate-300 group-hover:text-white transition-colors'}`} />
+            <span className={`font-medium md:hidden xl:block flex-1 whitespace-nowrap ${mobileMenuOpen ? '!block' : ''}`}>Applications</span>
+            {applicationsCount > 0 && (
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full absolute top-2 right-2 xl:static xl:bg-opacity-100 ${activeTab === 'applications' ? 'bg-white text-indigo-600' : 'bg-indigo-500 text-white md:bg-indigo-600 xl:bg-indigo-500/20 xl:text-indigo-300'} ${(mobileMenuOpen && applicationsCount > 0) ? '!static !bg-white !text-indigo-600' : ''}`}>
+                {applicationsCount}
+              </span>
+            )}
+          </button>
+          
+          <button 
+            className={`menu-item flex items-center gap-3 px-3 xl:px-4 py-3 w-full text-left transition-all rounded-xl group relative ${activeTab === 'messages' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-300 hover:bg-white/10 hover:text-white'} ${mobileMenuOpen ? 'justify-start' : 'justify-center xl:justify-start'}`}
+            onClick={() => setActiveTab('messages')}
+            title="My Messages"
+          >
+            <MessageSquare size={20} className={`shrink-0 ${activeTab === 'messages' ? 'text-white' : 'text-slate-300 group-hover:text-white transition-colors'}`} />
+            <span className={`font-medium md:hidden xl:block whitespace-nowrap ${mobileMenuOpen ? '!block' : ''}`}>Messages</span>
+          </button>
 
-        {/* Saved Section */}
-        <button 
-          className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'saved' ? 'text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:text-white'}`} style={activeTab === 'saved' ? { background: 'rgba(248,250,252,0.10)' } : {}} 
-          onClick={() => setActiveTab('saved')}
-        >
-          <Heart size={20} />
-          {!collapsed && <span className="font-medium">Saved</span>}
-        </button>
+          <button 
+            className={`menu-item flex items-center gap-3 px-3 xl:px-4 py-3 w-full text-left transition-all rounded-xl group relative ${activeTab === 'saved' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-300 hover:bg-white/10 hover:text-white'} ${mobileMenuOpen ? 'justify-start' : 'justify-center xl:justify-start'}`}
+            onClick={() => setActiveTab('saved')}
+            title="Saved Properties"
+          >
+            <Heart size={20} className={`shrink-0 ${activeTab === 'saved' ? 'text-white' : 'text-slate-300 group-hover:text-white transition-colors'}`} />
+            <span className={`font-medium md:hidden xl:block flex-1 whitespace-nowrap ${mobileMenuOpen ? '!block' : ''}`}>Saved</span>
+            {savedCount > 0 && (
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full absolute top-2 right-2 xl:static xl:bg-opacity-100 ${activeTab === 'saved' ? 'bg-white text-indigo-600' : 'bg-indigo-500 text-white md:bg-indigo-600 xl:bg-indigo-500/20 xl:text-indigo-300'} ${(mobileMenuOpen && savedCount > 0) ? '!static !bg-white !text-indigo-600' : ''}`}>
+                {savedCount}
+              </span>
+            )}
+          </button>
 
-        {/* Report Section */}
-        <button 
-          className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'report' ? 'text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:text-white'}`} style={activeTab === 'report' ? { background: 'rgba(248,250,252,0.10)' } : {}} 
-          onClick={() => setActiveTab('report')}
-        >
-          <Flag size={20} />
-          {!collapsed && <span className="font-medium">Report</span>}
-        </button>
+          <button 
+            className={`menu-item flex items-center gap-3 px-3 xl:px-4 py-3 w-full text-left transition-all rounded-xl group relative ${activeTab === 'report' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-300 hover:bg-white/10 hover:text-white'} ${mobileMenuOpen ? 'justify-start' : 'justify-center xl:justify-start'}`}
+            onClick={() => setActiveTab('report')}
+            title="Report Issue"
+          >
+            <Flag size={20} className={`shrink-0 ${activeTab === 'report' ? 'text-white' : 'text-slate-300 group-hover:text-white transition-colors'}`} />
+            <span className={`font-medium md:hidden xl:block whitespace-nowrap ${mobileMenuOpen ? '!block' : ''}`}>Report</span>
+          </button>
 
-        <button 
-          className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'rentals' ? 'text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:text-white'}`} style={activeTab === 'rentals' ? { background: 'rgba(248,250,252,0.10)' } : {}} 
-          onClick={() => setActiveTab('rentals')}
-        >
-          <Key size={20} />
-          {!collapsed && <span className="font-medium">My Rentals</span>}
-        </button>
+          <button 
+            className={`menu-item flex items-center gap-3 px-3 xl:px-4 py-3 w-full text-left transition-all rounded-xl group relative ${activeTab === 'rentals' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-300 hover:bg-white/10 hover:text-white'} ${mobileMenuOpen ? 'justify-start' : 'justify-center xl:justify-start'}`}
+            onClick={() => setActiveTab('rentals')}
+            title="My Rentals"
+          >
+            <Key size={20} className={`shrink-0 ${activeTab === 'rentals' ? 'text-white' : 'text-slate-300 group-hover:text-white transition-colors'}`} />
+            <span className={`font-medium md:hidden xl:block whitespace-nowrap ${mobileMenuOpen ? '!block' : ''}`}>Rentals</span>
+          </button>
 
-        <button 
-          className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'payments' ? 'text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:text-white'}`} style={activeTab === 'payments' ? { background: 'rgba(248,250,252,0.10)' } : {}} 
-          onClick={() => setActiveTab('payments')}
-        >
-          <CreditCard size={20} />
-          {!collapsed && <span className="font-medium">Payments</span>}
-        </button>
+          <button 
+            className={`menu-item flex items-center gap-3 px-3 xl:px-4 py-3 w-full text-left transition-all rounded-xl group relative ${activeTab === 'payments' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-300 hover:bg-white/10 hover:text-white'} ${mobileMenuOpen ? 'justify-start' : 'justify-center xl:justify-start'}`}
+            onClick={() => setActiveTab('payments')}
+            title="Payments"
+          >
+            <CreditCard size={20} className={`shrink-0 ${activeTab === 'payments' ? 'text-white' : 'text-slate-300 group-hover:text-white transition-colors'}`} />
+            <span className={`font-medium md:hidden xl:block whitespace-nowrap ${mobileMenuOpen ? '!block' : ''}`}>Payments</span>
+          </button>
 
-        <button 
-          className={`menu-item flex items-center gap-3 px-6 py-3 w-full text-left transition-colors ${activeTab === 'settings' ? 'text-white border-r-4 border-indigo-400' : 'text-gray-400 hover:text-white'}`} style={activeTab === 'settings' ? { background: 'rgba(248,250,252,0.10)' } : {}} 
-          onClick={() => setActiveTab('settings')}
-        >
-          <SettingsIcon size={20} />
-          {!collapsed && <span className="font-medium">Settings</span>}
-        </button>
-      </nav>
+          <button 
+            className={`menu-item flex items-center gap-3 px-3 xl:px-4 py-3 w-full text-left transition-all rounded-xl group relative ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-300 hover:bg-white/10 hover:text-white'} ${mobileMenuOpen ? 'justify-start' : 'justify-center xl:justify-start'}`}
+            onClick={() => setActiveTab('settings')}
+            title="Settings"
+          >
+            <SettingsIcon size={20} className={`shrink-0 ${activeTab === 'settings' ? 'text-white' : 'text-slate-300 group-hover:text-white transition-colors'}`} />
+            <span className={`font-medium md:hidden xl:block whitespace-nowrap ${mobileMenuOpen ? '!block' : ''}`}>Settings</span>
+          </button>
+        </nav>
 
-      <div className="sidebar-footer p-6 border-t border-white/10">
-        <button
-          className="logout-button flex items-center gap-3 w-full text-left text-gray-400 hover:text-white p-3 rounded-lg transition-colors"
-          style={{ background: 'rgba(248,250,252,0.05)' }}
-          onClick={() => {
-            if (window.confirm('Are you sure you want to logout?')) {
-              logout();
-              navigate('/login');
-            }
-          }}
-        >
-          <LogOut size={20} />
-          {!collapsed && <span className="font-medium">Logout</span>}
-        </button>
-      </div>
-    </aside>
+        <div className="sidebar-footer p-6 border-t border-white/10 bg-white/5">
+          <button className={`logout-button flex items-center gap-3 w-full text-left text-slate-300 hover:text-rose-400 hover:bg-rose-500/10 p-3 rounded-xl transition-all group ${mobileMenuOpen ? 'justify-start' : 'justify-center xl:justify-start'}`} onClick={() => { logout(); navigate('/login'); }}>
+            <LogOut size={20} className="group-hover:translate-x-1 transition-transform shrink-0" />
+            <span className={`font-medium md:hidden xl:block whitespace-nowrap ${mobileMenuOpen ? '!block' : ''}`}>Logout</span>
+          </button>
+        </div>
+      </aside>
     </>
   );
 };

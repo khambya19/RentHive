@@ -14,12 +14,13 @@ router.post('/book-direct', bikeController.bookBikeDirect); // Book a bike direc
 
 // Routes for vendors (bike rental shops)
 router.get('/vendor', bikeController.getVendorBikes); // Get vendor's bikes
-router.post('/vendor', bikeController.createBike); // Create new bike
+router.post('/vendor', bikeUpload.array('images', 10), bikeController.createBike); // Create new bike
 router.put('/vendor/:id', bikeController.updateBike); // Update bike
 router.delete('/vendor/:id', bikeController.deleteBike); // Delete bike
 
 router.get('/vendor/bookings', bikeController.getVendorBookings); // Get vendor's bookings
 router.put('/vendor/bookings/:id/status', bikeController.updateBookingStatus); // Update booking status
+router.patch('/bookings/:id/status', bikeController.updateBookingStatus); // Add PATCH support specific for owner dashboard actions
 
 // Approve/Reject bike bookings
 router.patch('/bookings/:bookingId/approve', bikeController.approveBooking);
@@ -31,5 +32,8 @@ router.get('/customers', bikeController.getVendorCustomers); // Get vendor custo
 
 // Upload bike images
 router.post('/upload-images', bikeUpload.array('images', 10), bikeController.uploadBikeImages);
+
+// Get single bike by ID - MUST BE LAST to avoid shadowing other routes
+router.get('/:id', bikeController.getBikeById);
 
 module.exports = router;

@@ -2,26 +2,29 @@ import React, { useState, useEffect, useCallback } from 'react';
 import UserProfileModal from './UserProfileModal';
 import API_BASE_URL from '../../config/api';
 import axios from 'axios';
-import { Search, Filter, Lock, Unlock, Trash2, Key, Eye } from 'lucide-react';
+import { Lock, Unlock, Trash2, Key, Eye, FileCheck } from 'lucide-react';
+import { useSocket } from '../../context/SocketContext';
 
-// Table for listing, searching, filtering, and managing users (customers + owners)
-const UsersTable = () => {
+const UsersTable = ({ initialKycFilter = 'all', initialRoleFilter = 'all' }) => {
+  const { socket } = useSocket();
   const [users, setUsers] = useState([]);
-  const [search, setSearch] = useState('');
-  const [role, setRole] = useState('all');
-  const [status, setStatus] = useState('all');
   const [selectedUser, setSelectedUser] = useState(null);
   const [showProfile, setShowProfile] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Determine fixed modes
+  const isKycMode = initialKycFilter === 'pending';
+  const isSpecificRoleMode = initialRoleFilter !== 'all';
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
       const params = new URLSearchParams();
-      if (search) params.append('search', search);
-      if (role && role !== 'all') params.append('role', role);
-      if (status && status !== 'all') params.append('status', status);
+      
+      // Enforce filters based on the tab context (props)
+      if (initialRoleFilter !== 'all') params.append('role', initialRoleFilter);
+      if (initialKycFilter !== 'all') params.append('kycStatus', initialKycFilter); // This handles 'pending' for KYC tab
       
       const response = await axios.get(`${API_BASE_URL}/admin/users?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -31,15 +34,45 @@ const UsersTable = () => {
         setUsers(response.data.users);
       }
     } catch (err) {
-      // console.error('Error fetching users:', err);
+      console.error('Error fetching users:', err);
     } finally {
       setLoading(false);
     }
-  }, [search, role, status]);
+  }, [initialRoleFilter, initialKycFilter]);
 
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
+
+  // Real-time listener
+  useEffect(() => {
+    if (!socket) return;
+    
+    socket.on('kyc-submitted', (data) => {
+      fetchUsers();
+    });
+
+    socket.on('user-registered', (data) => {
+      // Refresh if the new user matches our current view filter
+      if (initialRoleFilter === 'all' || initialRoleFilter === data.type) {
+        fetchUsers();
+      }
+    });
+
+    return () => {
+      socket.off('kyc-submitted');
+      socket.off('user-registered');
+    };
+  }, [socket, fetchUsers, initialRoleFilter]);
+
+  useEffect(() => {
+    if (selectedUser) {
+      const updatedUser = users.find(u => u.id === selectedUser.id);
+      if (updatedUser) {
+        setSelectedUser(updatedUser);
+      }
+    }
+  }, [users, selectedUser]);
 
   const handleBlockToggle = async (userId) => {
     try {
@@ -47,19 +80,14 @@ const UsersTable = () => {
       const response = await axios.patch(`${API_BASE_URL}/admin/users/${userId}/block`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
-      if (response.data.success) {
-        fetchUsers();
-      }
+      if (response.data.success) fetchUsers();
     } catch (err) {
-      // console.error('Error toggling user block:', err);
       alert('Failed to update user status');
     }
   };
 
   const handleDelete = async (userId) => {
     if (!window.confirm('Are you sure you want to delete this user?')) return;
-    
     try {
       const token = localStorage.getItem('token');
       await axios.delete(`${API_BASE_URL}/admin/users/${userId}`, {
@@ -67,7 +95,6 @@ const UsersTable = () => {
       });
       fetchUsers();
     } catch (err) {
-      // console.error('Error deleting user:', err);
       alert('Failed to delete user');
     }
   };
@@ -78,103 +105,117 @@ const UsersTable = () => {
       const response = await axios.post(`${API_BASE_URL}/admin/users/${userId}/reset-password`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
       if (response.data.success) {
         alert(`Temporary password: ${response.data.tempPassword}\n\nPlease save this and share it with the user.`);
       }
     } catch (err) {
-      // console.error('Error resetting password:', err);
       alert('Failed to reset password');
     }
   };
 
-  if (loading) return <div className="text-center py-8 text-gray-600">Loading users...</div>;
+  if (loading) return <div className="text-center py-20 text-slate-400 font-bold animate-pulse">Loading database...</div>;
 
   return (
-    <div className="rounded shadow p-4" style={{ background: '#f8fafc' }}>
-      <div className="flex flex-wrap gap-4 mb-4">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
-          <input 
-            className="border p-2 pl-10 rounded w-full" 
-            placeholder="Search by name, email, phone" 
-            value={search} 
-            onChange={e => setSearch(e.target.value)} 
-          />
-        </div>
-        <div className="relative">
-          <Filter className="absolute left-3 top-2.5 text-gray-400" size={18} />
-          <select className="border p-2 pl-10 rounded appearance-none pr-8" style={{ background: '#f8fafc' }} value={role} onChange={e => setRole(e.target.value)}>
-            <option value="all">All Roles</option>
-            <option value="renter">Customer (Renter)</option>
-            <option value="lessor">Lessor</option>
-            <option value="owner">Owner</option>
-            <option value="vendor">Vendor</option>
-          </select>
-        </div>
-        <div className="relative">
-          <Filter className="absolute left-3 top-2.5 text-gray-400" size={18} />
-          <select className="border p-2 pl-10 rounded appearance-none pr-8" style={{ background: '#f8fafc' }} value={status} onChange={e => setStatus(e.target.value)}>
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="blocked">Blocked</option>
-          </select>
-        </div>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="p-2 text-left">Name</th>
-              <th className="p-2 text-left">Email</th>
-              <th className="p-2 text-left">Phone</th>
-              <th className="p-2 text-left">Role</th>
-              <th className="p-2 text-left">Status</th>
-              <th className="p-2 text-left">Actions</th>
+    <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+      {/* Search and Filters REMOVED as requested */}
+      
+      {/* Table */}
+      <div className="overflow-x-auto rounded-lg border border-slate-100">
+        <table className="min-w-full text-sm text-left">
+          <thead className="bg-slate-50 text-slate-500 uppercase font-bold text-xs tracking-wider">
+            <tr>
+              <th className="px-6 py-4">User</th>
+              <th className="px-6 py-4">Role</th>
+              <th className="px-6 py-4">Status</th>
+              <th className="px-6 py-4">KYC</th>
+              <th className="px-6 py-4 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-100">
             {users.length === 0 ? (
               <tr>
-                <td colSpan="6" className="p-4 text-center text-gray-500">No users found</td>
+                <td colSpan="5" className="px-6 py-12 text-center text-slate-400 font-medium">
+                   {isKycMode ? 'No pending KYC requests found.' : 'No users found.'}
+                </td>
               </tr>
             ) : (
               users.map(user => (
-                <tr key={user.id} className="border-t hover:bg-gray-50">
-                  <td className="p-2 cursor-pointer text-blue-600 hover:text-blue-800 flex items-center gap-1" onClick={() => { setSelectedUser(user); setShowProfile(true); }}>
-                    <Eye size={14} /> {user.name}
+                <tr key={user.id} className="hover:bg-slate-50/80 transition-colors group">
+                  <td className="px-6 py-4">
+                     <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                           {user.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                           <p className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors cursor-pointer" onClick={() => { setSelectedUser(user); setShowProfile(true); }}>{user.name}</p>
+                           <p className="text-xs text-slate-500">{user.email}</p>
+                        </div>
+                     </div>
                   </td>
-                  <td className="p-2">{user.email}</td>
-                  <td className="p-2">{user.phone || 'N/A'}</td>
-                  <td className="p-2 capitalize">{user.role}</td>
-                  <td className="p-2">
-                    <span className={`px-2 py-1 rounded text-xs ${user.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                      {user.active ? 'Active' : 'Blocked'}
-                    </span>
+                  <td className="px-6 py-4">
+                     <span className={`px-2 py-1 rounded text-xs font-bold uppercase tracking-wider ${
+                        user.role === 'owner' ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700'
+                     }`}>
+                        {user.role}
+                     </span>
                   </td>
-                  <td className="p-2">
-                    <div className="flex gap-2">
+                  <td className="px-6 py-4">
+                     {user.active ? 
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Active</span> : 
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-red-600"><span className="w-2 h-2 rounded-full bg-red-500"></span> Blocked</span>
+                     }
+                  </td>
+                  <td className="px-6 py-4">
+                      {user.kyc_status === 'approved' && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-50 text-green-700 border border-green-100">Verified</span>}
+                      {user.kyc_status === 'pending' && (
+                        <button 
+                          onClick={() => { setSelectedUser(user); setShowProfile(true); }}
+                          className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200 animate-pulse hover:bg-amber-200 transition-colors shadow-sm"
+                        >
+                          <FileCheck size={12} /> Review
+                        </button>
+                      )}
+                      {user.kyc_status === 'rejected' && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-50 text-red-700 border border-red-100">Rejected</span>}
+                      {(!user.kyc_status || user.kyc_status === 'not_submitted') && <span className="text-xs text-slate-400 font-medium">Not Submitted</span>}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex justify-end gap-2">
                       <button 
-                        className={`p-1.5 rounded text-white ${user.active ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`} 
-                        onClick={() => handleBlockToggle(user.id, user.active)}
-                        title={user.active ? 'Block User' : 'Unblock User'}
+                        className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                        onClick={() => { setSelectedUser(user); setShowProfile(true); }}
+                        title="View Profile"
                       >
-                        {user.active ? <Lock size={16} /> : <Unlock size={16} />}
+                        <Eye size={18} />
                       </button>
-                      <button 
-                        className="p-1.5 rounded bg-yellow-500 hover:bg-yellow-600 text-white" 
-                        onClick={() => handleResetPassword(user.id)}
-                        title="Reset Password"
-                      >
-                        <Key size={16} />
-                      </button>
-                      <button 
-                        className="p-1.5 rounded bg-gray-500 hover:bg-gray-600 text-white" 
-                        onClick={() => handleDelete(user.id)}
-                        title="Delete User"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      
+                      {/* Show actions only for non-KYC mode? Or always? User said "from there i can access and denied like blocked their login". This implies blocking capability needs to be here. */}
+                      {!isKycMode && (
+                        <>
+                           <div className="w-px h-6 bg-slate-200 mx-1 self-center"></div>
+
+                           <button 
+                             className={`p-2 rounded-lg transition-colors ${user.active ? 'text-slate-400 hover:text-red-600 hover:bg-red-50' : 'text-slate-400 hover:text-green-600 hover:bg-green-50'}`} 
+                             onClick={() => handleBlockToggle(user.id)}
+                             title={user.active ? 'Block User' : 'Unblock User'}
+                           >
+                             {user.active ? <Lock size={18} /> : <Unlock size={18} />}
+                           </button>
+                           <button 
+                             className="p-2 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" 
+                             onClick={() => handleResetPassword(user.id)}
+                             title="Reset Password"
+                           >
+                             <Key size={18} />
+                           </button>
+                           <button 
+                             className="p-2 rounded-lg text-slate-400 hover:text-red-900 hover:bg-red-50 transition-colors" 
+                             onClick={() => handleDelete(user.id)}
+                             title="Delete User"
+                           >
+                             <Trash2 size={18} />
+                           </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -183,8 +224,13 @@ const UsersTable = () => {
           </tbody>
         </table>
       </div>
+
       {showProfile && selectedUser && (
-        <UserProfileModal user={selectedUser} onClose={() => setShowProfile(false)} />
+        <UserProfileModal 
+           user={selectedUser} 
+           onClose={() => setShowProfile(false)} 
+           onUpdate={fetchUsers} 
+        />
       )}
     </div>
   );

@@ -27,10 +27,12 @@ const ProtectedRoute = ({ children, allowedTypes }) => {
     const userType = user.type || user.role;
     if (allowedTypes && !allowedTypes.includes(userType)) {
         // Redirect based on user type
-        if (userType === 'renter' || userType === 'lessor') {
+        if (userType === 'renter') {
             return <Navigate to="/user/dashboard" replace />;
-        } else if (userType === 'owner' || userType === 'vendor') {
+        } else if (['owner', 'vendor', 'lessor'].includes(userType)) {
             return <Navigate to="/owner/dashboard" replace />;
+        } else if (['admin', 'super_admin'].includes(userType)) {
+            return <Navigate to="/admin/dashboard" replace />;
         } else {
             return <Navigate to="/login" replace />;
         }
@@ -40,6 +42,7 @@ const ProtectedRoute = ({ children, allowedTypes }) => {
 
 
 function AppContent() {
+    // console.log("AppContent rendered");
     const location = useLocation();
     // Hide footer on auth pages AND dashboard pages
     const showFooter = location.pathname !== '/login' && 
@@ -48,11 +51,13 @@ function AppContent() {
                        location.pathname !== '/register-owner' &&
                        location.pathname !== '/forgot-password' &&
                        !location.pathname.startsWith('/user/dashboard') &&
-                       !location.pathname.startsWith('/owner/dashboard');
+                       !location.pathname.startsWith('/owner/dashboard') &&
+                       !location.pathname.startsWith('/admin/dashboard');
 
     // Hide navbar on dashboard pages
     const showNavBar = !location.pathname.startsWith('/user/dashboard') &&
-                       !location.pathname.startsWith('/owner/dashboard');
+                       !location.pathname.startsWith('/owner/dashboard') &&
+                       !location.pathname.startsWith('/admin/dashboard');
 
     return (
         <div className="App">
@@ -65,12 +70,12 @@ function AppContent() {
                 <Route path="/register-user" element={<RegisterUser />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/user/dashboard" element={
-                    <ProtectedRoute allowedTypes={['lessor']}>
+                    <ProtectedRoute allowedTypes={['renter']}>
                         <UserDashboard />
                     </ProtectedRoute>
                 } />
                 <Route path="/owner/dashboard" element={
-                    <ProtectedRoute allowedTypes={['owner']}>
+                    <ProtectedRoute allowedTypes={['owner', 'vendor', 'lessor']}>
                         <OwnerDashboard />
                     </ProtectedRoute>
                 } />
@@ -81,7 +86,7 @@ function AppContent() {
                     </ProtectedRoute>
                 } />
                 <Route path="/user/ratings" element={
-                    <ProtectedRoute allowedTypes={['lessor', 'renter']}>
+                    <ProtectedRoute allowedTypes={['renter']}>
                         <RatingPage />
                     </ProtectedRoute>
                 } />

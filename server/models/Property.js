@@ -66,8 +66,12 @@ const Property = sequelize.define('Property', {
     defaultValue: []
   },
   status: {
-    type: DataTypes.ENUM('Available', 'Rented', 'Maintenance'),
+    type: DataTypes.STRING,
     defaultValue: 'Available'
+  },
+  isApproved: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
   },
   viewCount: {
     type: DataTypes.INTEGER,
@@ -83,6 +87,62 @@ const Property = sequelize.define('Property', {
   },
   longitude: {
     type: DataTypes.DECIMAL(11, 8),
+    allowNull: true
+  },
+  listingType: {
+    type: DataTypes.STRING,
+    defaultValue: 'For Rent'
+  },
+  propertyCondition: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  yearBuilt: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
+  lotSize: {
+    type: DataTypes.STRING, /* Keeping as string to avoid precision issues if mixed input */
+    allowNull: true
+  },
+  lotSizeUnit: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  garageSpaces: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  hoaFees: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true
+  },
+  hoaFeesFrequency: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  furnished: {
+    type: DataTypes.STRING,
+    defaultValue: 'No'
+  },
+  petPolicy: {
+    type: DataTypes.STRING,
+    defaultValue: 'No'
+  },
+  petDetails: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  leaseTerms: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  virtualTourLink: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  floorPlan: {
+    type: DataTypes.STRING,
     allowNull: true
   }
 }, {

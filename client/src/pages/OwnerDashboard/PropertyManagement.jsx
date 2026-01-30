@@ -7,7 +7,7 @@ import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
 import noImage from '../../assets/no-image.png';
 import { Plus, MapPin, Home, Bed, Bath, Ruler, Trash2, Edit } from 'lucide-react';
 
-const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
+const PropertyManagement = ({ inlineMode = false, showSuccess, showError, isEditMode, editData, onEditComplete }) => {
   const { user: _user } = useAuth();
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -61,8 +61,11 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
         longitude: selectedLocation?.lng || null,
       };
 
-      const response = await fetch(`${API_BASE_URL}/properties`, {
-        method: 'POST',
+      const url = isEditMode && editData ? `${API_BASE_URL}/properties/${editData.id}` : `${API_BASE_URL}/properties`;
+      const method = isEditMode && editData ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method: method,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
@@ -71,21 +74,30 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
       });
 
       if (response.ok) {
-        const newProperty = await response.json();
-        setProperties([...properties, newProperty]);
+        if (!inlineMode) {
+           const newProperty = await response.json();
+           if (isEditMode) {
+             setProperties(properties.map(p => p.id === newProperty.id ? newProperty : p));
+           } else {
+             setProperties([...properties, newProperty]); 
+           }
+        }
         setShowPropertyModal(false);
         resetForm();
-        if (showSuccess) showSuccess('Success', 'Property added successfully!');
-        else alert('Property added successfully!');
+        if (showSuccess) showSuccess('Success', `Property ${isEditMode ? 'updated' : 'added'} successfully!`);
+        else alert(`Property ${isEditMode ? 'updated' : 'added'} successfully!`);
+
+        if (onEditComplete) onEditComplete();
       } else {
         const errorData = await response.json();
-        if (showError) showError('Error', `Failed to add property: ${errorData.error || 'Unknown error'}`);
-        else alert(`Failed to add property: ${errorData.error || 'Unknown error'}`);
+        const msg = `Failed to ${isEditMode ? 'update' : 'add'} property: ${errorData.error || 'Unknown error'}`;
+        if (showError) showError('Error', msg);
+        else alert(msg);
       }
     } catch (error) {
-      console.error('Error adding property:', error);
-      if (showError) showError('Error', 'Failed to add property');
-      else alert('Failed to add property');
+      console.error('Error saving property:', error);
+      if (showError) showError('Error', `Failed to ${isEditMode ? 'update' : 'add'} property`);
+      else alert(`Failed to ${isEditMode ? 'update' : 'add'} property`);
     }
   };
 
@@ -102,13 +114,16 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
   // In inline mode, just render the form without the list
   if (inlineMode) {
     return (
-      <div className="p-4 md:p-8 max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100">
+      <div className="w-full h-full">
         {showPropertyModal && (
           <div className="animate-fade-in">
             <AddPropertyForm
               onSubmit={handleAddProperty}
-              onCancel={() => setShowPropertyModal(false)}
-              initialData={null}
+              onCancel={() => {
+                 if (onEditComplete) onEditComplete();
+                 setShowPropertyModal(false);
+              }}
+              initialData={isEditMode ? editData : null}
             />
           </div>
         )}
@@ -117,7 +132,7 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
   }
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto">
+    <div className="p-6 md:p-8 w-full">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">My Properties</h2>
@@ -141,6 +156,7 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError }) => {
                 alt={property.title}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 onError={(e) => {
+                  e.target.onerror = null;
                   e.target.src = noImage;
                 }}
               />

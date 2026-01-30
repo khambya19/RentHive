@@ -13,7 +13,7 @@ import './NotificationBell.css';
 import ModalPortal from './ModalPortal';
 import NotificationModal from './NotificationModal';
 
-const NotificationBell = ({ userId }) => {
+const NotificationBell = ({ user }) => {
   const {
     notifications,
     unreadCount,
@@ -33,13 +33,12 @@ const NotificationBell = ({ userId }) => {
   const [bellPosition, setBellPosition] = useState(null);
   const [, setCurrentTime] = useState(Date.now());
 
-  // Register user when component mounts
+  // Register user when component mounts - Stabilized
   useEffect(() => {
-    if (userId) {
-      registerUser(userId);
-      // console.log('🔔 NotificationBell: Registered user', userId);
+    if (user?.id) {
+      registerUser({ userId: user.id, role: user.type || user.role });
     }
-  }, [userId, registerUser]);
+  }, [user?.id, user?.type, user?.role, registerUser]);
 
   // Update current time every minute for real-time relative timestamps
   useEffect(() => {

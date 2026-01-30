@@ -17,7 +17,8 @@ const UserDashboard = () => {
   const [activeTab, setActiveTab] = useState(() => {
     // Initialize from sessionStorage
     const storedTab = sessionStorage.getItem('dashboardTab');
-    ;
+    return storedTab || 'overview';
+  });
   const [modalProperty, setModalProperty] = useState(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -28,7 +29,8 @@ const UserDashboard = () => {
       const storedTab = sessionStorage.getItem('dashboardTab');
       if (storedTab) {
         setActiveTab(storedTab);
-        
+        sessionStorage.removeItem('dashboardTab');
+      }
     };
     
     // Check immediately

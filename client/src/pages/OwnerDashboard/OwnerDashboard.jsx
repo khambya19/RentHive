@@ -46,7 +46,8 @@ const OwnerDashboard = () => {
   const [activeTab, setActiveTab] = useState(() => {
     // Initialize from sessionStorage
     const storedTab = sessionStorage.getItem('dashboardTab');
-    ;
+    return storedTab || 'overview';
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // New state for mobile menu
   
@@ -56,7 +57,8 @@ const OwnerDashboard = () => {
       const storedTab = sessionStorage.getItem('dashboardTab');
       if (storedTab) {
         setActiveTab(storedTab);
-        
+        sessionStorage.removeItem('dashboardTab');
+      }
     };
     
     // Check immediately

@@ -18,7 +18,7 @@ const Report = sequelize.define('Report', {
     onDelete: 'CASCADE'
   },
   listingType: {
-    type: DataTypes.ENUM('property', 'bike'),
+    type: DataTypes.STRING, // Changed from ENUM for migration safety
     allowNull: false,
     field: 'listing_type'
   },
@@ -36,7 +36,7 @@ const Report = sequelize.define('Report', {
     allowNull: true
   },
   status: {
-    type: DataTypes.ENUM('pending', 'reviewed', 'resolved', 'dismissed'),
+    type: DataTypes.STRING, // Changed from ENUM for migration safety
     defaultValue: 'pending'
   }
 }, {

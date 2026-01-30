@@ -9,7 +9,7 @@ const Message = sequelize.define('Message', {
   },
   conversationId: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true,
     comment: 'Unique identifier for conversation between two users'
   },
   senderId: {
@@ -53,7 +53,7 @@ const Message = sequelize.define('Message', {
   },
   message: {
     type: DataTypes.TEXT,
-    allowNull: false
+    allowNull: true
   },
   messageType: {
     type: DataTypes.ENUM('text', 'image', 'file', 'system'),

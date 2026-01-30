@@ -20,6 +20,7 @@ const BikeBooking = require('./models/BikeBooking');
 const Payment = require('./models/Payment');
 const Message = require('./models/Message');
 const Report = require('./models/Report');
+const BookingApplication = require('./models/BookingApplication');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const propertyRoutes = require('./routes/propertyRoutes');
@@ -29,6 +30,7 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const publicRoutes = require('./routes/publicRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const bookingRoutes = require('./routes/bookingRoutes');
 
 
 
@@ -58,9 +60,13 @@ app.use('/api/users', userRoutes);
 app.use('/api/properties', propertyRoutes);
 app.use('/api/bikes', bikeRoutes);
 app.use('/api/owners', ownerRoutes);
+app.use('/api/bookings', bookingRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/chat', require('./routes/chatRoutes'));
 app.use('/api/reports', reportRoutes);
+const adminRoutes = require('./routes/adminRoutes');
+app.use('/api/admin', adminRoutes);
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -96,6 +102,18 @@ io.on('connection', (socket) => {
     console.log(`📊 Total connected users: ${connectedUsers.size}`);
   });
 
+  socket.on('join_chat', (chatId) => {
+    socket.join(chatId);
+    console.log(`📡 Socket ${socket.id} joined room: ${chatId}`);
+  });
+
+  socket.on('send_message', (data) => {
+    if (data.receiverId) {
+      console.log(`✉️ Relaying message from ${data.senderId} to user_${data.receiverId}`);
+      io.to(`user_${data.receiverId}`).emit('receive_message', data);
+    }
+  });
+
   socket.on('disconnect', () => {
     if (socket.userId) {
       connectedUsers.delete(socket.userId);
@@ -106,93 +124,93 @@ io.on('connection', (socket) => {
   });
 });
 
-      // Start server & DB
-      (async () => {
-        try {
-          await sequelize.authenticate();
-          console.log('✅ Database connected');
+// Start server & DB
+(async () => {
+  try {
+    await sequelize.authenticate();
+    console.log('✅ Database connected');
 
-          // Model associations
-          User.hasMany(Property, { foreignKey: 'vendorId', as: 'properties' });
-          Property.belongsTo(User, { foreignKey: 'vendorId', as: 'vendor' });
+    // Model associations
+    User.hasMany(Property, { foreignKey: 'vendorId', as: 'properties' });
+    Property.belongsTo(User, { foreignKey: 'vendorId', as: 'vendor' });
 
-          User.hasMany(Booking, { foreignKey: 'tenantId', as: 'tenantBookings' });
-          User.hasMany(Booking, { foreignKey: 'vendorId', as: 'vendorBookings' });
-          Property.hasMany(Booking, { foreignKey: 'propertyId', as: 'bookings' });
-          Booking.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
-          Booking.belongsTo(User, { foreignKey: 'tenantId', as: 'tenant' });
-          Booking.belongsTo(User, { foreignKey: 'vendorId', as: 'vendor' });
+    User.hasMany(Booking, { foreignKey: 'tenantId', as: 'tenantBookings' });
+    User.hasMany(Booking, { foreignKey: 'vendorId', as: 'vendorBookings' });
+    Property.hasMany(Booking, { foreignKey: 'propertyId', as: 'bookings' });
+    Booking.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
+    Booking.belongsTo(User, { foreignKey: 'tenantId', as: 'tenant' });
+    Booking.belongsTo(User, { foreignKey: 'vendorId', as: 'vendor' });
 
-          Property.hasMany(PropertyView, { foreignKey: 'propertyId', as: 'views' });
-          PropertyView.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
+    Property.hasMany(PropertyView, { foreignKey: 'propertyId', as: 'views' });
+    PropertyView.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
 
-          Property.hasMany(Inquiry, { foreignKey: 'propertyId', as: 'inquiries' });
-          Inquiry.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
-          Inquiry.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+    Property.hasMany(Inquiry, { foreignKey: 'propertyId', as: 'inquiries' });
+    Inquiry.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
+    Inquiry.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 
-          // Bike associations
-          User.hasMany(Bike, { foreignKey: 'vendorId', as: 'bikes' });
-          Bike.belongsTo(User, { foreignKey: 'vendorId', as: 'vendor' });
+    // Bike associations
+    User.hasMany(Bike, { foreignKey: 'vendorId', as: 'bikes' });
+    Bike.belongsTo(User, { foreignKey: 'vendorId', as: 'vendor' });
 
-          User.hasMany(BikeBooking, { foreignKey: 'lessorId', as: 'lessorBikeBookings' });
-          User.hasMany(BikeBooking, { foreignKey: 'vendorId', as: 'vendorBikeBookings' });
-          Bike.hasMany(BikeBooking, { foreignKey: 'bikeId', as: 'bookings' });
-          BikeBooking.belongsTo(Bike, { foreignKey: 'bikeId', as: 'bike' });
-          BikeBooking.belongsTo(User, { foreignKey: 'lessorId', as: 'lessor' });
-          BikeBooking.belongsTo(User, { foreignKey: 'vendorId', as: 'vendor' });
+    User.hasMany(BikeBooking, { foreignKey: 'lessorId', as: 'lessorBikeBookings' });
+    User.hasMany(BikeBooking, { foreignKey: 'vendorId', as: 'vendorBikeBookings' });
+    Bike.hasMany(BikeBooking, { foreignKey: 'bikeId', as: 'bookings' });
+    BikeBooking.belongsTo(Bike, { foreignKey: 'bikeId', as: 'bike' });
+    BikeBooking.belongsTo(User, { foreignKey: 'lessorId', as: 'lessor' });
+    BikeBooking.belongsTo(User, { foreignKey: 'vendorId', as: 'vendor' });
 
-          // Payments
-          Payment.belongsTo(Booking, { foreignKey: 'bookingId' });
-          Payment.belongsTo(User, { foreignKey: 'tenantId', as: 'tenant' });
-          Payment.belongsTo(User, { foreignKey: 'ownerId', as: 'owner' });
-          Booking.hasMany(Payment, { foreignKey: 'bookingId' });
+    // Payments
+    Payment.belongsTo(Booking, { foreignKey: 'bookingId' });
+    Payment.belongsTo(User, { foreignKey: 'tenantId', as: 'tenant' });
+    Payment.belongsTo(User, { foreignKey: 'ownerId', as: 'owner' });
+    Booking.hasMany(Payment, { foreignKey: 'bookingId' });
 
-          // Messages
-          Message.belongsTo(User, { foreignKey: 'senderId', as: 'sender' });
-          Message.belongsTo(User, { foreignKey: 'receiverId', as: 'receiver' });
-          Message.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
-          Message.belongsTo(Bike, { foreignKey: 'bikeId', as: 'bike' });
-          User.hasMany(Message, { foreignKey: 'senderId', as: 'sentMessages' });
-          User.hasMany(Message, { foreignKey: 'receiverId', as: 'receivedMessages' });
+    // Messages
+    Message.belongsTo(User, { foreignKey: 'senderId', as: 'sender' });
+    Message.belongsTo(User, { foreignKey: 'receiverId', as: 'receiver' });
+    Message.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
+    Message.belongsTo(Bike, { foreignKey: 'bikeId', as: 'bike' });
+    User.hasMany(Message, { foreignKey: 'senderId', as: 'sentMessages' });
+    User.hasMany(Message, { foreignKey: 'receiverId', as: 'receivedMessages' });
 
-          // Reports
-          Report.belongsTo(User, { foreignKey: 'reporterId', as: 'reporter' });
-          User.hasMany(Report, { foreignKey: 'reporterId', as: 'reports' });
+    // Reports
+    Report.belongsTo(User, { foreignKey: 'reporterId', as: 'reporter' });
+    User.hasMany(Report, { foreignKey: 'reporterId', as: 'reports' });
 
-          // Sync DB (safe mode - no force/alter unless you really need it)
-          await sequelize.sync(); // ← safe sync, won't drop tables
-          console.log('✅ Database synced');
+    // Sync DB (safe mode - no force/alter unless you really need it)
+    await sequelize.sync({ alter: true }); // ← Updated to alter tables for new schema changes
+    console.log('✅ Database synced');
 
-          // Payment scheduler
-          const paymentScheduler = require('./services/paymentScheduler');
-          const schedule = require('node-schedule');
+    // Payment scheduler
+    const paymentScheduler = require('./services/paymentScheduler');
+    const schedule = require('node-schedule');
 
-          // Daily at midnight
-          schedule.scheduleJob('0 0 * * *', async () => {
-            console.log('🕒 Running daily payment scheduler...');
-            await paymentScheduler.createMonthlyPayments();
-            await paymentScheduler.checkOverduePayments();
-          });
+    // Daily at midnight
+    schedule.scheduleJob('0 0 * * *', async () => {
+      console.log('🕒 Running daily payment scheduler...');
+      await paymentScheduler.createMonthlyPayments();
+      await paymentScheduler.checkOverduePayments();
+    });
 
-          // Reminders at 8 AM & 4 PM
-          schedule.scheduleJob('0 8,16 * * *', async () => {
-            console.log('🕒 Running payment reminder scheduler...');
-            await paymentScheduler.sendUpcomingPaymentReminders();
-          });
+    // Reminders at 8 AM & 4 PM
+    schedule.scheduleJob('0 8,16 * * *', async () => {
+      console.log('🕒 Running payment reminder scheduler...');
+      await paymentScheduler.sendUpcomingPaymentReminders();
+    });
 
-          console.log('✅ Payment scheduler initialized');
+    console.log('✅ Payment scheduler initialized');
 
-          const port = process.env.PORT || 5001;
-          server.listen(port, () => {
-            console.log(`Server running on port ${port}`);
-            console.log('✅ Server is ready');
-          });
+    const port = process.env.PORT || 5001;
+    server.listen(port, () => {
+      console.log(`Server running on port ${port}`);
+      console.log('✅ Server is ready');
+    });
 
-        } catch (err) {
-          console.error('❌ Failed to start server:', err);
-          process.exit(1);
-        }
-      })();
+  } catch (err) {
+    console.error('❌ Failed to start server:', err);
+    process.exit(1);
+  }
+})();
 
 
 

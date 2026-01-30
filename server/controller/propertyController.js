@@ -5,7 +5,6 @@ const Inquiry = require('../models/Inquiry');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { Op } = require('sequelize');
-const sendEmail = require('../utils/mailer');
 
 // Get all available properties for browsing (tenant/lessor)
 exports.getAvailableProperties = async (req, res) => {
@@ -96,46 +95,32 @@ exports.getAvailableProperties = async (req, res) => {
         {
           model: User,
           as: 'vendor',
-          attributes: ['id', 'name', 'email', 'phone', 'profileImage']
+          attributes: ['id', 'name', 'email', 'phone']
         }
       ],
       order: orderClause
     });
-
     return res.json(properties.map(p => ({
-      id: p.id,
-      title: p.title,
-      propertyType: p.propertyType,
-      address: p.address,
-      city: p.city,
-      bedrooms: p.bedrooms,
-      bathrooms: p.bathrooms,
-      area: p.area,
-      rentPrice: p.rentPrice,
-      securityDeposit: p.securityDeposit,
-      amenities: p.amenities,
-      description: p.description,
-      images: p.images,
-      status: p.status,
-      latitude: p.latitude,
-      longitude: p.longitude,
-      createdAt: p.createdAt,
-      vendorId: p.vendorId,
-      vendorName: p.vendor?.name,
-      vendorEmail: p.vendor?.email,
-      vendorPhone: p.vendor?.phone,
-      vendorImage: p.vendor?.profileImage
+      ...p.get({ plain: true }), // Start with all raw fields
+      // Explicitly ensure critical fields if needed, or just return everything
+      vendor: p.vendor // Include associated vendor object
     })));
   } catch (error) {
     console.error('Error fetching available properties:', error);
-    return res.status(500).json({ error: 'Failed to fetch properties' });
+    return res.json([]);
   }
 };
 
 // Get all properties for a vendor
 exports.getVendorProperties = async (req, res) => {
   try {
+    if (!req.user || !req.user.id) {
+      console.error('getVendorProperties: User not authenticated or ID missing');
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
     const vendorId = req.user.id;
+    console.log(`Fetching properties for vendor: ${vendorId}`);
     
     const properties = await Property.findAll({
       where: { vendorId },
@@ -161,11 +146,25 @@ exports.getVendorProperties = async (req, res) => {
       longitude: p.longitude,
       viewCount: p.viewCount,
       inquiryCount: p.inquiryCount,
-      createdAt: p.createdAt
+      createdAt: p.createdAt,
+      // Include any new fields explicitly if needed, or rely on sequelize to provide them
+      listingType: p.listingType,
+      propertyCondition: p.propertyCondition,
+      yearBuilt: p.yearBuilt,
+      lotSize: p.lotSize,
+      garageSpaces: p.garageSpaces,
+      hoaFees: p.hoaFees,
+      furnished: p.furnished,
+      petPolicy: p.petPolicy,
+      leaseTerms: p.leaseTerms,
+      virtualTourLink: p.virtualTourLink,
+      floorPlan: p.floorPlan
     })));
   } catch (error) {
     console.error('Error fetching vendor properties:', error);
-    return res.status(500).json({ error: 'Failed to fetch properties' });
+    // Send detailed error in development
+    const errorMessage = process.env.NODE_ENV === 'development' ? error.message : 'Failed to fetch properties';
+    return res.status(500).json({ error: errorMessage });
   }
 };
 
@@ -234,12 +233,21 @@ exports.getVendorStats = async (req, res) => {
 };
 
 // Create new property
+// Create new property
 exports.createProperty = async (req, res) => {
   try {
-    const vendorId = req.user.id;
+    const vendorId = req.user.id; // User is attached by protect middleware
+    
+    // Check if user is verified
+    const user = await User.findByPk(vendorId);
+    if (!user || !user.isVerified || user.kycStatus !== 'approved') {
+      return res.status(403).json({ error: 'You must complete KYC verification to post listings.' });
+    }
+
     const {
       title,
       propertyType,
+      listingType,
       address,
       city,
       bedrooms,
@@ -249,20 +257,29 @@ exports.createProperty = async (req, res) => {
       securityDeposit,
       amenities,
       description,
+      images,
       latitude,
-      longitude
+      longitude,
+      propertyCondition,
+      yearBuilt,
+      lotSize,
+      lotSizeUnit,
+      garageSpaces,
+      hoaFees,
+      hoaFeesFrequency,
+      furnished,
+      petPolicy,
+      petDetails,
+      leaseTerms,
+      virtualTourLink,
+      floorPlan
     } = req.body;
-
-    // Process uploaded image files
-    const imagePaths = req.files ? req.files.map(file => file.filename) : [];
-
-    // Parse amenities if it's a JSON string
-    const parsedAmenities = typeof amenities === 'string' ? JSON.parse(amenities) : (amenities || []);
 
     const property = await Property.create({
       vendorId,
       title,
       propertyType,
+      listingType: listingType || 'For Rent',
       address,
       city,
       bedrooms: parseInt(bedrooms),
@@ -270,34 +287,30 @@ exports.createProperty = async (req, res) => {
       area,
       rentPrice: parseFloat(rentPrice),
       securityDeposit: securityDeposit ? parseFloat(securityDeposit) : null,
-      amenities: parsedAmenities,
+      amenities: amenities || [],
       description,
-      images: imagePaths,
+      images: images || [],
       status: 'Available',
       latitude: latitude ? parseFloat(latitude) : null,
-      longitude: longitude ? parseFloat(longitude) : null
+      longitude: longitude ? parseFloat(longitude) : null,
+      propertyCondition,
+      yearBuilt: yearBuilt ? parseInt(yearBuilt) : null,
+      lotSize: lotSize ? String(lotSize) : null,
+      lotSizeUnit,
+      garageSpaces: garageSpaces ? parseInt(garageSpaces) : 0,
+      hoaFees: hoaFees ? parseFloat(hoaFees) : null,
+      hoaFeesFrequency,
+      furnished: furnished || 'No',
+      petPolicy: petPolicy || 'No',
+      petDetails,
+      leaseTerms,
+      virtualTourLink,
+      floorPlan,
+      isApproved: true
     });
 
     return res.json({
-      id: property.id,
-      title: property.title,
-      propertyType: property.propertyType,
-      address: property.address,
-      city: property.city,
-      bedrooms: property.bedrooms,
-      bathrooms: property.bathrooms,
-      area: property.area,
-      rentPrice: property.rentPrice,
-      securityDeposit: property.securityDeposit,
-      amenities: property.amenities,
-      description: property.description,
-      images: property.images,
-      status: property.status,
-      latitude: property.latitude,
-      longitude: property.longitude,
-      viewCount: 0,
-      inquiryCount: 0,
-      createdAt: property.createdAt
+      ...property.get({ plain: true })
     });
   } catch (error) {
     console.error('Error creating property:', error);
@@ -319,6 +332,7 @@ exports.updateProperty = async (req, res) => {
     const {
       title,
       propertyType,
+      listingType,
       address,
       city,
       bedrooms,
@@ -328,23 +342,29 @@ exports.updateProperty = async (req, res) => {
       securityDeposit,
       amenities,
       description,
+      images,
       status,
       latitude,
-      longitude
+      longitude,
+      propertyCondition,
+      yearBuilt,
+      lotSize,
+      lotSizeUnit,
+      garageSpaces,
+      hoaFees,
+      hoaFeesFrequency,
+      furnished,
+      petPolicy,
+      petDetails,
+      leaseTerms,
+      virtualTourLink,
+      floorPlan
     } = req.body;
-
-    // Process uploaded image files if any
-    let imagePaths = property.images;
-    if (req.files && req.files.length > 0) {
-      imagePaths = req.files.map(file => file.filename);
-    }
-
-    // Parse amenities if it's a JSON string
-    const parsedAmenities = amenities && typeof amenities === 'string' ? JSON.parse(amenities) : (amenities || property.amenities);
 
     await property.update({
       title: title || property.title,
       propertyType: propertyType || property.propertyType,
+      listingType: listingType || property.listingType,
       address: address !== undefined ? address : property.address,
       city: city !== undefined ? city : property.city,
       bedrooms: bedrooms ? parseInt(bedrooms) : property.bedrooms,
@@ -352,34 +372,29 @@ exports.updateProperty = async (req, res) => {
       area: area || property.area,
       rentPrice: rentPrice ? parseFloat(rentPrice) : property.rentPrice,
       securityDeposit: securityDeposit ? parseFloat(securityDeposit) : property.securityDeposit,
-      amenities: parsedAmenities,
+      amenities: amenities || property.amenities,
       description: description !== undefined ? description : property.description,
-      images: imagePaths,
+      images: images || property.images,
       status: status || property.status,
       latitude: latitude !== undefined ? (latitude ? parseFloat(latitude) : null) : property.latitude,
-      longitude: longitude !== undefined ? (longitude ? parseFloat(longitude) : null) : property.longitude
+      longitude: longitude !== undefined ? (longitude ? parseFloat(longitude) : null) : property.longitude,
+      propertyCondition: propertyCondition || property.propertyCondition,
+      yearBuilt: yearBuilt ? parseInt(yearBuilt) : property.yearBuilt,
+      lotSize: lotSize ? String(lotSize) : property.lotSize,
+      lotSizeUnit: lotSizeUnit || property.lotSizeUnit,
+      garageSpaces: garageSpaces !== undefined ? parseInt(garageSpaces) : property.garageSpaces,
+      hoaFees: hoaFees ? parseFloat(hoaFees) : property.hoaFees,
+      hoaFeesFrequency: hoaFeesFrequency || property.hoaFeesFrequency,
+      furnished: furnished || property.furnished,
+      petPolicy: petPolicy || property.petPolicy,
+      petDetails: petDetails !== undefined ? petDetails : property.petDetails,
+      leaseTerms: leaseTerms || property.leaseTerms,
+      virtualTourLink: virtualTourLink !== undefined ? virtualTourLink : property.virtualTourLink,
+      floorPlan: floorPlan !== undefined ? floorPlan : property.floorPlan
     });
 
     return res.json({
-      id: property.id,
-      title: property.title,
-      propertyType: property.propertyType,
-      address: property.address,
-      city: property.city,
-      bedrooms: property.bedrooms,
-      bathrooms: property.bathrooms,
-      area: property.area,
-      rentPrice: property.rentPrice,
-      securityDeposit: property.securityDeposit,
-      amenities: property.amenities,
-      description: property.description,
-      images: property.images,
-      status: property.status,
-      latitude: property.latitude,
-      longitude: property.longitude,
-      viewCount: property.viewCount,
-      inquiryCount: property.inquiryCount,
-      createdAt: property.createdAt
+      ...property.get({ plain: true })
     });
   } catch (error) {
     console.error('Error updating property:', error);
@@ -482,72 +497,17 @@ exports.updateBookingStatus = async (req, res) => {
     if (notificationTitle) {
       try {
         const notification = await Notification.create({
-          user_id: booking.tenantId,
+          userId: booking.tenantId,
           title: notificationTitle,
           message: notificationMessage,
           type: 'info',
-          is_broadcast: false,
-          link: `/user/dashboard?tab=applications`
+          isBroadcast: false,
+          link: `/tenant/dashboard?tab=applications`
         });
 
         console.log(`📧 STATUS UPDATE (${status}): Sending notification to TENANT (tenantId: ${booking.tenantId})`);
         console.log(`   Owner ID who ${status.toLowerCase()}: ${vendorId}`);
         console.log(`   This notification should ONLY go to tenant, NOT owner`);
-        
-        // Send email if booking is approved
-        if (status === 'Approved') {
-          try {
-            const tenant = await User.findByPk(booking.tenantId);
-            if (tenant && tenant.email) {
-              const moveInDate = new Date(booking.moveInDate).toLocaleDateString('en-US', {
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric'
-              });
-              const moveOutDate = booking.moveOutDate 
-                ? new Date(booking.moveOutDate).toLocaleDateString('en-US', {
-                    month: 'long',
-                    day: 'numeric',
-                    year: 'numeric'
-                  })
-                : 'Not specified';
-              
-              const emailHtml = `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                  <h2 style="color: #4F46E5;">🎉 Your Booking Has Been Approved!</h2>
-                  <p>Dear ${tenant.name},</p>
-                  <p>Great news! Your booking request has been approved by the property owner.</p>
-                  
-                  <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                    <h3 style="margin-top: 0; color: #1F2937;">Property Details</h3>
-                    <p><strong>Property:</strong> ${property.title}</p>
-                    <p><strong>Location:</strong> ${property.location || 'N/A'}</p>
-                    <p><strong>Monthly Rent:</strong> NPR ${parseInt(booking.monthlyRent).toLocaleString()}</p>
-                    <p><strong>Move-in Date:</strong> ${moveInDate}</p>
-                    <p><strong>Move-out Date:</strong> ${moveOutDate}</p>
-                  </div>
-                  
-                  <p>Please log in to your dashboard to view more details and complete the next steps.</p>
-                  <a href="http://localhost:5173/user/dashboard?tab=rentals" style="display: inline-block; background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">View My Bookings</a>
-                  
-                  <p style="color: #6B7280; font-size: 14px; margin-top: 30px;">Best regards,<br>RentHive Team</p>
-                </div>
-              `;
-              
-              await sendEmail({
-                to: tenant.email,
-                subject: `🎉 Booking Approved - ${property.title}`,
-                html: emailHtml,
-                text: `Your booking for ${property.title} has been approved! Move-in: ${moveInDate}, Monthly Rent: NPR ${parseInt(booking.monthlyRent).toLocaleString()}`
-              });
-              
-              console.log(`✅ Approval email sent to ${tenant.email}`);
-            }
-          } catch (emailError) {
-            console.error('Error sending approval email:', emailError);
-            // Don't fail the approval if email fails
-          }
-        }
         
         if (io && connectedUsers) {
           const socketId = connectedUsers.get(booking.tenantId.toString());
@@ -665,6 +625,8 @@ exports.bookProperty = async (req, res) => {
 
     // Send notification to property owner
     try {
+      const { io, connectedUsers } = require('../server');
+      
       const moveInFormatted = new Date(moveInDate).toLocaleDateString('en-US', {
         month: 'long',
         day: 'numeric',
@@ -682,44 +644,37 @@ exports.bookProperty = async (req, res) => {
       const notificationTitle = '🏠 New Property Booking Request';
       const notificationMessage = `${tenant.name} wants to rent your property "${property.title}" from ${moveInFormatted}${moveOutDate ? ` to ${moveOutFormatted}` : ''}. Monthly rent: NPR ${parseInt(property.rentPrice).toLocaleString()}`;
 
-      // Create notification in database
+      // Create notification
       const notification = await Notification.create({
-        user_id: property.vendorId,
+        userId: property.vendorId,
         title: notificationTitle,
         message: notificationMessage,
         type: 'info',
-        is_broadcast: false,
-        link: `/owner/dashboard?tab=bookings`,
-        metadata: JSON.stringify({
-          bookingId: booking.id,
-          propertyId: property.id,
-          tenantId: tenant.id,
-          requiresAction: true
-        })
+        isBroadcast: false,
+        link: `/owner/dashboard?tab=bookings`
       });
 
       console.log('✅ Notification created:', notification.id);
-      console.log(`📧 BOOKING REQUEST: Notification saved for OWNER (vendorId: ${property.vendorId})`);
+      console.log(`📧 BOOKING REQUEST: Sending notification to OWNER (vendorId: ${property.vendorId})`);
       console.log(`   Tenant ID who booked: ${tenantId}`);
       console.log(`   This notification should ONLY go to owner, NOT tenant`);
 
-      // Emit real-time notification via Socket.IO
-      const io = req.app.get('io');
-      if (io) {
-        io.to(`user_${property.vendorId}`).emit('new-notification', {
-          id: notification.id,
-          title: notification.title,
-          message: notification.message,
-          type: notification.type,
-          link: notification.link,
-          is_read: false,
-          created_at: notification.created_at,
-          is_broadcast: false,
-          metadata: notification.metadata
-        });
-        console.log(`✅ Real-time notification sent to owner ${property.vendorId}`);
-      } else {
-        console.log('⚠️ Socket.IO not available, notification saved to database only');
+      // Emit real-time notification
+      if (io && connectedUsers) {
+        const socketId = connectedUsers.get(property.vendorId.toString());
+        if (socketId) {
+          io.to(socketId).emit('new-notification', {
+            id: notification.id,
+            title: notification.title,
+            message: notification.message,
+            type: notification.type,
+            link: notification.link,
+            is_read: false,
+            created_at: notification.created_at,
+            is_broadcast: false
+          });
+          console.log(`✅ Booking request notification sent to owner ${property.vendorId}`);
+        }
       }
     } catch (notificationError) {
       console.error('Error sending notification:', notificationError);
@@ -741,6 +696,67 @@ exports.bookProperty = async (req, res) => {
   } catch (error) {
     console.error('❌ Error booking property:', error);
     return res.status(500).json({ error: 'Failed to book property' });
+  }
+};
+
+// Get single property details for viewing
+exports.getPropertyById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const property = await Property.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: 'vendor',
+          attributes: ['id', 'name', 'email', 'phone', 'businessName', 'profileImage']
+        }
+      ]
+    });
+
+    if (!property) {
+      return res.status(404).json({ error: 'Property not found' });
+    }
+
+    // Increment view count
+    await property.increment('viewCount');
+
+    return res.json({
+      id: property.id,
+      title: property.title,
+      propertyType: property.propertyType,
+      address: property.address,
+      city: property.city,
+      bedrooms: property.bedrooms,
+      bathrooms: property.bathrooms,
+      area: property.area,
+      rentPrice: property.rentPrice,
+      securityDeposit: property.securityDeposit,
+      amenities: property.amenities,
+      description: property.description,
+      images: property.images,
+      status: property.status,
+      latitude: property.latitude,
+      longitude: property.longitude,
+      viewCount: property.viewCount,
+      inquiryCount: property.inquiryCount,
+      createdAt: property.createdAt,
+      vendor: property.vendor,
+      // New fields
+      listingType: property.listingType,
+      propertyCondition: property.propertyCondition,
+      yearBuilt: property.yearBuilt,
+      lotSize: property.lotSize,
+      garageSpaces: property.garageSpaces,
+      hoaFees: property.hoaFees,
+      furnished: property.furnished,
+      petPolicy: property.petPolicy,
+      leaseTerms: property.leaseTerms,
+      virtualTourLink: property.virtualTourLink,
+      floorPlan: property.floorPlan
+    });
+  } catch (error) {
+    console.error('Error fetching property by ID:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };
 

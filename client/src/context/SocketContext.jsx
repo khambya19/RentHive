@@ -28,6 +28,21 @@ export const SocketProvider = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
 
+  // Sync with localStorage/Context on mount
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        const parsed = JSON.parse(storedUser);
+        if (parsed && (parsed.id || parsed._id)) {
+          setCurrentUserId(parsed.id || parsed._id);
+        }
+      } catch (e) {
+        console.error("SocketProvider stored user parse error", e);
+      }
+    }
+  }, []);
+
   // Initialize socket once
 
   useEffect(() => {

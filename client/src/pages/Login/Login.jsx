@@ -62,10 +62,11 @@ const Login = () => {
     // Hardcoded super admin login
     if (email === 'renthiveadmin@gmail.com' && password === 'Renthive@11') {
       const user = {
-        id: 0,
+        id: 6, // Match database ID
         name: 'Super Admin',
         email: 'renthiveadmin@gmail.com',
         role: 'super_admin',
+        type: 'super_admin',
         active: true
       };
       const token = 'superadmintoken';
@@ -76,19 +77,26 @@ const Login = () => {
     }
     
     try {
-      const response = await axios.post(`${API_BASE_URL}/auth/login`, { email, password });
+      // console.log('Attempting login with:', { email, API_BASE_URL });
+      const response = await axios.post(`${API_BASE_URL}/auth/login`, { 
+        email: email.trim().toLowerCase(), 
+        password 
+      });
+      // console.log('Login response:', response.data);
       const { token, user } = response.data;
       login(user, token);
       
       // Route based on user type
-      // lessor, owner, vendor -> Owner Dashboard
-      // renter -> User Dashboard
-      if (user.type === 'lessor' || user.type === 'owner' || user.type === 'vendor') {
+      // owner -> Owner Dashboard
+      // user -> User Dashboard
+      if (user.type === 'owner') {
         navigate('/owner/dashboard');
       } else {
         navigate('/user/dashboard');
       }
     } catch (err) {
+      console.error('Login error:', err);
+      console.error('Error response:', err.response);
       setServerError(err.response?.data?.error || 'Login failed. Please check your credentials.');
     } finally {
       setIsLoading(false);

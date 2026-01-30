@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { io } from 'socket.io-client';
 import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
-import { Send, User as UserIcon, MessageSquare, Search } from 'lucide-react';
-
-const socket = io(SERVER_BASE_URL);
+import { useSocket } from '../../context/SocketContext';
+import { Send, User as UserIcon, MessageSquare, Search, Eye } from 'lucide-react';
 
 const AdminChat = () => {
     const { user } = useAuth();
+    const { socket, isConnected } = useSocket();
     const [conversations, setConversations] = useState([]);
     const [activeChat, setActiveChat] = useState(null);
     const [messages, setMessages] = useState([]);
@@ -17,25 +16,27 @@ const AdminChat = () => {
     const [search, setSearch] = useState('');
 
     useEffect(() => {
+        if (!socket || !isConnected) return;
+
         // Fetch list of conversations
         fetchConversations();
 
-        socket.emit('join_chat', 'admin_support'); // Maybe specific room
+        socket.emit('join_chat', 'admin_support');
         socket.emit('register', user.id);
 
-        socket.on('receive_message', (data) => {
-             // If active chat is open with this user, append message
+        const handleReceiveMessage = (data) => {
              if (activeChat && (data.senderId === activeChat.partner.id || data.receiverId === activeChat.partner.id)) {
                  setMessages(prev => [...prev, data]);
              }
-             // Refresh list to update "last message"
              fetchConversations();
-        });
+        };
+
+        socket.on('receive_message', handleReceiveMessage);
 
         return () => {
-            socket.off('receive_message');
+            socket.off('receive_message', handleReceiveMessage);
         };
-    }, [activeChat, user]);
+    }, [activeChat, user, socket, isConnected]);
 
     const fetchConversations = async () => {
         try {
@@ -70,7 +71,7 @@ const AdminChat = () => {
 
         const msgData = {
             receiverId: activeChat.partner.id,
-            content: newMessage,
+            message: newMessage,
             senderId: user.id
         };
 
@@ -103,26 +104,17 @@ const AdminChat = () => {
         <div className="flex h-[calc(100vh-140px)] bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
             {/* Sidebar List */}
             <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
-                 <div className="p-4 border-b border-slate-100">
+                <div className="p-4 border-b border-slate-100">
                      <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
                          <MessageSquare size={18} className="text-indigo-600"/> Messages
                      </h3>
-                     <div className="relative">
-                         <Search size={16} className="absolute left-3 top-3 text-slate-400" />
-                         <input 
-                             className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                             placeholder="Search users..."
-                             value={search}
-                             onChange={e => setSearch(e.target.value)}
-                         />
-                     </div>
-                 </div>
+                </div>
                  
                  <div className="flex-1 overflow-y-auto">
-                     {filteredConvos.length === 0 ? (
+                     {conversations.length === 0 ? (
                          <div className="p-8 text-center text-slate-400 text-sm">No conversations found.</div>
                      ) : (
-                         filteredConvos.map((convo, idx) => (
+                         conversations.map((convo, idx) => (
                              <div 
                                 key={idx}
                                 onClick={() => handleSelectChat(convo)}
@@ -139,11 +131,14 @@ const AdminChat = () => {
                                          )}
                                      </div>
                                      <div className="flex-1 min-w-0">
-                                         <div className="flex justify-between items-baseline mb-1">
-                                             <h4 className="font-bold text-slate-900 truncate text-sm">{convo.partner.name}</h4>
-                                             <span className="text-[10px] text-slate-400">{new Date(convo.lastMessage.createdAt).toLocaleDateString()}</span>
+                                         <div className="flex justify-between items-start mb-1">
+                                             <div className="overflow-hidden mr-2">
+                                                <h4 className="font-bold text-slate-900 truncate text-sm leading-tight">{convo.partner.name}</h4>
+                                                <p className="text-[10px] text-slate-500 truncate leading-tight">{convo.partner.email}</p>
+                                             </div>
+                                             <span className="text-[10px] text-slate-400 shrink-0">{new Date(convo.lastMessage.createdAt).toLocaleDateString()}</span>
                                          </div>
-                                         <p className="text-xs text-slate-500 truncate">{convo.lastMessage.content}</p>
+                                         <p className="text-xs text-slate-500 truncate">{convo.lastMessage.message || convo.lastMessage.content}</p>
                                      </div>
                                  </div>
                              </div>
@@ -176,11 +171,12 @@ const AdminChat = () => {
                         {/* Messages */}
                         <div className="flex-1 overflow-y-auto p-6 space-y-4">
                             {messages.map((msg, idx) => {
+                                if (!user) return null;
                                 const isMe = msg.senderId === user.id;
                                 return (
                                     <div key={idx} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                                         <div className={`max-w-[70%] rounded-2xl px-5 py-3 text-sm shadow-sm ${isMe ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white text-slate-800 border border-slate-200 rounded-tl-none'}`}>
-                                            <p>{msg.content}</p>
+                                            <p>{msg.message || msg.content}</p>
                                             <p className={`text-[10px] mt-1 text-right ${isMe ? 'text-indigo-200' : 'text-slate-400'}`}>
                                                 {new Date(msg.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                             </p>

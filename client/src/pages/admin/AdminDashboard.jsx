@@ -271,7 +271,7 @@ const AdminDashboard = () => {
           )}
 
           {activeTab === 'owners' && <SuperAdmin initialRoleFilter="owner" />}
-          {activeTab === 'users' && <SuperAdmin initialRoleFilter="renter" />}
+          {activeTab === 'users' && <SuperAdmin initialRoleFilter="user" />}
           {activeTab === 'properties' && <PropertiesTable />}
           {activeTab === 'automobiles' && <AutomobilesTable />}
           {activeTab === 'reports' && <ReportsTable />}

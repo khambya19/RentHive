@@ -14,7 +14,7 @@ exports.getAdminStats = async (req, res) => {
     const totalBookings = await Booking.count();
     const revenueResult = await Payment.sum('amount');
     const totalRevenue = revenueResult || 0;
-    const activeUsers = await User.count({ where: { isVerified: true } });
+    const activeUsers = await User.count({ where: { isBlocked: false } });
     const pendingBookings = await Booking.count({ where: { status: 'Pending' } });
     
     // KYC Stats
@@ -54,14 +54,14 @@ exports.getAllUsers = async (req, res) => {
     
     if (role && role !== 'all') where.type = role;
     
-    if (status === 'active') where.isVerified = true;
-    else if (status === 'blocked') where.isVerified = false;
+    if (status === 'active') where.isBlocked = false;
+    else if (status === 'blocked') where.isBlocked = true;
 
     if (kycStatus) where.kycStatus = kycStatus;
     
     const users = await User.findAll({
       where,
-      attributes: ['id', 'name', 'email', 'phone', 'type', 'isVerified', 'kycStatus', 'kycDocumentType', 'kycDocumentImage', 'createdAt'],
+      attributes: ['id', 'name', 'email', 'phone', 'type', 'isVerified', 'isBlocked', 'kycStatus', 'kycDocumentType', 'kycDocumentImage', 'createdAt'],
       order: [['createdAt', 'DESC']]
     });
     
@@ -75,7 +75,8 @@ exports.getAllUsers = async (req, res) => {
         email: user.email,
         phone: user.phone,
         role: user.type,
-        active: user.isVerified,
+        active: !user.isBlocked,
+        isVerified: user.isVerified,
         kyc_status: user.kycStatus, 
         kyc_doc: user.kycDocumentImage ? `${baseUrl}/uploads/profiles/${user.kycDocumentImage}` : null,
         created_at: user.createdAt
@@ -102,9 +103,10 @@ exports.updateKycStatus = async (req, res) => {
 
     user.kycStatus = status;
     if (status === 'approved') {
-      user.isVerified = true; // Auto-verify account when KYC approves
+      // Don't auto-verify email verify here, that's done via OTP. 
+      // But we can ensure they aren't blocked.
+      user.isBlocked = false; 
     } else if (status === 'rejected') {
-        user.isVerified = false;
         // Ideally save 'remarks' to a notification or audit log
         console.log(`KYC Rejected for user ${id}. Remarks: ${remarks}`);
     }
@@ -175,7 +177,8 @@ exports.getUserById = async (req, res) => {
         email: user.email,
         phone: user.phone,
         role: user.type,
-        active: user.isVerified,
+        active: !user.isBlocked,
+        isVerified: user.isVerified,
         kyc_status: user.kycStatus,
         kyc_doc: user.kycDocumentImage ? `${baseUrl}/uploads/profiles/${user.kycDocumentImage}` : null,
         created_at: user.createdAt
@@ -191,9 +194,9 @@ exports.toggleBlockUser = async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    user.isVerified = !user.isVerified;
+    user.isBlocked = !user.isBlocked;
     await user.save();
-    res.json({ success: true, active: user.isVerified });
+    res.json({ success: true, active: !user.isBlocked });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -217,7 +220,7 @@ exports.resetUserPassword = async (req, res) => {
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
     const crypto = require('crypto');
-    const bcrypt = require('bcrypt');
+    const bcrypt = require('bcryptjs');
     const tempPassword = crypto.randomBytes(4).toString('hex');
     const hashed = await bcrypt.hash(tempPassword, 10);
     user.password = hashed;

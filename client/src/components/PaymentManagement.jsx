@@ -21,7 +21,7 @@ const PaymentManagement = () => {
   const fetchPayments = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
-      const endpoint = user.type === 'owner' || user.type === 'vendor' 
+      const endpoint = user.type === 'owner' 
         ? '/payments/owner' 
         : '/payments/tenant';
       
@@ -48,7 +48,7 @@ const PaymentManagement = () => {
 
   useEffect(() => {
     fetchPayments();
-    if (user.type === 'owner' || user.type === 'vendor') fetchStats();
+    if (user.type === 'owner') fetchStats();
   }, [fetchPayments, fetchStats, user.type]);
 
   const filteredPayments = payments.filter(p => filter === 'all' || p.status.toLowerCase() === filter);
@@ -65,7 +65,7 @@ const PaymentManagement = () => {
       </div>
 
       {/* Stats Cards (Owner Only) */}
-      {(user.type === 'owner' || user.type === 'vendor') && stats && (
+      {user.type === 'owner' && stats && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-2xl border border-orange-200/50">
              <div className="flex items-center gap-3 mb-2">

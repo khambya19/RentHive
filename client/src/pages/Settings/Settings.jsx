@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { z } from 'zod';
 import { SERVER_BASE_URL } from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
@@ -25,6 +26,20 @@ import {
   MessageSquare,
   ShieldCheck
 } from 'lucide-react';
+
+const passwordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(/[A-Z]/, 'Must contain at least one uppercase letter')
+    .regex(/[a-z]/, 'Must contain at least one lowercase letter')
+    .regex(/[0-9]/, 'Must contain at least one number')
+    .regex(/[^A-Za-z0-9]/, 'Must contain at least one special character'),
+  confirmPassword: z.string().min(1, 'Confirm password is required'),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: "New passwords do not match",
+  path: ["confirmPassword"],
+});
 
 const Settings = () => {
   const { user, login, logout } = useAuth();
@@ -181,11 +196,15 @@ const Settings = () => {
 
   const handleChangePassword = async () => {
     setErrorMsg(''); setSuccessMsg('');
-    if (passData.newPassword !== passData.confirmPassword) {
-      return setErrorMsg('New passwords do not match');
-    }
-    if (passData.newPassword.length < 6) {
-      return setErrorMsg('Password must be at least 6 characters');
+    
+    // Zod validation
+    try {
+      passwordSchema.parse(passData);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return setErrorMsg(err.errors[0].message);
+      }
+      return setErrorMsg('Invalid input');
     }
 
     setLoading(true);

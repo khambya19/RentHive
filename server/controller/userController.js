@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { Op } = require('sequelize');
 const sequelize = require('../config/db');
@@ -51,14 +52,13 @@ exports.changePassword = async (req, res) => {
     // I'll assume simple check or if authController uses bcrypt, I should too.
     // Let's assume clear text for consistency with previous resets, OR verify if bcrypt is used.
     // However, best practice:
-    // const match = await bcrypt.compare(currentPassword, user.password);
-    
-    // For now, updating directly.
-    if (user.password !== currentPassword) {
+    const match = await bcrypt.compare(currentPassword, user.password);
+    if (!match) {
        return res.status(401).json({ error: 'Incorrect current password' });
     }
     
-    user.password = newPassword; 
+    const hashed = await bcrypt.hash(newPassword, 10);
+    user.password = hashed; 
     await user.save();
     
     res.json({ success: true, message: 'Password updated successfully' });
@@ -200,7 +200,7 @@ exports.resetUserPassword = async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    const bcrypt = require('bcrypt');
+    const bcrypt = require('bcryptjs');
     const tempPassword = crypto.randomBytes(4).toString('hex');
     const hashed = await bcrypt.hash(tempPassword, 10);
     user.password = hashed;

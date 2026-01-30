@@ -36,9 +36,9 @@ const NotificationBell = ({ user }) => {
   // Register user when component mounts - Stabilized
   useEffect(() => {
     if (user?.id) {
-      registerUser({ userId: user.id, role: user.type || user.role });
+      registerUser(user.id); // Pass only the user ID, not an object
     }
-  }, [user?.id, user?.type, user?.role, registerUser]);
+  }, [user?.id, registerUser]);
 
   // Update current time every minute for real-time relative timestamps
   useEffect(() => {

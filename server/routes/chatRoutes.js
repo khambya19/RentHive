@@ -37,8 +37,8 @@ router.get('/conversations/list', protect, async (req, res) => {
             },
             order: [['createdAt', 'DESC']],
             include: [
-                { model: User, as: 'sender', attributes: ['id', 'name', 'profileImage', 'type'] },
-                { model: User, as: 'receiver', attributes: ['id', 'name', 'profileImage', 'type'] }
+                { model: User, as: 'sender', attributes: ['id', 'name', 'email', 'profileImage', 'type'] },
+                { model: User, as: 'receiver', attributes: ['id', 'name', 'email', 'profileImage', 'type'] }
             ]
         });
 
@@ -94,22 +94,22 @@ router.get('/:otherUserId', protect, async (req, res) => {
 router.post('/send', protect, async (req, res) => {
   try {
     const senderId = req.user.id;
-    const { receiverId, content } = req.body;
+    const { receiverId, message } = req.body;
 
-    if (!content || !receiverId) {
-      return res.status(400).json({ error: 'Receiver and content required' });
+    if (!message || !receiverId) {
+      return res.status(400).json({ error: 'Receiver and message required' });
     }
 
-    const message = await Message.create({
+    const newMessage = await Message.create({
       senderId,
       receiverId,
-      content
+      message
     });
 
-    const fullMessage = await Message.findByPk(message.id, {
+    const fullMessage = await Message.findByPk(newMessage.id, {
         include: [
-            { model: User, as: 'sender', attributes: ['id', 'name', 'profileImage'] },
-            { model: User, as: 'receiver', attributes: ['id', 'name', 'profileImage'] }
+            { model: User, as: 'sender', attributes: ['id', 'name', 'email', 'profileImage'] },
+            { model: User, as: 'receiver', attributes: ['id', 'name', 'email', 'profileImage'] }
         ]
     });
 

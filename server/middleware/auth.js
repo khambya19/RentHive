@@ -19,8 +19,9 @@ exports.protect = (req, res, next) => {
   // Allow hardcoded super admin token
   if (token === 'superadmintoken') {
     req.user = { 
-      id: 0, 
-      role: 'super_admin', 
+      id: 6, 
+      role: 'super_admin',
+      type: 'super_admin',
       email: 'renthiveadmin@gmail.com',
       name: 'Super Admin'
     };

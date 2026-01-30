@@ -27,9 +27,9 @@ const ProtectedRoute = ({ children, allowedTypes }) => {
     const userType = user.type || user.role;
     if (allowedTypes && !allowedTypes.includes(userType)) {
         // Redirect based on user type
-        if (userType === 'renter') {
+        if (userType === 'user') {
             return <Navigate to="/user/dashboard" replace />;
-        } else if (['owner', 'vendor', 'lessor'].includes(userType)) {
+        } else if (userType === 'owner') {
             return <Navigate to="/owner/dashboard" replace />;
         } else if (['admin', 'super_admin'].includes(userType)) {
             return <Navigate to="/admin/dashboard" replace />;
@@ -70,12 +70,12 @@ function AppContent() {
                 <Route path="/register-user" element={<RegisterUser />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/user/dashboard" element={
-                    <ProtectedRoute allowedTypes={['renter']}>
+                    <ProtectedRoute allowedTypes={['user']}>
                         <UserDashboard />
                     </ProtectedRoute>
                 } />
                 <Route path="/owner/dashboard" element={
-                    <ProtectedRoute allowedTypes={['owner', 'vendor', 'lessor']}>
+                    <ProtectedRoute allowedTypes={['owner']}>
                         <OwnerDashboard />
                     </ProtectedRoute>
                 } />
@@ -86,7 +86,7 @@ function AppContent() {
                     </ProtectedRoute>
                 } />
                 <Route path="/user/ratings" element={
-                    <ProtectedRoute allowedTypes={['renter']}>
+                    <ProtectedRoute allowedTypes={['user']}>
                         <RatingPage />
                     </ProtectedRoute>
                 } />

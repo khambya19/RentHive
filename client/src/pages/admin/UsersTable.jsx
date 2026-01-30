@@ -13,7 +13,7 @@ const UsersTable = ({ initialKycFilter = 'all', initialRoleFilter = 'all' }) => 
   const [loading, setLoading] = useState(true);
 
   // Determine fixed modes
-  const isKycMode = initialKycFilter === 'pending';
+  const isKycMode = initialRoleFilter === 'all';
   const isSpecificRoleMode = initialRoleFilter !== 'all';
 
   const fetchUsers = useCallback(async () => {
@@ -135,7 +135,11 @@ const UsersTable = ({ initialKycFilter = 'all', initialRoleFilter = 'all' }) => 
             {users.length === 0 ? (
               <tr>
                 <td colSpan="5" className="px-6 py-12 text-center text-slate-400 font-medium">
-                   {isKycMode ? 'No pending KYC requests found.' : 'No users found.'}
+                   {initialKycFilter === 'pending' && 'No pending KYC requests found.'}
+                   {initialKycFilter === 'approved' && 'No approved KYC records found.'}
+                   {initialKycFilter === 'rejected' && 'No rejected KYC records found.'}
+                   {initialKycFilter === 'all' && 'No KYC submissions found.'}
+                   {!initialKycFilter && 'No users found.'}
                 </td>
               </tr>
             ) : (
@@ -166,32 +170,52 @@ const UsersTable = ({ initialKycFilter = 'all', initialRoleFilter = 'all' }) => 
                      }
                   </td>
                   <td className="px-6 py-4">
-                      {user.kyc_status === 'approved' && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-50 text-green-700 border border-green-100">Verified</span>}
-                      {user.kyc_status === 'pending' && (
-                        <button 
-                          onClick={() => { setSelectedUser(user); setShowProfile(true); }}
-                          className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200 animate-pulse hover:bg-amber-200 transition-colors shadow-sm"
-                        >
-                          <FileCheck size={12} /> Review
-                        </button>
+                      {isKycMode ? (
+                        // Show KYC status only in KYC mode
+                        <>
+                          {user.kyc_status === 'approved' && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-50 text-green-700 border border-green-100">Verified</span>}
+                          {user.kyc_status === 'pending' && (
+                            <button 
+                              onClick={() => { setSelectedUser(user); setShowProfile(true); }}
+                              className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200 animate-pulse hover:bg-amber-200 transition-colors shadow-sm"
+                            >
+                              <FileCheck size={12} /> Review
+                            </button>
+                          )}
+                          {user.kyc_status === 'rejected' && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-50 text-red-700 border border-red-100">Rejected</span>}
+                          {(!user.kyc_status || user.kyc_status === 'not_submitted') && <span className="text-xs text-slate-400 font-medium">Not Submitted</span>}
+                        </>
+                      ) : (
+                        // Show simplified KYC badge in User/Owner mode
+                        <>
+                          {user.kyc_status === 'approved' && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-50 text-green-700 border border-green-100">✓ Verified</span>}
+                          {user.kyc_status !== 'approved' && <span className="text-xs text-slate-400 font-medium">-</span>}
+                        </>
                       )}
-                      {user.kyc_status === 'rejected' && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-50 text-red-700 border border-red-100">Rejected</span>}
-                      {(!user.kyc_status || user.kyc_status === 'not_submitted') && <span className="text-xs text-slate-400 font-medium">Not Submitted</span>}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2">
-                      <button 
-                        className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
-                        onClick={() => { setSelectedUser(user); setShowProfile(true); }}
-                        title="View Profile"
-                      >
-                        <Eye size={18} />
-                      </button>
-                      
-                      {/* Show actions only for non-KYC mode? Or always? User said "from there i can access and denied like blocked their login". This implies blocking capability needs to be here. */}
-                      {!isKycMode && (
+                      {isKycMode ? (
+                        // KYC Mode: Only View Profile button
+                        <button 
+                          className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                          onClick={() => { setSelectedUser(user); setShowProfile(true); }}
+                          title="View Profile & Review KYC"
+                        >
+                          <Eye size={18} />
+                        </button>
+                      ) : (
+                        // User/Owner Mode: View + Block/Unblock + Actions
                         <>
-                           <div className="w-px h-6 bg-slate-200 mx-1 self-center"></div>
+                          <button 
+                            className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                            onClick={() => { setSelectedUser(user); setShowProfile(true); }}
+                            title="View Profile"
+                          >
+                            <Eye size={18} />
+                          </button>
+                          
+                          <div className="w-px h-6 bg-slate-200 mx-1 self-center"></div>
 
                            <button 
                              className={`p-2 rounded-lg transition-colors ${user.active ? 'text-slate-400 hover:text-red-600 hover:bg-red-50' : 'text-slate-400 hover:text-green-600 hover:bg-green-50'}`} 

@@ -1,23 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-// Only import socket.io-client if SERVER_BASE_URL is defined
-let io;
-if (typeof window !== 'undefined') {
-    try {
-        io = require('socket.io-client').io;
-    } catch (e) {
-        io = null;
-    }
-}
 import { Send, User, MessageSquare, Loader2 } from 'lucide-react';
 import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
-
-// Only connect if SERVER_BASE_URL is defined and not empty
-const socket = (io && SERVER_BASE_URL) ? io(SERVER_BASE_URL, { autoConnect: true, reconnectionAttempts: 3 }) : null;
+import { useSocket } from '../../context/SocketContext';
 
 const ChatWithAdmin = () => {
   const { user } = useAuth();
+  const { socket, isConnected } = useSocket();
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [adminId, setAdminId] = useState(null); // We need to find an admin to chat with
@@ -35,17 +25,24 @@ const ChatWithAdmin = () => {
              headers: { Authorization: `Bearer ${token}` }
         });
         
-        let targetAdmin = convoRes.data.conversations.find(c => c.partner?.type === 'super_admin')?.partner;
+        let targetAdmin = null;
+        if (convoRes.data && convoRes.data.success && Array.isArray(convoRes.data.conversations)) {
+            targetAdmin = convoRes.data.conversations.find(c => c.partner?.type === 'super_admin')?.partner;
+        }
         
         if (!targetAdmin) {
              // If no chat yet, fetch support agent info
-             const agentRes = await axios.get(`${API_BASE_URL}/chat/support-agent`, {
-                 headers: { Authorization: `Bearer ${token}` }
-             });
-             if (agentRes.data.success && agentRes.data.admin) {
-                 setAdminId(agentRes.data.admin.id);
-             } else {
-                 setAdminId(1);
+             try {
+                const agentRes = await axios.get(`${API_BASE_URL}/chat/support-agent`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (agentRes.data.success && agentRes.data.admin) {
+                    setAdminId(agentRes.data.admin.id);
+                } else {
+                    setAdminId(6); // Default to super admin ID 6
+                }
+             } catch (agentErr) {
+                 setAdminId(6); // Fallback
              }
         } else {
              setAdminId(targetAdmin.id);
@@ -53,8 +50,9 @@ const ChatWithAdmin = () => {
         
       } catch (err) {
         console.error("Error init chat", err);
-        // Fallback
-        setAdminId(1);
+        setAdminId(6); // Last resort fallback
+      } finally {
+          setLoading(false);
       }
     };
     
@@ -81,20 +79,21 @@ const ChatWithAdmin = () => {
 
       fetchMessages();
 
-            // Socket setup (guarded)
-            if (socket) {
-                socket.emit('register', user.id);
-                socket.on('receive_message', (data) => {
-                    if (data.senderId === adminId || data.receiverId === user.id) {
-                        setMessages((prev) => [...prev, data]);
-                    }
-                });
-                return () => {
-                    socket.off('receive_message');
-                };
-            }
-            return undefined;
-  }, [adminId, user]);
+      // Socket setup (guarded)
+      if (socket && isConnected) {
+          socket.emit('register', user.id);
+          const handleReceiveMessage = (data) => {
+              if (data.senderId === adminId || data.receiverId === user.id) {
+                  setMessages((prev) => [...prev, data]);
+              }
+          };
+          socket.on('receive_message', handleReceiveMessage);
+          return () => {
+              socket.off('receive_message', handleReceiveMessage);
+          };
+      }
+      return undefined;
+  }, [adminId, user, socket, isConnected]);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -106,7 +105,7 @@ const ChatWithAdmin = () => {
 
     const msgData = {
         receiverId: adminId,
-        content: newMessage,
+        message: newMessage,
         senderId: user.id
     };
     
@@ -148,11 +147,12 @@ const ChatWithAdmin = () => {
                 <div className="text-center text-slate-400 py-10 text-sm">No messages yet. Say hello! 👋</div>
             ) : (
                 messages.map((msg, idx) => {
+                    if (!user) return null;
                     const isMe = msg.senderId === user.id;
                     return (
                         <div key={idx} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                             <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${isMe ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white text-slate-800 border border-slate-200 rounded-tl-none shadow-sm'}`}>
-                                <p>{msg.content}</p>
+                                <p>{msg.message || msg.content}</p>
                                 <p className={`text-[10px] mt-1 text-right ${isMe ? 'text-indigo-200' : 'text-slate-400'}`}>
                                     {new Date(msg.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                 </p>

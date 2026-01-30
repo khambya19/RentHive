@@ -196,10 +196,8 @@ const AdminNotifications = () => {
                     onChange={(e) => setRecipientType(e.target.value)}
                     className="w-full border border-gray-300 rounded-lg p-3 focus:ring-purple-500 focus:border-purple-500"
                   >
-                    <option value="renter">All Renters</option>
-                    <option value="lessor">All Lessors</option>
+                    <option value="user">All Users</option>
                     <option value="owner">All Owners</option>
-                    <option value="vendor">All Vendors</option>
                   </select>
                 </div>
               )}

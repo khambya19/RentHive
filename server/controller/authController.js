@@ -1,9 +1,18 @@
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const sendEmail = require('../utils/mailer');
 const { generateOTP, getOtpExpiry } = require('../utils/otp');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
+
+const logOtpToFile = (email, otp, type = 'Verification') => {
+  const logPath = path.join(__dirname, '../otp_logs.txt');
+  const timestamp = new Date().toLocaleString();
+  const entry = `[${timestamp}] ${type} OTP for ${email}: ${otp}\n`;
+  fs.appendFileSync(logPath, entry);
+};
 
 const SALT_ROUNDS = 10;
 
@@ -85,10 +94,11 @@ exports.register = async (req, res) => {
       </div>
     `;
 
-    // Log OTP only in development mode for testing
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('🔑 [DEV] OTP for', email, ':', otp);
-    }
+    // Always log OTP for development ease
+    console.log('---------------------------------');
+    console.log('🔑 Verification OTP for', email, ':', otp);
+    console.log('---------------------------------');
+    logOtpToFile(email, otp, 'Verification');
     
     try {
       await sendEmail({ to: email, subject: 'RentHive - Verify your email', html });
@@ -107,7 +117,7 @@ exports.register = async (req, res) => {
            title: 'New User Registration',
            message: `A new ${user.type} has registered: ${user.name}`,
            type: 'info',
-           link: `/admin/dashboard?tab=${user.type === 'renter' ? 'users' : 'owners'}`
+           link: `/admin/dashboard?tab=${user.type === 'user' ? 'users' : 'owners'}`
         });
       }
 
@@ -164,10 +174,11 @@ exports.resendOtp = async (req, res) => {
     user.otpExpiry = otpExpiry;
     await user.save();
 
-    // Log OTP to terminal for dev/testing
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('🔑 [DEV] Resent OTP for', email, ':', otp);
-    }
+    // Always log OTP for development ease
+    console.log('---------------------------------');
+    console.log('🔑 Resent OTP for', email, ':', otp);
+    console.log('---------------------------------');
+    logOtpToFile(email, otp, 'Resend');
 
     const html = `<p>Your new RentHive OTP: <b>${otp}</b>. Expires in ${process.env.OTP_EXPIRE_MINUTES || 10} minutes.</p>`;
     await sendEmail({ to: email, subject: 'RentHive - New OTP', html });
@@ -215,13 +226,25 @@ exports.login = async (req, res) => {
       return res.status(400).json({ error: 'User not found' });
     }
 
+    console.log(`DEBUG: Comparing password for ${trimmedEmail}`);
+    console.log(`DEBUG: Received password length: ${password.length}`);
     const match = await bcrypt.compare(password, user.password);
     if (!match) {
-      console.log(`❌ Login failed: Password mismatch for ${email}.`);
+      console.log(`❌ Login failed: Password mismatch for ${email}. Received len: ${password.length}`);
       return res.status(400).json({ error: 'Password incorrect' });
     }
     
-    if (!user.isVerified) return res.status(403).json({ error: 'Please verify your email first' });
+    // Check for admin blocking
+    if (user.isBlocked) {
+      console.log(`❌ Login failed: User ${email} is blocked.`);
+      return res.status(403).json({ error: 'Your account has been blocked by the admin. Please contact support.' });
+    }
+    
+    // Check if email is verified
+    if (!user.isVerified) {
+      console.log(`❌ Login failed: User ${email} email not verified.`);
+      return res.status(403).json({ error: 'Please verify your email address before logging in.' });
+    }
 
     const payload = { id: user.id, email: user.email, type: user.type };
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -260,8 +283,8 @@ exports.login = async (req, res) => {
 // Get current user profile (Fresh data)
 exports.getMe = async (req, res) => {
   try {
-    // If req.user is super admin hardcoded
-    if (req.user.id === 0) {
+    // If req.user is super admin with hardcoded token (id 6 now)
+    if (req.user.id === 6 && req.user.type === 'super_admin') {
       return res.json({ success: true, user: req.user });
     }
 
@@ -317,10 +340,11 @@ exports.forgotPassword = async (req, res) => {
     user.otpExpiry = otpExpiry;
     await user.save();
 
-    // Log OTP to terminal for dev/testing
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('🔑 [DEV] Password Reset OTP for', email, ':', otp);
-    }
+    // Always log OTP for development ease
+    console.log('---------------------------------');
+    console.log('🔑 Password Reset OTP for', email, ':', otp);
+    console.log('---------------------------------');
+    logOtpToFile(email, otp, 'Password Reset');
 
     const html = `<p>Your password reset OTP is: <b>${otp}</b></p>`;
     await sendEmail({ to: email, subject: 'RentHive - Password Reset', html });

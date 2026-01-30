@@ -1,13 +1,21 @@
 import React from 'react';
-import { Home, Bike, MapPin, BedDouble, Bath, Ruler, Calendar, Fuel, Gauge, ArrowRight } from 'lucide-react';
+import { Home, Bike, MapPin, BedDouble, Bath, Ruler, Calendar, Fuel, Gauge, ArrowRight, Flag } from 'lucide-react';
 
-const ListingCard = ({ item, onClick }) => {
+const ListingCard = ({ item, onClick, onReport }) => {
   const isProperty = item.type === 'property';
   const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5050';
-  const folder = isProperty ? 'properties' : 'bikes';
-  const imageUrl = item.images?.[0]
-    ? `${baseUrl}/uploads/${folder}/${item.images[0]}`
-    : null;
+  
+  // Handle image path - check if it already includes /uploads prefix
+  let imageUrl = null;
+  if (item.images?.[0]) {
+    const imagePath = item.images[0];
+    if (imagePath.startsWith('/uploads')) {
+      imageUrl = `${baseUrl}${imagePath}`;
+    } else {
+      const folder = isProperty ? 'properties' : 'bikes';
+      imageUrl = `${baseUrl}/uploads/${folder}/${imagePath}`;
+    }
+  }
 
   return (
     <div
@@ -19,6 +27,18 @@ const ListingCard = ({ item, onClick }) => {
           ${isProperty ? 'bg-green-500/90 text-white' : 'bg-blue-500/90 text-white'}`}>
           {isProperty ? 'Property' : 'Automobile'}
         </span>
+        
+        {/* Report Button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onReport) onReport(item);
+          }}
+          className="absolute top-4 left-4 p-2 bg-white/90 hover:bg-red-50 rounded-full shadow-lg backdrop-blur-sm transition-all z-10 group/report"
+          title="Report this listing"
+        >
+          <Flag size={16} className="text-gray-600 group-hover/report:text-red-600 transition-colors" />
+        </button>
         
         {imageUrl ? (
           <img 

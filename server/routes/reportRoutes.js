@@ -1,15 +1,21 @@
 const express = require('express');
 const router = express.Router();
-const { createReport, getVendorReports, updateReportStatus } = require('../controller/reportController');
+const reportController = require('../controller/reportController');
 const { protect } = require('../middleware/auth');
 
-// Create a new report (for users/vendors to report listings)
-router.post('/', protect, createReport);
+// All routes require authentication
+router.use(protect);
 
-// Get reports for vendor's listings (Owner Dashboard)
-router.get('/vendor', protect, getVendorReports);
+// Submit a report (any authenticated user)
+router.post('/', reportController.submitReport);
 
-// Update report status
-router.put('/:id', protect, updateReportStatus);
+// Get user's submitted reports
+router.get('/my-reports', reportController.getUserReports);
+
+// Get all reports (admin/vendor - you can add role check middleware later)
+router.get('/all', reportController.getAllReports);
+
+// Update report status (admin only - you can add role check middleware later)
+router.put('/:id/status', reportController.updateReportStatus);
 
 module.exports = router;

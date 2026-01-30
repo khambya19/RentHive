@@ -114,11 +114,11 @@ exports.markPaymentAsPaid = async (req, res) => {
     const notifyType = userId === payment.tenantId ? 'Payment received' : 'Payment confirmed';
     
     await Notification.create({
-      userId: notifyUserId,
+      user_id: notifyUserId,
       type: 'payment_update',
       title: notifyType,
       message: `Payment of Rs. ${payment.amount} has been marked as paid for due date ${payment.dueDate}`,
-      read: false
+      is_read: false
     });
     
     res.json({ message: 'Payment marked as paid', payment });
@@ -195,11 +195,11 @@ exports.createPayment = async (req, res) => {
     
     // Notify tenant
     await Notification.create({
-      userId: booking.tenantId,
+      user_id: booking.tenantId,
       type: 'payment_created',
       title: 'New Payment Due',
       message: `A new payment of Rs. ${amount} is due on ${dueDate}`,
-      read: false
+      is_read: false
     });
     
     res.status(201).json({ message: 'Payment created', payment });

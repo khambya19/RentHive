@@ -7,54 +7,44 @@ const Report = sequelize.define('Report', {
     primaryKey: true,
     autoIncrement: true
   },
-  reporterType: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    comment: 'Type of user who reported (user, vendor)'
-  },
   reporterId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    comment: 'ID of the user/vendor who reported'
+    field: 'reporter_id',
+    references: {
+      model: 'users',
+      key: 'id'
+    },
+    onDelete: 'CASCADE'
   },
-  reportedType: {
-    type: DataTypes.STRING,
+  listingType: {
+    type: DataTypes.STRING, // Changed from ENUM for migration safety
     allowNull: false,
-    comment: 'Type of entity being reported (property, automobile, user, vendor)'
+    field: 'listing_type'
   },
-  reportedId: {
+  listingId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    comment: 'ID of the entity being reported'
-  },
-  ownerId: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    comment: 'ID of the owner of the reported listing (for quick filtering)'
+    field: 'listing_id'
   },
   reason: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    comment: 'Category of the report (e.g., Spam, Fraud, Inappropriate)'
+    type: DataTypes.STRING(100),
+    allowNull: false
   },
   description: {
     type: DataTypes.TEXT,
-    allowNull: true,
-    comment: 'Detailed description of the issue'
+    allowNull: true
   },
   status: {
-    type: DataTypes.STRING,
-    defaultValue: 'pending',
-    allowNull: false
-  },
-  adminNotes: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-    comment: 'Notes from admin/owner about the report'
+    type: DataTypes.STRING, // Changed from ENUM for migration safety
+    defaultValue: 'pending'
   }
 }, {
   tableName: 'reports',
-  timestamps: true
+  timestamps: true,
+  underscored: true,
+  createdAt: 'created_at',
+  updatedAt: 'updated_at'
 });
 
 module.exports = Report;

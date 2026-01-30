@@ -61,7 +61,7 @@ router.get('/listings', async (req, res) => {
         type: 'bike',
         title: b.brand ? `${b.brand} ${b.model}` : b.model,
         location: b.location || 'Nepal',
-        price: `Rs ${b.dailyRate ? Number(b.dailyRate).toLocaleString() : 'N/A'} per day`,
+        price: `Rs ${(b.dailyRate || 0).toLocaleString()} per day`,
         priceValue: b.dailyRate || 0,
         image: b.images && b.images.length > 0 ? b.images[0] : null,
         rating: (Math.random() * 2 + 3).toFixed(1), // Placeholder rating

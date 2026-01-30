@@ -23,10 +23,10 @@ router.get('/', propertyController.getVendorProperties);
 router.get('/stats', propertyController.getVendorStats);
 
 // Create new property
-router.post('/', propertyController.createProperty);
+router.post('/', propertyUpload.array('images', 10), propertyController.createProperty);
 
 // Update property
-router.put('/:id', propertyController.updateProperty);
+router.put('/:id', propertyUpload.array('images', 10), propertyController.updateProperty);
 
 // Delete property
 router.delete('/:id', propertyController.deleteProperty);

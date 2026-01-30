@@ -11,6 +11,7 @@ import OwnerBookings from "./OwnerBookings";
 import UnifiedPostingForm from "./UnifiedPostingForm";
 import AllListings from "./AllListings";
 import Settings from "../Settings/Settings";
+import Messages from "./Messages";
 import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
 import { 
   LayoutDashboard, 
@@ -493,15 +494,7 @@ const OwnerDashboard = () => {
           {activeTab === 'listings' && <AllListings showSuccess={showSuccess} showError={showError} onEdit={handleEditListing} />}
           {activeTab === 'bookings' && <OwnerBookings showSuccess={showSuccess} showError={showError} />}
           {activeTab === 'payments' && <PaymentManagement />}
-          {activeTab === 'messages' && (
-            <div className="placeholder flex flex-col items-center justify-center h-full text-gray-500">
-              <div className="bg-white p-6 rounded-full shadow-sm mb-4">
-                <Construction size={48} className="text-indigo-400" />
-              </div>
-              <h3 className="text-xl font-bold text-slate-700">Messages Center</h3>
-              <p className="text-slate-400">Chat features coming soon!</p>
-            </div>
-          )}
+          {activeTab === 'messages' && <Messages />}
           {activeTab === 'add-listing' && <UnifiedPostingForm showSuccess={showSuccess} showError={showError} editData={editData} editType={editType} onEditComplete={() => { setEditData(null); setEditType(null); setActiveTab('listings'); }} />}
           {activeTab === 'settings' && <Settings />}
         </div>

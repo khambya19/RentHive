@@ -9,12 +9,88 @@ const { Op } = require('sequelize');
 // Get all available properties for browsing (tenant/lessor)
 exports.getAvailableProperties = async (req, res) => {
   try {
+    const { 
+      search, 
+      city, 
+      minPrice, 
+      maxPrice, 
+      type, 
+      bedrooms, 
+      bathrooms, 
+      minArea, 
+      maxArea, 
+      amenities,
+      sortBy = 'createdAt',
+      sortOrder = 'DESC'
+    } = req.query;
+
+    const whereClause = { status: 'Available' };
+
+    // Property type filter
+    if (type && type !== 'all') {
+      whereClause.propertyType = type;
+    }
+
+    // City/Location filter
+    if (city) {
+      whereClause.city = { [Op.iLike || Op.like]: `%${city}%` };
+    }
+
+    // Price range filter
+    if (minPrice || maxPrice) {
+      whereClause.rentPrice = {};
+      if (minPrice) whereClause.rentPrice[Op.gte] = parseFloat(minPrice);
+      if (maxPrice) whereClause.rentPrice[Op.lte] = parseFloat(maxPrice);
+    }
+
+    // Bedrooms filter
+    if (bedrooms) {
+      whereClause.bedrooms = parseInt(bedrooms);
+    }
+
+    // Bathrooms filter
+    if (bathrooms) {
+      whereClause.bathrooms = parseInt(bathrooms);
+    }
+
+    // Area range filter
+    if (minArea || maxArea) {
+      whereClause.area = {};
+      if (minArea) whereClause.area[Op.gte] = parseFloat(minArea);
+      if (maxArea) whereClause.area[Op.lte] = parseFloat(maxArea);
+    }
+
+    // Amenities filter (check if property has all selected amenities)
+    if (amenities) {
+      const amenitiesList = amenities.split(',').map(a => a.trim());
+      whereClause.amenities = {
+        [Op.contains]: amenitiesList
+      };
+    }
+
+    // Search by title, address, or city
+    if (search) {
+      whereClause[Op.or] = [
+        { title: { [Op.iLike || Op.like]: `%${search}%` } },
+        { address: { [Op.iLike || Op.like]: `%${search}%` } },
+        { city: { [Op.iLike || Op.like]: `%${search}%` } },
+        { description: { [Op.iLike || Op.like]: `%${search}%` } }
+      ];
+    }
+
+    // Determine sort order
+    let orderClause = [];
+    const validSortFields = ['createdAt', 'rentPrice', 'area', 'bedrooms', 'bathrooms', 'title'];
+    const validSortOrders = ['ASC', 'DESC'];
+    
+    if (validSortFields.includes(sortBy) && validSortOrders.includes(sortOrder.toUpperCase())) {
+      orderClause.push([sortBy, sortOrder.toUpperCase()]);
+    } else {
+      orderClause.push(['createdAt', 'DESC']);
+    }
+
     const properties = await Property.findAll({
-      where: { 
-        status: 'Available'
-        // Temporarily removed isApproved check to show real user data immediately
-        // isApproved: true 
-      },
+      where: whereClause,
       include: [
         {
           model: User,
@@ -22,7 +98,7 @@ exports.getAvailableProperties = async (req, res) => {
           attributes: ['id', 'name', 'email', 'phone']
         }
       ],
-      order: [['createdAt', 'DESC']]
+      order: orderClause
     });
     return res.json(properties.map(p => ({
       ...p.get({ plain: true }), // Start with all raw fields

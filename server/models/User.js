@@ -37,6 +37,10 @@ const User = sequelize.define('User', {
   savedListings: { 
     type: DataTypes.JSON, 
     defaultValue: [] 
+  },
+  isBlocked: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
   }
 }, {
   tableName: 'users',

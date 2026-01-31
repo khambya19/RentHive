@@ -155,7 +155,7 @@ const RegisterUser = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: 'renter', fullName: form.fullName, email: form.email, phone: form.phoneNumber,
+          type: 'user', fullName: form.fullName, email: form.email, phone: form.phoneNumber,
           password: form.password, confirmPassword: form.confirmPassword, address: form.address,
         }),
       });
@@ -182,7 +182,7 @@ const RegisterUser = () => {
               <UserCircle size={28} />
               <span className="text-xl font-bold">RentHive</span>
             </div>
-            <h3 className="text-2xl font-bold mb-3">Join as a Renter</h3>
+            <h3 className="text-2xl font-bold mb-3">Join as a User</h3>
             <p className="text-blue-100 text-sm">Find your perfect home or ride.</p>
             <div className="mt-6 space-y-2">
               <div className="flex items-center gap-2 text-blue-100 text-sm"><CheckCircle size={14} /> Browse listings</div>

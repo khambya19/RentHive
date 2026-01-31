@@ -1,19 +1,41 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import {
+  Key,
+  MapPin,
+  Calendar,
+  Clock,
+  CheckCircle,
+  XCircle,
+  CreditCard,
+  MessageCircle,
+  MoreVertical,
+  Home,
+  Bike
+} from 'lucide-react';
+import API_BASE_URL, { SERVER_BASE_URL } from '../../../config/api';
 import ReviewModal from './ReviewModal';
+import ListingDetail from './ListingDetail';
+
+const Rentals = ({ rentals, loading, onRefresh, setActiveTab, showToast }) => {
   // Submit review to backend
   const handleSubmitReview = async ({ rating, comment, rental, existingReviewId }) => {
     try {
       const user = JSON.parse(localStorage.getItem('user'));
       const isBike = rental.type === 'bike' || !!rental.dailyRate;
-      
+
       // Get the correct property/bike ID - DO NOT use rental.id as fallback
       const actualPropertyId = !isBike ? rental.propertyId : null;
       const actualBikeId = isBike ? (rental.bikeId || rental.bikeBooking?.bikeId) : null;
-      
+
       if (!actualPropertyId && !actualBikeId) {
         if (showToast) showToast('Cannot submit review: This rental is not linked to a valid property or bike.', 'error');
         throw new Error('Missing valid propertyId or bikeId in rental data');
       }
-      
+
       // If updating existing review
       if (existingReviewId) {
         const updateBody = { rating, comment };
@@ -29,9 +51,9 @@ import ReviewModal from './ReviewModal';
           ...(actualPropertyId && { propertyId: actualPropertyId }),
           ...(actualBikeId && { bikeId: actualBikeId })
         };
-        
+
         console.log('Submitting review:', reviewBody, 'Rental data:', { id: rental.id, propertyId: rental.propertyId, bikeId: rental.bikeId, type: rental.type });
-        
+
         await axios.post(`${API_BASE_URL}/reviews/add`, reviewBody);
         if (showToast) showToast('✅ Review submitted successfully! Other users can now see your review.', 'success');
       }
@@ -45,28 +67,7 @@ import ReviewModal from './ReviewModal';
       throw error;
     }
   };
-import React, { useState, useEffect } from 'react';
-import ListingDetail from './ListingDetail';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { 
-  Key, 
-  MapPin, 
-  Calendar, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
-  CreditCard,
-  MessageCircle,
-  MoreVertical,
-  Home,
-  Bike
-} from 'lucide-react';
-import API_BASE_URL, { SERVER_BASE_URL } from '../../../config/api';
 
-const Rentals = ({ rentals, loading, onRefresh, setActiveTab, showToast }) => {
   const navigate = useNavigate();
   const [filter, setFilter] = useState('all'); // 'all', 'property', 'bike'
   // Remove selectedRental and details panel logic
@@ -116,7 +117,7 @@ const Rentals = ({ rentals, loading, onRefresh, setActiveTab, showToast }) => {
     // Receipt Metadata
     doc.text(`Receipt #: REC-${rental.id.toString().padStart(6, '0')}`, 196, 50, { align: 'right' });
     doc.text(`Date: ${new Date().toLocaleDateString()}`, 196, 55, { align: 'right' });
-    
+
     // Status Badge
     doc.setTextColor(22, 163, 74); // Green 600
     doc.setFont('helvetica', 'bold');
@@ -169,45 +170,45 @@ const Rentals = ({ rentals, loading, onRefresh, setActiveTab, showToast }) => {
   };
 
   const handleContact = (rental) => {
-      const chatState = { 
-        selectedUser: {
-           id: rental.vendorId || rental.vendor?.id,
-           name: rental.vendor?.name || 'Owner',
-           email: rental.vendor?.email,
-           profileImage: rental.vendor?.profileImage
-        },
-        context: {
-           propertyId: rental.propertyId,
-           bikeId: rental.bikeBooking?.bikeId,
-           rentalId: rental.id,
-           title: rental.title
-        }
-      };
-
-      if (setActiveTab) {
-        // Pass state via location so UserMessages picks it up
-        navigate('/user/dashboard', { state: chatState, replace: true });
-        setActiveTab('messages');
-      } else {
-        // Fallback or external navigation
-        navigate('/user/dashboard', { state: chatState });
+    const chatState = {
+      selectedUser: {
+        id: rental.vendorId || rental.vendor?.id,
+        name: rental.vendor?.name || 'Owner',
+        email: rental.vendor?.email,
+        profileImage: rental.vendor?.profileImage
+      },
+      context: {
+        propertyId: rental.propertyId,
+        bikeId: rental.bikeBooking?.bikeId,
+        rentalId: rental.id,
+        title: rental.title
       }
+    };
+
+    if (setActiveTab) {
+      // Pass state via location so UserMessages picks it up
+      navigate('/user/dashboard', { state: chatState, replace: true });
+      setActiveTab('messages');
+    } else {
+      // Fallback or external navigation
+      navigate('/user/dashboard', { state: chatState });
+    }
   };
 
 
   // Handler to open review modal
   const handleOpenReview = async (rental) => {
     setReviewRental(rental);
-    
+
     // Check if user already has a review for this property/bike
     try {
       const user = JSON.parse(localStorage.getItem('user'));
       const isBike = rental.type === 'bike' || !!rental.dailyRate;
       const queryParam = isBike ? `bikeId=${rental.bikeId}` : `propertyId=${rental.propertyId}`;
-      
+
       const response = await axios.get(`${API_BASE_URL}/reviews?${queryParam}`);
       const existingReview = response.data.find(r => r.userId === user?.id);
-      
+
       if (existingReview) {
         // Pre-fill with existing review
         setReviewRental({ ...rental, existingReview });
@@ -215,40 +216,40 @@ const Rentals = ({ rentals, loading, onRefresh, setActiveTab, showToast }) => {
     } catch (error) {
       console.error('Error checking existing review:', error);
     }
-    
+
     setReviewModalOpen(true);
   };
 
   return (
     <div className="w-full max-w-5xl mx-auto space-y-8 pb-12">
-      
+
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Active Rentals</h1>
           <p className="text-slate-500 font-medium">Manage your ongoing and upcoming bookings</p>
         </div>
-        
+
         {/* Filter Tabs */}
         <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
-           <button 
-             onClick={() => setFilter('all')}
-             className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${filter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-           >
-             All
-           </button>
-           <button 
-             onClick={() => setFilter('property')}
-             className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${filter === 'property' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-           >
-             <Home size={14} /> Properties
-           </button>
-           <button 
-             onClick={() => setFilter('bike')}
-             className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${filter === 'bike' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-           >
-             <Bike size={14} /> Vehicles
-           </button>
+          <button
+            onClick={() => setFilter('all')}
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${filter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setFilter('property')}
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${filter === 'property' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            <Home size={14} /> Properties
+          </button>
+          <button
+            onClick={() => setFilter('bike')}
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${filter === 'bike' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            <Bike size={14} /> Vehicles
+          </button>
         </div>
       </div>
 
@@ -262,39 +263,39 @@ const Rentals = ({ rentals, loading, onRefresh, setActiveTab, showToast }) => {
         </div>
       ) : (
         <div className="space-y-4">
-            {filteredRentals.map((rental) => (
-             <div key={`${rental.type}-${rental.id}`} className="group bg-white rounded-2xl p-4 border border-slate-100 hover:border-orange-200 transition-all shadow-sm hover:shadow-md flex flex-col md:flex-row gap-6">
-               {/* ...existing code for image and content... */}
-               <div className="flex-1 flex flex-col justify-between py-2">
+          {filteredRentals.map((rental) => (
+            <div key={`${rental.type}-${rental.id}`} className="group bg-white rounded-2xl p-4 border border-slate-100 hover:border-orange-200 transition-all shadow-sm hover:shadow-md flex flex-col md:flex-row gap-6">
+              {/* ...existing code for image and content... */}
+              <div className="flex-1 flex flex-col justify-between py-2">
                 {/* ...existing code for content... */}
                 <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                   <div className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white shadow-sm overflow-hidden">
-                    <div className="w-full h-full bg-orange-200 flex items-center justify-center text-[10px] font-bold text-orange-700">
-                      {(rental.vendor?.name?.[0] || 'V').toUpperCase()}
+                    <div className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white shadow-sm overflow-hidden">
+                      <div className="w-full h-full bg-orange-200 flex items-center justify-center text-[10px] font-bold text-orange-700">
+                        {(rental.vendor?.name?.[0] || 'V').toUpperCase()}
+                      </div>
                     </div>
-                   </div>
-                   <p className="text-xs font-bold text-slate-600">Hosted by <span className="text-slate-900">{rental.vendor?.name || 'Partner'}</span></p>
+                    <p className="text-xs font-bold text-slate-600">Hosted by <span className="text-slate-900">{rental.vendor?.name || 'Partner'}</span></p>
                   </div>
                   <div className="flex gap-2">
-                   <button 
-                    onClick={() => handleDownloadReceipt(rental)}
-                    className="px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-bold uppercase rounded-lg transition-colors border border-slate-200"
-                   >
-                    Download Receipt
-                   </button>
-                   <button 
-                    onClick={() => handleContact(rental)}
-                    className="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold uppercase rounded-lg transition-colors flex items-center gap-2 shadow-lg hover:shadow-xl"
-                   >
-                    <MessageCircle size={14} /> Contact
-                   </button>
-                   <button
-                    onClick={() => handleOpenReview(rental)}
-                    className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-bold uppercase rounded-lg transition-colors flex items-center gap-2 shadow-lg hover:shadow-xl"
-                   >
-                    Review
-                   </button>
+                    <button
+                      onClick={() => handleDownloadReceipt(rental)}
+                      className="px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-bold uppercase rounded-lg transition-colors border border-slate-200"
+                    >
+                      Download Receipt
+                    </button>
+                    <button
+                      onClick={() => handleContact(rental)}
+                      className="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold uppercase rounded-lg transition-colors flex items-center gap-2 shadow-lg hover:shadow-xl"
+                    >
+                      <MessageCircle size={14} /> Contact
+                    </button>
+                    <button
+                      onClick={() => handleOpenReview(rental)}
+                      className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-bold uppercase rounded-lg transition-colors flex items-center gap-2 shadow-lg hover:shadow-xl"
+                    >
+                      Review
+                    </button>
                   </div>
                 </div>
               </div>

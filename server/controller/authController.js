@@ -19,10 +19,10 @@ const SALT_ROUNDS = 10;
 // Helper function for validation
 function validateRegisterBody(body) {
   if (!body) return 'Request body is missing or invalid';
-  
+
   const { type, fullName, email, phone, password, confirmPassword } = body;
-    // Nepali phone validation: must be 10 digits, start with 9
-    if (!phone || !/^9\d{9}$/.test(phone)) return 'Phone must be a valid Nepali number (10 digits, starts with 9)';
+  // Nepali phone validation: must be 10 digits, start with 9
+  if (!phone || !/^9\d{9}$/.test(phone)) return 'Phone must be a valid Nepali number (10 digits, starts with 9)';
   if (!type || !['lessor', 'owner', 'vendor', 'renter', 'user'].includes(type)) return 'Invalid type';
   if (!fullName) return 'Name required';
   if (!email) return 'Email required';
@@ -36,7 +36,7 @@ exports.register = async (req, res) => {
     // --- DEBUG LOGS ---
     console.log("--- New Registration Request ---");
     console.log("Received Body:", req.body);
-    
+
     const errMsg = validateRegisterBody(req.body);
     if (errMsg) {
       console.log("❌ Validation Failed:", errMsg);
@@ -56,8 +56,8 @@ exports.register = async (req, res) => {
 
     // Prevent duplicate registration for verified users
     if (user && user.isVerified) {
-      return res.status(400).json({ 
-        error: 'This email is already registered. Please login instead.' 
+      return res.status(400).json({
+        error: 'This email is already registered. Please login instead.'
       });
     }
 
@@ -99,11 +99,11 @@ exports.register = async (req, res) => {
     console.log('🔑 Verification OTP for', email, ':', otp);
     console.log('---------------------------------');
     logOtpToFile(email, otp, 'Verification');
-    
+
     try {
       await sendEmail({ to: email, subject: 'RentHive - Verify your email', html });
       console.log('✅ OTP email sent successfully to:', email);
-      
+
       // Notify Admin in Real-time
       const { io } = require('../server');
       if (io) {
@@ -114,10 +114,10 @@ exports.register = async (req, res) => {
         });
         // Also notification
         io.to('admins').emit('new-notification', {
-           title: 'New User Registration',
-           message: `A new ${user.type} has registered: ${user.name}`,
-           type: 'info',
-           link: `/admin/dashboard?tab=${user.type === 'user' ? 'users' : 'owners'}`
+          title: 'New User Registration',
+          message: `A new ${user.type} has registered: ${user.name}`,
+          type: 'info',
+          link: `/admin/dashboard?tab=${user.type === 'user' ? 'users' : 'owners'}`
         });
       }
 
@@ -125,9 +125,9 @@ exports.register = async (req, res) => {
       console.error('❌ Email sending failed:', emailErr.message);
     }
 
-    return res.status(201).json({ 
-      message: 'OTP sent to email', 
-      email, 
+    return res.status(201).json({
+      message: 'OTP sent to email',
+      email,
       // Only include OTP in response during development
       ...(process.env.NODE_ENV !== 'production' && { otp })
     });
@@ -145,12 +145,12 @@ exports.checkEmail = async (req, res) => {
     if (!email) return res.status(400).json({ error: 'Email required' });
 
     const user = await User.findOne({ where: { email } });
-    
+
     // Email exists and is verified = not available
     if (user && user.isVerified) {
       return res.json({ exists: true, message: 'This email is already registered' });
     }
-    
+
     // Email doesn't exist or is unverified = available
     return res.json({ exists: false });
   } catch (err) {
@@ -197,7 +197,7 @@ exports.verifyOtp = async (req, res) => {
 
     const user = await User.findOne({ where: { email } });
     if (!user) return res.status(400).json({ error: 'User not found' });
-    
+
     if (user.isVerified) return res.status(400).json({ error: 'User already verified' });
     if (user.otp !== otp) return res.status(400).json({ error: 'Invalid OTP' });
     if (new Date() > user.otpExpiry) return res.status(400).json({ error: 'OTP expired' });
@@ -206,7 +206,7 @@ exports.verifyOtp = async (req, res) => {
     user.otp = null;
     user.otpExpiry = null;
     await user.save();
-    
+
     return res.json({ message: 'Email verified successfully', success: true });
   } catch (err) {
     console.error('verifyOtp error', err);
@@ -217,29 +217,41 @@ exports.verifyOtp = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
-    const trimmedEmail = email.trim().toLowerCase();
+    // Log to file for debugging using absolute path
+    const logPath = '/Users/rojenkhadka/RentHive/server/login_attempts.log';
+    const trimmedEmail = email ? email.trim().toLowerCase() : 'N/A';
+    const logEntry = `[${new Date().toLocaleString()}] Login attempt: ${trimmedEmail}\n`;
+    fs.appendFileSync(logPath, logEntry);
+
+    if (!email || !password) {
+      fs.appendFileSync(logPath, `Result: Email/Password missing\n`);
+      return res.status(400).json({ error: 'Email and password required' });
+    }
+
     const user = await User.findOne({ where: { email: trimmedEmail } });
+
     if (!user) {
+      fs.appendFileSync(logPath, `Result: User not found\n`);
       console.log(`❌ Login failed: User with email ${email} not found.`);
       return res.status(400).json({ error: 'User not found' });
     }
 
-    console.log(`DEBUG: Comparing password for ${trimmedEmail}`);
-    console.log(`DEBUG: Received password length: ${password.length}`);
     const match = await bcrypt.compare(password, user.password);
     if (!match) {
-      console.log(`❌ Login failed: Password mismatch for ${email}. Received len: ${password.length}`);
+      fs.appendFileSync(logPath, `Result: Password mismatch\n`);
+      console.log(`❌ Login failed: Password mismatch for ${email}.`);
       return res.status(400).json({ error: 'Password incorrect' });
     }
-    
+
+    fs.appendFileSync(logPath, `Result: Success\n`);
+
     // Check for admin blocking
     if (user.isBlocked) {
       console.log(`❌ Login failed: User ${email} is blocked.`);
       return res.status(403).json({ error: 'Your account has been blocked by the admin. Please contact support.' });
     }
-    
+
     // Check if email is verified
     if (!user.isVerified) {
       console.log(`❌ Login failed: User ${email} email not verified.`);
@@ -290,15 +302,15 @@ exports.getMe = async (req, res) => {
 
     const userId = req.user.id;
     const user = await User.findByPk(userId);
-    
+
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     // Construct full profile url
-    const profilePic = user.profileImage 
-       ? (user.profileImage.startsWith('http') ? user.profileImage : `${process.env.BASE_URL}/uploads/profiles/${user.profileImage}`)
-       : null;
+    const profilePic = user.profileImage
+      ? (user.profileImage.startsWith('http') ? user.profileImage : `${process.env.BASE_URL}/uploads/profiles/${user.profileImage}`)
+      : null;
 
     res.json({
       success: true,

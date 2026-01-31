@@ -12,8 +12,8 @@
     "dependencies": {
         "@tailwindcss/vite": "^4.1.18",
         "axios": "^1.13.2",
-        "jspdf": "^4.0.0",
-        "jspdf-autotable": "^5.0.7",
+        "jspdf": "^2.5.2",
+        "jspdf-autotable": "^3.8.4",
         "leaflet": "^1.9.4",
         "lucide-react": "^0.563.0",
         "react": "^18.2.0",

@@ -47,10 +47,9 @@ export const SocketProvider = ({ children }) => {
 
   // Initialize socket once
   useEffect(() => {
-    if (socketRef.current) return; // Prevent duplicate connections
-    
-    const socketInstance = io(SERVER_BASE_URL, {
-      transports: ['polling', 'websocket'], // Polling first for stabler handshake
+    const url = SERVER_BASE_URL;
+    const socketInstance = io(url, {
+      transports: ['polling', 'websocket'],
       upgrade: true,
       reconnection: true,
       reconnectionDelay: 1000,
@@ -60,6 +59,7 @@ export const SocketProvider = ({ children }) => {
     });
 
     socketRef.current = socketInstance;
+    window.socket = socketInstance;
     setSocket(socketInstance);
 
     socketInstance.on('connect', () => {
@@ -99,23 +99,17 @@ export const SocketProvider = ({ children }) => {
     fetchUserNotifications(currentUser.id);
   }, [currentUser, socket, isConnected]);
 
-  const registerUser = useCallback((userData) => {
-    if (!userData) return;
-    
-    const newId = typeof userData === 'object' ? userData.userId || userData.id : userData;
-    const newRole = typeof userData === 'object' ? userData.role : null;
-
-    setCurrentUser(prev => {
-      if (prev?.id === newId && prev?.role === newRole) {
-        return prev;
-      }
-      return { id: newId, role: newRole };
-    });
+  const registerUser = useCallback((userId) => {
+    if (!userId) return;
+    setCurrentUserId(userId);
+    // The actual emit happens in the useEffect above
   }, []);
 
   const fetchUserNotifications = async (userId) => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/notifications/user/${userId}`);
+      const res = await axios.get(
+        `${API_BASE_URL}/notifications/user/${userId}`
+      );
       if (res.data.success) {
         setNotifications(res.data.data.notifications || []);
         setUnreadCount(res.data.data.unreadCount || 0);
@@ -128,7 +122,10 @@ export const SocketProvider = ({ children }) => {
   const markNotificationAsRead = async (notificationId) => {
     if (!currentUser?.id) return;
     try {
-      const res = await axios.patch(`${API_BASE_URL}/notifications/${notificationId}/read`, { userId: currentUser.id });
+      const res = await axios.patch(
+        `${API_BASE_URL}/notifications/${notificationId}/read`,
+        { userId: currentUserId }
+      );
       if (res.data.success) {
         setNotifications((prev) =>
           prev.map((n) =>
@@ -147,7 +144,9 @@ export const SocketProvider = ({ children }) => {
   const markAllAsRead = async () => {
     if (!currentUser?.id) return;
     try {
-      const res = await axios.patch(`${API_BASE_URL}/notifications/user/${currentUser.id}/read-all`);
+      const res = await axios.patch(
+        `${API_BASE_URL}/notifications/user/${currentUserId}/read-all`
+      );
       if (res.data.success) {
         setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
         setUnreadCount(0);
@@ -160,7 +159,10 @@ export const SocketProvider = ({ children }) => {
   const deleteNotification = async (notificationId) => {
     if (!currentUser?.id) return;
     try {
-      const res = await axios.delete(`${API_BASE_URL}/notifications/${notificationId}`, { data: { userId: currentUser.id } });
+      const res = await axios.delete(
+        `${API_BASE_URL}/notifications/${notificationId}`,
+        { data: { userId: currentUserId } }
+      );
       if (res.data.success) {
         setNotifications((prev) => {
           const removed = prev.find((n) => n.id === notificationId);

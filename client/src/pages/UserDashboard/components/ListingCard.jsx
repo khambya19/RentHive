@@ -1,10 +1,11 @@
 import React from 'react';
 import { Home, Bike, MapPin, BedDouble, Bath, Ruler, Calendar, Fuel, Gauge, ArrowRight, Flag } from 'lucide-react';
+import { SERVER_BASE_URL } from '../../../config/api';
 
 const ListingCard = ({ item, onClick, onReport }) => {
   const isProperty = item.type === 'property';
-  const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5050';
-  
+  const baseUrl = SERVER_BASE_URL;
+
   // Handle image path - check if it already includes /uploads prefix
   let imageUrl = null;
   if (item.images?.[0]) {
@@ -27,7 +28,7 @@ const ListingCard = ({ item, onClick, onReport }) => {
           ${isProperty ? 'bg-green-500/90 text-white' : 'bg-blue-500/90 text-white'}`}>
           {isProperty ? 'Property' : 'Automobile'}
         </span>
-        
+
         {/* Report Button */}
         <button
           onClick={(e) => {
@@ -39,10 +40,10 @@ const ListingCard = ({ item, onClick, onReport }) => {
         >
           <Flag size={16} className="text-gray-600 group-hover/report:text-red-600 transition-colors" />
         </button>
-        
+
         {imageUrl ? (
-          <img 
-            src={imageUrl} 
+          <img
+            src={imageUrl}
             alt={item.title || item.brand}
             className="w-full h-full object-cover rounded-2xl transition-transform duration-700 group-hover:scale-105"
             onError={e => { e.target.onerror = null; e.target.src = 'https://placehold.co/400x300?text=No+Image'; }}
@@ -85,8 +86,8 @@ const ListingCard = ({ item, onClick, onReport }) => {
             </span>
           </div>
           <span className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider border shadow-sm
-            ${(item.status || 'available').toLowerCase() === 'available' 
-              ? 'bg-green-50 text-green-700 border-green-200' 
+            ${(item.status || 'available').toLowerCase() === 'available'
+              ? 'bg-green-50 text-green-700 border-green-200'
               : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>
             {item.status || 'Available'}
           </span>

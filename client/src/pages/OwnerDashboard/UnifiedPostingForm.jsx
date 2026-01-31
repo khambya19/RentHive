@@ -5,16 +5,16 @@ import PropertyLocationMap from '../../components/PropertyLocationMap';
 import API_BASE_URL from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Home, 
-  Bike, 
-  ChevronDown, 
-  ChevronLeft, 
-  ChevronRight, 
-  MapPin, 
-  Check, 
-  Info, 
-  Upload, 
+import {
+  Home,
+  Bike,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  MapPin,
+  Check,
+  Info,
+  Upload,
   CheckCircle,
   ShieldAlert,
   Settings,
@@ -32,7 +32,7 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editId, setEditId] = useState(null);
-  
+
   const [bikeForm, setBikeForm] = useState({
     name: '',
     brand: '',
@@ -60,7 +60,7 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
       setIsEditMode(true);
       setEditId(editData.id);
       setListingType(editType);
-      
+
       if (editType === 'automobile') {
         // Pre-fill automobile form
         setBikeForm({
@@ -88,7 +88,7 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
           contactEmail: editData.contactEmail || user?.email || '',
           contactPhone: editData.contactPhone || user?.phone || '',
         });
-        
+
         if (editData.latitude && editData.longitude) {
           setSelectedLocation({
             lat: Number(editData.latitude),
@@ -104,40 +104,40 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
   // -- GATE CHECK: If user is not verified, block access --
   if (user?.kycStatus !== 'approved') {
     return (
-       <div className="flex flex-col items-center justify-center p-8 md:p-16 text-center w-full max-w-4xl mx-auto align-middle h-full">
-         <div className="w-24 h-24 bg-amber-50 rounded-full flex items-center justify-center mb-6">
-            <ShieldAlert size={48} className="text-amber-500" />
-         </div>
-         <h2 className="text-2xl font-bold text-slate-900 mb-2">Verification Required</h2>
-         <p className="text-slate-500 mb-8 leading-relaxed">
-           To ensure safety and trust on RentHive, all owners must complete KYC verification before posting listings.
-           <br/>Your current status is: <strong className="uppercase text-amber-600">{user?.kycStatus?.replace('_', ' ') || 'NOT SUBMITTED'}</strong>
-         </p>
-         
-         <button 
-           onClick={() => {
-              // Assuming this component is used inside OwnerDashboard which handles tabs via state or URL
-              // We'll try to find the button to switch tabs or navigate if it's a route
-              // Since OwnerDashboard passes activeTab, we might need a way to tell the parent to switch.
-              // But standard navigation is safer if we are not sure about parent props.
-              // For now, let's look at the parent Structure. It seems OwnerDashboard uses state 'activeTab'.
-              // We can't change parent state easily unless a prop was passed.
-              // However, the USER asked for "Settings" tab to upload KYC.
-              // We can hint the user to go to Settings.
-              const settingsTab = document.querySelector('button[title="Settings"]'); // Try finding via DOM as fallback? No, fragile.
-              // Best is to just show instructions or if 'navigate' works for a specific route.
-              // But OwnerDashboard is single page tabs.
-              // Let's just use a window alert or rely on the user clicking the sidebar.
-              // Actually, I can simply render a visually guiding button.
-              navigate('/owner/dashboard?tab=settings'); // This might trigger the useEffect in OwnerDashboard to switch tabs
-              window.location.reload(); // Force reload to pick up the query param
-           }}
-           className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all flex items-center gap-2"
-         >
-           <Settings size={20} />
-           Go to Settings to Verify
-         </button>
-       </div>
+      <div className="flex flex-col items-center justify-center p-8 md:p-16 text-center w-full max-w-4xl mx-auto align-middle h-full">
+        <div className="w-24 h-24 bg-amber-50 rounded-full flex items-center justify-center mb-6">
+          <ShieldAlert size={48} className="text-amber-500" />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-900 mb-2">Verification Required</h2>
+        <p className="text-slate-500 mb-8 leading-relaxed">
+          To ensure safety and trust on RentHive, all owners must complete KYC verification before posting listings.
+          <br />Your current status is: <strong className="uppercase text-amber-600">{user?.kycStatus?.replace('_', ' ') || 'NOT SUBMITTED'}</strong>
+        </p>
+
+        <button
+          onClick={() => {
+            // Assuming this component is used inside OwnerDashboard which handles tabs via state or URL
+            // We'll try to find the button to switch tabs or navigate if it's a route
+            // Since OwnerDashboard passes activeTab, we might need a way to tell the parent to switch.
+            // But standard navigation is safer if we are not sure about parent props.
+            // For now, let's look at the parent Structure. It seems OwnerDashboard uses state 'activeTab'.
+            // We can't change parent state easily unless a prop was passed.
+            // However, the USER asked for "Settings" tab to upload KYC.
+            // We can hint the user to go to Settings.
+            const settingsTab = document.querySelector('button[title="Settings"]'); // Try finding via DOM as fallback? No, fragile.
+            // Best is to just show instructions or if 'navigate' works for a specific route.
+            // But OwnerDashboard is single page tabs.
+            // Let's just use a window alert or rely on the user clicking the sidebar.
+            // Actually, I can simply render a visually guiding button.
+            navigate('/owner/dashboard?tab=settings'); // This might trigger the useEffect in OwnerDashboard to switch tabs
+            window.location.reload(); // Force reload to pick up the query param
+          }}
+          className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all flex items-center gap-2"
+        >
+          <Settings size={20} />
+          Go to Settings to Verify
+        </button>
+      </div>
     );
   }
 
@@ -176,7 +176,12 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
 
   const handleLocationSelect = (location) => {
     setSelectedLocation(location);
-    setBikeForm({ ...bikeForm, latitude: location.lat, longitude: location.lng });
+    setBikeForm({
+      ...bikeForm,
+      latitude: location.lat,
+      longitude: location.lng,
+      location: bikeForm.location || (location.display_name ? location.display_name.split(',')[0] : '')
+    });
   };
 
   const clearLocation = () => {
@@ -227,10 +232,10 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
 
   const handleBikeSubmit = async (e) => {
     e.preventDefault();
-    
+
     // Ensure we are on the final step (Review) before submitting
     if (currentStep !== 5) {
-      return; 
+      return;
     }
 
     if (!validateBikeForm()) return;
@@ -238,7 +243,7 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
     try {
       const token = localStorage.getItem('token');
       const formData = new FormData();
-      
+
       // Append all bike form fields
       Object.keys(bikeForm).forEach(key => {
         if (key === 'images' && bikeForm.images.length > 0) {
@@ -254,7 +259,7 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
           formData.append(key, bikeForm[key]);
         }
       });
-      
+
       // Keep existing images if in edit mode
       if (isEditMode) {
         const existingImages = bikeForm.images.filter(img => typeof img === 'string');
@@ -264,8 +269,8 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
       }
 
       // Choose endpoint based on edit mode
-      const url = isEditMode 
-        ? `${API_BASE_URL}/bikes/vendor/${editId}` 
+      const url = isEditMode
+        ? `${API_BASE_URL}/bikes/vendor/${editId}`
         : `${API_BASE_URL}/bikes/vendor`;
       const method = isEditMode ? 'PUT' : 'POST';
 
@@ -319,18 +324,18 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
   const renderStepIndicator = () => (
     <div className="flex justify-between items-center mb-10 px-4 relative">
       <div className="absolute top-1/2 left-0 w-full h-1 bg-gray-100 -z-10 rounded"></div>
-      <div 
+      <div
         className="absolute top-1/2 left-0 h-1 bg-green-500 -z-10 rounded transition-all duration-500"
         style={{ width: `${((currentStep - 1) / 4) * 100}%` }}
       ></div>
       {[1, 2, 3, 4, 5].map(step => (
         <div key={step} className={`flex flex-col items-center group relative z-10`}>
-          <div 
+          <div
             className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg transition-all duration-300 border-[3px] 
-              ${currentStep === step 
-                ? 'bg-blue-600 border-blue-600 text-white shadow-xl scale-110 ring-4 ring-blue-50' 
-                : currentStep > step 
-                  ? 'bg-green-500 border-green-500 text-white' 
+              ${currentStep === step
+                ? 'bg-blue-600 border-blue-600 text-white shadow-xl scale-110 ring-4 ring-blue-50'
+                : currentStep > step
+                  ? 'bg-green-500 border-green-500 text-white'
                   : 'bg-white border-gray-200 text-gray-400 group-hover:border-gray-300'}`}
           >
             {currentStep > step ? <Check size={24} strokeWidth={3} /> : step}
@@ -367,9 +372,9 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
         <div className="text-center py-12">
           <h2 className="text-3xl font-bold text-gray-900 mb-2">What would you like to list?</h2>
           <p className="text-gray-600 text-lg mb-12">Choose the type of rental you want to add</p>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 w-full mx-auto">
-            <div 
+            <div
               className="bg-white rounded-2xl p-10 border-2 border-gray-100 cursor-pointer transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:border-green-500 group"
               onClick={() => setListingType('property')}
             >
@@ -384,7 +389,7 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
               </button>
             </div>
 
-            <div 
+            <div
               className="bg-white rounded-2xl p-6 md:p-10 border-2 border-gray-100 cursor-pointer transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:border-blue-500 group"
               onClick={() => setListingType('automobile')}
             >
@@ -409,7 +414,7 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
     return (
       <div className="p-4 md:p-8 w-full">
         <div className="flex items-center gap-4 mb-8 pb-4 border-b border-gray-100">
-          <button 
+          <button
             className="p-2 -ml-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
             onClick={() => setListingType(null)}
           >
@@ -418,8 +423,8 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
           </button>
           <h2 className="text-2xl font-bold text-gray-900">List a Property</h2>
         </div>
-        <PropertyManagement 
-          inlineMode={true} 
+        <PropertyManagement
+          inlineMode={true}
           editData={isEditMode && editType === 'property' ? editData : null}
           isEditMode={isEditMode && editType === 'property'}
           onEditComplete={onEditComplete}
@@ -433,11 +438,11 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
   // If automobile selected, show automobile form
   if (listingType === 'automobile') {
     const totalSteps = 5;
-    
+
     return (
       <div className="p-4 md:p-8 w-full">
         <div className="flex items-center gap-4 mb-8 pb-4 border-b border-gray-100">
-          <button 
+          <button
             className="p-2 -ml-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
             onClick={() => setListingType(null)}
           >
@@ -449,10 +454,10 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
 
         <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-8">
           {renderStepIndicator()}
-          
+
           <form className="mt-8" onSubmit={(e) => e.preventDefault()}>
             <div className="animate-fade-in space-y-8">
-              
+
               {/* Step 1: Basic Info */}
               {currentStep === 1 && (
                 <>
@@ -460,7 +465,7 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
                     <h2 className="text-2xl font-bold text-gray-900">Basic Information</h2>
                     <p className="text-gray-500">Enter the main details of the vehicle.</p>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <label className={labelClass}>Vehicle Name <span className="text-red-500">*</span></label>
                     <input
@@ -592,8 +597,7 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
                     <h2 className="text-2xl font-bold text-gray-900">Pricing & Location</h2>
                     <p className="text-gray-500">Set your rates and pickup location.</p>
                   </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="space-y-2">
                       <label className={labelClass}>Daily Rate (NPR) <span className="text-red-500">*</span></label>
                       <input
@@ -602,9 +606,12 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
                         value={bikeForm.dailyRate}
                         onChange={(e) => {
                           const val = e.target.value;
-                          setBikeForm(prev => ({ 
-                            ...prev, 
-                            dailyRate: val
+                          setBikeForm(prev => ({
+                            ...prev,
+                            dailyRate: val,
+                            // Auto-set weekly/monthly if not set by user to help with dynamic pricing
+                            weeklyRate: !prev.weeklyRate ? (val * 7).toFixed(0) : prev.weeklyRate,
+                            monthlyRate: !prev.monthlyRate ? (val * 30).toFixed(0) : prev.monthlyRate
                           }));
                         }}
                         placeholder="e.g., 500"
@@ -631,13 +638,13 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label className={labelClass}>Location/City <span className="text-red-500">*</span></label>
+                      <label className={labelClass}>City/Location <span className="text-red-500">*</span></label>
                       <input
                         type="text"
                         className={inputClass}
                         value={bikeForm.location}
                         onChange={(e) => setBikeForm({ ...bikeForm, location: e.target.value })}
-                        placeholder="e.g., Pokhara, Kathmandu, Chitwan"
+                        placeholder="e.g., Kathmandu, Pokhara"
                         required
                       />
                     </div>
@@ -649,7 +656,7 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
                         className={inputClass}
                         value={bikeForm.pickupLocation}
                         onChange={(e) => setBikeForm({ ...bikeForm, pickupLocation: e.target.value })}
-                        placeholder="e.g., Thamel, Kathmandu (Near Garden of Dreams)"
+                        placeholder="e.g., Thamel (Near Garden of Dreams)"
                         required
                       />
                     </div>
@@ -699,11 +706,10 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
                       </h3>
                       <button
                         type="button"
-                        className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
-                          showLocationPicker 
-                            ? 'bg-red-50 text-red-600 hover:bg-red-100' 
-                            : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-200'
-                        }`}
+                        className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${showLocationPicker
+                          ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                          : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-200'
+                          }`}
                         onClick={() => setShowLocationPicker(!showLocationPicker)}
                       >
                         {showLocationPicker ? 'Hide Map' : 'Show Map'}
@@ -752,14 +758,14 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
                     <h2 className="text-2xl font-bold text-gray-900">Features & Amenities</h2>
                     <p className="text-gray-500">What's included with your vehicle?</p>
                   </div>
-                  
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                     {['Helmet Included', 'Full Tank', 'Insurance Included', 'Free Delivery', 'GPS Tracker', 'Spare Key'].map(feature => (
-                      <label 
-                        key={feature} 
+                      <label
+                        key={feature}
                         className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all duration-200
-                          ${bikeForm.features.includes(feature) 
-                            ? 'bg-blue-50 border-blue-500 shadow-sm' 
+                          ${bikeForm.features.includes(feature)
+                            ? 'bg-blue-50 border-blue-500 shadow-sm'
                             : 'bg-white border-gray-200 hover:border-blue-300 hover:bg-gray-50'}`}
                       >
                         <input
@@ -782,10 +788,10 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
                     <h2 className="text-2xl font-bold text-gray-900">Images</h2>
                     <p className="text-gray-500">Upload high-quality photos potential renters will love.</p>
                   </div>
-                  
+
                   <div className="space-y-4">
                     <label className="block font-semibold text-gray-700">Upload Images (Max 5) <span className="text-gray-400 font-normal">(Optional)</span></label>
-                    
+
                     <div className="relative border-2 border-dashed border-gray-300 rounded-2xl p-8 hover:bg-gray-50 hover:border-blue-400 transition-all text-center group cursor-pointer">
                       <input
                         type="file"
@@ -832,10 +838,10 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
                       <div className="flex items-start gap-4">
                         <div className="w-24 h-24 bg-white rounded-xl flex items-center justify-center text-blue-600 overflow-hidden shadow-md shrink-0">
                           {bikeForm.images.length > 0 ? (
-                            <img 
-                              src={bikeForm.images[0] instanceof File ? URL.createObjectURL(bikeForm.images[0]) : bikeForm.images[0]} 
-                              className="w-full h-full object-cover" 
-                              alt="Preview" 
+                            <img
+                              src={bikeForm.images[0] instanceof File ? URL.createObjectURL(bikeForm.images[0]) : bikeForm.images[0]}
+                              className="w-full h-full object-cover"
+                              alt="Preview"
                             />
                           ) : (
                             <Bike size={40} />
@@ -915,16 +921,16 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
                         {bikeForm.latitude && bikeForm.longitude && (
                           <div className="md:col-span-2 mt-2 pt-2 border-t border-gray-100 flex items-center justify-between">
                             <div>
-                               <span className="block text-gray-400 text-xs uppercase tracking-wider font-bold mb-1">Coordinates</span>
-                               <span className="text-xs font-mono text-gray-600">Lat: {bikeForm.latitude.toFixed(6)}, Lng: {bikeForm.longitude.toFixed(6)}</span>
+                              <span className="block text-gray-400 text-xs uppercase tracking-wider font-bold mb-1">Coordinates</span>
+                              <span className="text-xs font-mono text-gray-600">Lat: {bikeForm.latitude.toFixed(6)}, Lng: {bikeForm.longitude.toFixed(6)}</span>
                             </div>
-                            <a 
-                               href={`https://www.google.com/maps?q=${bikeForm.latitude},${bikeForm.longitude}`} 
-                               target="_blank" 
-                               rel="noopener noreferrer"
-                               className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors flex items-center gap-1"
+                            <a
+                              href={`https://www.google.com/maps?q=${bikeForm.latitude},${bikeForm.longitude}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors flex items-center gap-1"
                             >
-                               <MapPin size={12} /> View on Map
+                              <MapPin size={12} /> View on Map
                             </a>
                           </div>
                         )}
@@ -988,8 +994,8 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                           {bikeForm.images.map((image, index) => (
                             <div key={index} className="relative group aspect-video rounded-lg overflow-hidden border-2 border-gray-200">
-                              <img 
-                                src={image instanceof File ? URL.createObjectURL(image) : image} 
+                              <img
+                                src={image instanceof File ? URL.createObjectURL(image) : image}
                                 alt={`Preview ${index + 1}`}
                                 className="w-full h-full object-cover"
                               />
@@ -1010,8 +1016,8 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
                     {/* Confirmation Checkbox */}
                     <div className="bg-blue-50 border-2 border-blue-200 p-5 rounded-xl flex gap-3 items-start cursor-pointer hover:bg-blue-100 transition-colors" onClick={() => setTermsAccepted(!termsAccepted)}>
                       <div className="pt-0.5">
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
                           checked={termsAccepted}
                           onChange={(e) => setTermsAccepted(e.target.checked)}
@@ -1032,9 +1038,9 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
 
               <div className="flex justify-between items-center pt-8 border-t border-gray-100 mt-8">
                 {currentStep > 1 ? (
-                  <button 
-                    type="button" 
-                    className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold bg-white border-2 border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-all" 
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold bg-white border-2 border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-all"
                     onClick={prevStep}
                   >
                     <ChevronLeft size={20} />
@@ -1043,24 +1049,24 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
                 ) : (
                   <div></div>
                 )}
-                
+
                 {currentStep < totalSteps ? (
-                  <button 
-                    type="button" 
-                    className="flex items-center gap-2 px-8 py-3 rounded-xl font-bold bg-blue-600 text-white shadow-lg shadow-blue-200 hover:bg-blue-700 hover:translate-x-1 transition-all" 
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 px-8 py-3 rounded-xl font-bold bg-blue-600 text-white shadow-lg shadow-blue-200 hover:bg-blue-700 hover:translate-x-1 transition-all"
                     onClick={nextStep}
                   >
                     Next
                     <ChevronRight size={20} />
                   </button>
                 ) : (
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={handleBikeSubmit}
                     disabled={!termsAccepted}
                     className={`flex items-center gap-2 px-8 py-3 rounded-xl font-bold text-white shadow-lg transition-all
-                      ${termsAccepted 
-                        ? 'bg-green-600 shadow-green-200 hover:bg-green-700 hover:-translate-y-1' 
+                      ${termsAccepted
+                        ? 'bg-green-600 shadow-green-200 hover:bg-green-700 hover:-translate-y-1'
                         : 'bg-gray-300 shadow-gray-100 cursor-not-allowed'}`}
                   >
                     {isEditMode ? 'Update Automobile' : 'List Automobile'}

@@ -34,7 +34,7 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError, isEdit
       const response = await fetch(`${API_BASE_URL}/properties`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         setProperties(data);
@@ -53,7 +53,7 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError, isEdit
   const handleAddProperty = async (formData) => {
     try {
       const token = localStorage.getItem('token');
-      
+
       // Use location data from formData directly
       const propertyData = {
         ...formData
@@ -75,14 +75,14 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError, isEdit
         body: JSON.stringify(propertyData),
       });
 
-        if (response.ok) {
+      if (response.ok) {
         if (!inlineMode) {
-           const newProperty = await response.json();
-           if (actualEditMode) {
-             setProperties(properties.map(p => p.id === newProperty.id ? newProperty : p));
-           } else {
-             setProperties([...properties, newProperty]); 
-           }
+          const newProperty = await response.json();
+          if (actualEditMode) {
+            setProperties(properties.map(p => p.id === newProperty.id ? newProperty : p));
+          } else {
+            setProperties([...properties, newProperty]);
+          }
         }
         setShowPropertyModal(false);
         resetForm();
@@ -122,10 +122,12 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError, isEdit
             <AddPropertyForm
               onSubmit={handleAddProperty}
               onCancel={() => {
-                 if (onEditComplete) onEditComplete();
-                 setShowPropertyModal(false);
+                if (onEditComplete) onEditComplete();
+                setShowPropertyModal(false);
               }}
               initialData={isEditMode ? editData : null}
+              showError={showError}
+              showSuccess={showSuccess}
             />
           </div>
         )}
@@ -140,7 +142,7 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError, isEdit
           <h2 className="text-2xl font-bold text-gray-900">My Properties</h2>
           <p className="text-gray-500">Manage your rental properties</p>
         </div>
-        <button 
+        <button
           className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-xl font-semibold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200"
           onClick={() => { setEditingProperty(null); resetForm(); setShowPropertyModal(true); }}
         >
@@ -153,7 +155,7 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError, isEdit
         {properties.length > 0 ? properties.map(property => (
           <div key={property.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 group">
             <div className="relative h-48 overflow-hidden">
-              <img 
+              <img
                 src={property.images?.[0] ? `${SERVER_BASE_URL}/uploads/properties/${property.images[0]}` : noImage}
                 alt={property.title}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -174,7 +176,7 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError, isEdit
                 <MapPin size={16} className="flex-shrink-0" />
                 <span className="truncate">{property.address}, {property.city}</span>
               </p>
-              
+
               <div className="flex items-center gap-4 py-3 border-t border-b border-gray-50 mb-4">
                 <span className="flex items-center gap-1.5 text-gray-600 text-sm font-medium">
                   <Bed size={18} className="text-gray-400" /> {property.bedrooms} <span className="hidden sm:inline">Bed</span>
@@ -183,13 +185,13 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError, isEdit
                   <Bath size={18} className="text-gray-400" /> {property.bathrooms} <span className="hidden sm:inline">Bath</span>
                 </span>
               </div>
-              
+
               <div className="flex items-center justify-between mt-auto">
                 <div className="text-xl font-bold text-gray-900">
                   NPR {property.rentPrice ? Number(property.rentPrice).toLocaleString() : '0'}<span className="text-sm text-gray-400 font-normal">/mo</span>
                 </div>
                 <div className="flex gap-2">
-                  <button 
+                  <button
                     className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                     onClick={() => {
                       setEditingProperty(property);
@@ -199,9 +201,9 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError, isEdit
                   >
                     <Edit size={18} />
                   </button>
-                  <button 
+                  <button
                     className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    onClick={() => {/* Delete logic */}}
+                    onClick={() => {/* Delete logic */ }}
                     title="Delete Property"
                   >
                     <Trash2 size={18} />
@@ -217,7 +219,7 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError, isEdit
             </div>
             <h3 className="text-xl font-bold text-gray-900 mb-2">No properties yet</h3>
             <p className="text-gray-500 mb-8 max-w-sm">Start by adding your first property to rent out. It only takes a few minutes.</p>
-            <button 
+            <button
               className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200"
               onClick={() => { setEditingProperty(null); resetForm(); setShowPropertyModal(true); }}
             >
@@ -231,20 +233,20 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError, isEdit
       {/* Property Modal */}
       {showPropertyModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowPropertyModal(false)}>
-          <div 
-            className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl animate-scale-up" 
+          <div
+            className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl animate-scale-up"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="sticky top-0 z-10 flex items-center justify-between p-6 bg-white border-b border-gray-100">
               <h2 className="text-2xl font-bold text-gray-900">{editingProperty ? 'Edit Property' : 'Add New Property'}</h2>
-              <button 
+              <button
                 className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors"
                 onClick={() => setShowPropertyModal(false)}
               >
                 <div className="text-2xl leading-none">&times;</div>
               </button>
             </div>
-            
+
             <div className="p-6 md:p-8">
               <AddPropertyForm
                 onSubmit={handleAddProperty}

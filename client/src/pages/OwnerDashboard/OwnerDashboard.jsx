@@ -14,21 +14,21 @@ import Settings from "../Settings/Settings";
 import Messages from "./Messages";
 import Report from "./Report";
 import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
-import { 
-  LayoutDashboard, 
-  PlusCircle, 
-  List, 
-  CalendarDays, 
-  CreditCard, 
-  MessageSquare, 
+import {
+  LayoutDashboard,
+  PlusCircle,
+  List,
+  CalendarDays,
+  CreditCard,
+  MessageSquare,
   LogOut,
-  AlertTriangle, 
-  ChevronLeft, 
-  ChevronRight, 
-  RefreshCw, 
-  Home, 
-  Banknote, 
-  CalendarCheck, 
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  Home,
+  Banknote,
+  CalendarCheck,
   Bike,
   Settings as SettingsIcon,
   Hexagon,
@@ -40,10 +40,10 @@ import {
 import "./OwnerDashboard.css";
 
 const OwnerDashboard = () => {
-    useEffect(() => {
-      document.body.style.background = '#d6eef5';
-      return () => { document.body.style.background = ''; };
-    }, []);
+  useEffect(() => {
+    document.body.style.background = '#d6eef5';
+    return () => { document.body.style.background = ''; };
+  }, []);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user, logout, login } = useAuth();
@@ -64,7 +64,7 @@ const OwnerDashboard = () => {
     messages: 0,
     reports: 0
   });
-  
+
   // Listen for tab changes from sessionStorage (for notifications)
   useEffect(() => {
     const checkTabChange = () => {
@@ -74,32 +74,32 @@ const OwnerDashboard = () => {
         sessionStorage.removeItem('dashboardTab');
       }
     };
-    
+
     // Check immediately
     checkTabChange();
-    
+
     // Also listen for storage events (in case notification is clicked from another tab/window)
     window.addEventListener('storage', checkTabChange);
-    
+
     // Check periodically (as a fallback since storage event doesn't fire in same tab)
     const interval = setInterval(checkTabChange, 100);
-    
+
     return () => {
       window.removeEventListener('storage', checkTabChange);
       clearInterval(interval);
     };
   }, []);
-  
+
   const fetchUnreadMessages = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) return;
-      const res = await fetch(`${API_BASE_URL}/messages/unread-count`, { 
-         headers: { Authorization: `Bearer ${token}` } 
+      const res = await fetch(`${API_BASE_URL}/messages/unread-count`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
-         const data = await res.json();
-         setMessagesCount(data.count || 0);
+        const data = await res.json();
+        setMessagesCount(data.count || 0);
       }
     } catch (err) {
       console.error(err);
@@ -127,8 +127,8 @@ const OwnerDashboard = () => {
       ]);
 
       setCounts({
-        bookings: (bookings.propertyBookings || []).filter(b => b.status === 'Pending').length + 
-                  (bookings.bikeBookings || []).filter(b => b.status === 'Pending').length,
+        bookings: (bookings.propertyBookings || []).filter(b => b.status === 'Pending').length +
+          (bookings.bikeBookings || []).filter(b => b.status === 'Pending').length,
         payments: (payments || []).filter(p => p.status === 'Pending' || p.status === 'Overdue').length,
         messages: msg.count || 0,
         reports: (reports || []).filter(r => r.status === 'pending').length
@@ -146,15 +146,14 @@ const OwnerDashboard = () => {
     socket.on('kyc-status-updated', (data) => {
       // ... same logic ...
       const token = localStorage.getItem('token');
-      const updatedUser = { 
-        ...user, 
+      const updatedUser = {
+        ...user,
         kycStatus: data.status,
-        isVerified: data.isVerified 
+        isVerified: data.isVerified
       };
       if (typeof login === 'function') {
         login(updatedUser, token);
       }
-      
       if (data.status === 'approved') {
         showSuccess('KYC Approved', 'Congratulations! You can now post listings.');
       } else {
@@ -163,12 +162,12 @@ const OwnerDashboard = () => {
     });
 
     socket.on('new_message', () => {
-       setMessagesCount(prev => prev + 1);
-       showSuccess('New Message', 'You have received a new message.');
+      setMessagesCount(prev => prev + 1);
+      showSuccess('New Message', 'You have received a new message.');
     });
 
     socket.on('refresh_counts', () => {
-       fetchAllDashboardCounts();
+      fetchAllDashboardCounts();
     });
 
     fetchUnreadMessages();
@@ -188,7 +187,7 @@ const OwnerDashboard = () => {
     bikeRentals: 0,
   });
   const [loading, setLoading] = useState(true);
-  
+
   // Edit mode state
   const [editData, setEditData] = useState(null);
   const [editType, setEditType] = useState(null); // 'property' or 'automobile'
@@ -202,7 +201,7 @@ const OwnerDashboard = () => {
       setEditType(null);
     }
   };
-  
+
   // Handle edit from AllListings
   const handleEditListing = (data, type) => {
     setEditData(data);
@@ -229,7 +228,7 @@ const OwnerDashboard = () => {
 
       const headers = { 'Authorization': `Bearer ${token}` };
       const response = await fetch(`${API_BASE_URL}/owners/stats`, { headers });
-      
+
       if (response.ok) {
         const data = await response.json();
         // console.log('📊 Dashboard Stats Received:', data);
@@ -256,17 +255,17 @@ const OwnerDashboard = () => {
       {/* Welcome Banner */}
       <div className="welcome-banner rounded-2xl p-5 md:p-8 flex flex-col md:flex-row flex-wrap gap-4 justify-between items-center shadow-lg relative overflow-hidden bg-gradient-to-r from-slate-700 to-slate-800">
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
-        
+
         <div className="welcome-content relative z-10 text-center md:text-left">
           <h1 className="flex items-center justify-center md:justify-start gap-2 text-xl md:text-3xl font-bold text-white mb-1 md:mb-2">
-            Welcome, {user?.fullName?.split(' ')[0] || 'Owner'}! <span className="animate-wave origin-bottom-right inline-block">👋</span>
+            Welcome, {user?.fullName?.split(' ')[0] || (user?.type || user?.role || 'User')}! <span className="animate-wave origin-bottom-right inline-block">👋</span>
           </h1>
-          <p className="text-slate-300 text-sm md:text-lg font-medium">Here's your rental summary for today.</p>
+          <p className="text-slate-300 text-sm md:text-lg font-medium">Here's your summary for today.</p>
         </div>
-        
-        <button 
+
+        <button
           className="refresh-btn relative z-10 flex items-center gap-2 px-4 py-2 md:px-6 md:py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-semibold backdrop-blur-sm transition-all text-sm md:text-base border border-white/10"
-          onClick={fetchDashboardData} 
+          onClick={fetchDashboardData}
           disabled={loading}
         >
           <RefreshCw size={16} className={`${loading ? 'animate-spin' : ''}`} />
@@ -313,7 +312,7 @@ const OwnerDashboard = () => {
             <div className="p-3 bg-blue-50 rounded-xl text-blue-600 group-hover:scale-110 transition-transform">
               <CalendarCheck size={22} />
             </div>
-             <span className="text-xs font-bold px-2 py-1 bg-slate-100 text-slate-500 rounded-lg">REQUESTS</span>
+            <span className="text-xs font-bold px-2 py-1 bg-slate-100 text-slate-500 rounded-lg">REQUESTS</span>
           </div>
           <div>
             <h3 className="text-2xl md:text-3xl font-black text-slate-800 mb-1">{stats.totalBookings}</h3>
@@ -323,11 +322,11 @@ const OwnerDashboard = () => {
 
         {/* Bike Rentals */}
         <div className="stat-card bg-white p-5 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-all">
-           <div className="flex justify-between items-start mb-4">
+          <div className="flex justify-between items-start mb-4">
             <div className="p-3 bg-orange-50 rounded-xl text-orange-600 group-hover:scale-110 transition-transform">
               <Bike size={22} />
             </div>
-             <span className="text-xs font-bold px-2 py-1 bg-slate-100 text-slate-500 rounded-lg">RENTALS</span>
+            <span className="text-xs font-bold px-2 py-1 bg-slate-100 text-slate-500 rounded-lg">RENTALS</span>
           </div>
           <div>
             <h3 className="text-2xl md:text-3xl font-black text-slate-800 mb-1">{stats.bikeRentals}</h3>
@@ -339,24 +338,21 @@ const OwnerDashboard = () => {
       {/* KYC Status & Quick Actions Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* KYC Status Card */}
-        <div className={`col-span-1 p-6 rounded-2xl border flex flex-col justify-center items-center text-center relative overflow-hidden ${
-             user?.kycStatus === 'approved' ? 'bg-emerald-50 border-emerald-100' : 
-             user?.kycStatus === 'pending' ? 'bg-amber-50 border-amber-100' : 'bg-rose-50 border-rose-100'
-        }`}>
-          <div className={`p-4 rounded-full mb-3 ${
-             user?.kycStatus === 'approved' ? 'bg-emerald-100 text-emerald-600' : 
-             user?.kycStatus === 'pending' ? 'bg-amber-100 text-amber-600' : 'bg-rose-100 text-rose-600'
+        <div className={`col-span-1 p-6 rounded-2xl border flex flex-col justify-center items-center text-center relative overflow-hidden ${user?.kycStatus === 'approved' ? 'bg-emerald-50 border-emerald-100' :
+          user?.kycStatus === 'pending' ? 'bg-amber-50 border-amber-100' : 'bg-rose-50 border-rose-100'
           }`}>
-             <Shield size={32} />
+          <div className={`p-4 rounded-full mb-3 ${user?.kycStatus === 'approved' ? 'bg-emerald-100 text-emerald-600' :
+            user?.kycStatus === 'pending' ? 'bg-amber-100 text-amber-600' : 'bg-rose-100 text-rose-600'
+            }`}>
+            <Shield size={32} />
           </div>
           <h3 className="text-lg font-bold text-slate-800 mb-1">KYC Status</h3>
-          <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide mb-3 ${
-             user?.kycStatus === 'approved' ? 'bg-emerald-200 text-emerald-800' : 
-             user?.kycStatus === 'pending' ? 'bg-amber-200 text-amber-800' : 'bg-rose-200 text-rose-800'
-          }`}>
+          <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide mb-3 ${user?.kycStatus === 'approved' ? 'bg-emerald-200 text-emerald-800' :
+            user?.kycStatus === 'pending' ? 'bg-amber-200 text-amber-800' : 'bg-rose-200 text-rose-800'
+            }`}>
             {user?.kycStatus === 'approved' ? 'Verified Account' : (user?.kycStatus?.replace('_', ' ') || 'Not Submitted')}
           </span>
-          <button 
+          <button
             onClick={() => setActiveTab('settings')}
             className="text-sm font-semibold underline underline-offset-2 opacity-80 hover:opacity-100 transition-opacity"
           >
@@ -366,9 +362,9 @@ const OwnerDashboard = () => {
 
         {/* Quick Actions */}
         <div className="col-span-1 lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <button 
-             onClick={() => setActiveTab('add-listing')}
-             className="flex items-center gap-4 p-5 bg-white border border-slate-200 rounded-2xl hover:border-indigo-400 hover:shadow-md transition-all group text-left"
+          <button
+            onClick={() => setActiveTab('add-listing')}
+            className="flex items-center gap-4 p-5 bg-white border border-slate-200 rounded-2xl hover:border-indigo-400 hover:shadow-md transition-all group text-left"
           >
             <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors">
               <PlusCircle size={24} />
@@ -379,9 +375,9 @@ const OwnerDashboard = () => {
             </div>
           </button>
 
-          <button 
-             onClick={() => handleTabChange('bookings')}
-             className="flex items-center gap-4 p-5 bg-white border border-slate-200 rounded-2xl hover:border-blue-400 hover:shadow-md transition-all group text-left"
+          <button
+            onClick={() => handleTabChange('bookings')}
+            className="flex items-center gap-4 p-5 bg-white border border-slate-200 rounded-2xl hover:border-blue-400 hover:shadow-md transition-all group text-left"
           >
             <div className="p-3 bg-blue-50 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-colors">
               <CalendarDays size={24} />
@@ -391,10 +387,10 @@ const OwnerDashboard = () => {
               <p className="text-xs text-slate-500 mt-0.5">Manage incoming requests</p>
             </div>
           </button>
-          
-           <button 
-             onClick={() => handleTabChange('listings')}
-             className="flex items-center gap-4 p-5 bg-white border border-slate-200 rounded-2xl hover:border-purple-400 hover:shadow-md transition-all group text-left sm:col-span-2"
+
+          <button
+            onClick={() => handleTabChange('listings')}
+            className="flex items-center gap-4 p-5 bg-white border border-slate-200 rounded-2xl hover:border-purple-400 hover:shadow-md transition-all group text-left sm:col-span-2"
           >
             <div className="p-3 bg-purple-50 text-purple-600 rounded-xl group-hover:bg-purple-600 group-hover:text-white transition-colors">
               <List size={24} />
@@ -421,14 +417,15 @@ const OwnerDashboard = () => {
     <div className="owner-dashboard flex h-screen overflow-hidden bg-slate-50">
       {/* Dashboard Notifications - Super high z-index to be above sidebar */}
       <div className="fixed top-0 left-0 w-full z-[110000] pointer-events-none">
-        <DashboardNotifications 
-          notifications={notifications} 
-          onRemove={removeNotification} 
+        <DashboardNotifications
+          notifications={notifications}
+          onRemove={removeNotification}
         />
       </div>
 
       {/* Sidebar - Physically first in DOM for natural flex layout */}
-      <aside 
+      <aside
+        style={{ backgroundColor: '#0f172a', zIndex: 9999 }}
         className={`
           renthive-sidebar 
           fixed lg:sticky top-0 left-0 z-[100000] lg:z-30 
@@ -442,9 +439,9 @@ const OwnerDashboard = () => {
             <Menu size={24} />
           </button>
           <div className="sidebar-brand flex items-center gap-3">
-            <img 
-              src="/src/assets/rentHivelogo.png" 
-              alt="RentHive Logo" 
+            <img
+              src="/src/assets/rentHivelogo.png"
+              alt="RentHive Logo"
               className="w-8 h-8 object-contain"
             />
             <span className="brand-name text-xl font-bold tracking-tight text-white">RentHive</span>
@@ -456,26 +453,28 @@ const OwnerDashboard = () => {
         >
           <div className="user-avatar w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-lg ring-4 ring-slate-800/50 overflow-hidden shadow-inner">
             {(user?.profilePic || user?.profileImage || user?.photo) ? (
-              <img 
-                src={(user.profilePic || user.profileImage || user.photo).startsWith('http') 
-                  ? (user.profilePic || user.profileImage || user.photo) 
-                  : `${SERVER_BASE_URL}/uploads/profiles/${(user.profilePic || user.profileImage || user.photo).split('/').pop()}`} 
-                alt="User" 
-                className="w-full h-full object-cover" 
+              <img
+                src={(user.profilePic || user.profileImage || user.photo).startsWith('http')
+                  ? (user.profilePic || user.profileImage || user.photo)
+                  : `${SERVER_BASE_URL}/uploads/profiles/${(user.profilePic || user.profileImage || user.photo).split('/').pop()}`}
+                alt="User"
+                className="w-full h-full object-cover"
               />
             ) : (
               <User size={24} />
             )}
           </div>
           <div className="user-info overflow-hidden">
-            <p className="user-name font-bold truncate text-slate-900" style={{color:'#1e293b'}}>{user?.fullName || 'Owner'}</p>
-            <p className="user-role text-[10px] text-slate-400 uppercase tracking-widest font-bold">Property Owner</p>
+            <p className="user-name font-semibold truncate hover:text-clip text-slate-900">{user?.fullName || (user?.type || user?.role || 'User')}</p>
+            <p className="user-role text-xs text-slate-500 uppercase tracking-wider font-medium">
+              {user?.type === 'lessor' ? 'Lessor' : user?.type === 'vendor' ? 'Service Vendor' : 'Property Owner'}
+            </p>
           </div>
         </div>
 
         <nav className="sidebar-menu flex-1 py-6 overflow-y-auto custom-scrollbar px-3 space-y-1">
-          <button 
-            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'overview' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`} 
+          <button
+            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'overview' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`}
             onClick={() => handleTabChange('overview')}
             title="Overview"
           >
@@ -483,8 +482,8 @@ const OwnerDashboard = () => {
             <span className="font-medium">Overview</span>
           </button>
 
-          <button 
-            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'add-listing' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`} 
+          <button
+            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'add-listing' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`}
             onClick={() => handleTabChange('add-listing')}
             title="Add New Listing"
           >
@@ -492,8 +491,8 @@ const OwnerDashboard = () => {
             <span className="font-medium">Add Listing</span>
           </button>
 
-          <button 
-            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'listings' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`} 
+          <button
+            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'listings' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`}
             onClick={() => handleTabChange('listings')}
             title="All Listings"
           >
@@ -501,8 +500,8 @@ const OwnerDashboard = () => {
             <span className="font-medium">All Listings</span>
           </button>
 
-          <button 
-            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'bookings' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`} 
+          <button
+            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'bookings' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`}
             onClick={() => handleTabChange('bookings')}
             title="Incoming Bookings"
           >
@@ -515,8 +514,8 @@ const OwnerDashboard = () => {
             )}
           </button>
 
-          <button 
-            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'payments' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`} 
+          <button
+            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'payments' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`}
             onClick={() => handleTabChange('payments')}
             title="Payments & Finances"
           >
@@ -529,8 +528,8 @@ const OwnerDashboard = () => {
             )}
           </button>
 
-          <button 
-            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'messages' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`} 
+          <button
+            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'messages' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`}
             onClick={() => handleTabChange('messages')}
             title="Messages"
           >
@@ -543,8 +542,8 @@ const OwnerDashboard = () => {
             )}
           </button>
 
-          <button 
-            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'reports' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`} 
+          <button
+            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'reports' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`}
             onClick={() => handleTabChange('reports')}
             title="Reports"
           >
@@ -557,8 +556,8 @@ const OwnerDashboard = () => {
             )}
           </button>
 
-          <button 
-            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`} 
+          <button
+            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`}
             onClick={() => handleTabChange('settings')}
             title="Settings"
           >
@@ -578,9 +577,9 @@ const OwnerDashboard = () => {
       <main className="owner-main-content flex-1 flex flex-col h-screen overflow-hidden bg-white min-w-0">
         <div className="content-header bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm z-10">
           <div className="header-left flex items-center gap-4">
-             {/* Mobile/Tablet Menu Toggle */}
-             <button 
-              className="lg:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer active:scale-95"
+            {/* Mobile/Tablet Menu Toggle */}
+            <button
+              className="lg:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer relative z-[1000] active:scale-95"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
               <Menu size={24} />
@@ -612,16 +611,16 @@ const OwnerDashboard = () => {
           {activeTab === 'messages' && <Messages onRead={fetchUnreadMessages} />}
           {activeTab === 'reports' && <Report />}
           {activeTab === 'add-listing' && (
-            <UnifiedPostingForm 
-              showSuccess={showSuccess} 
-              showError={showError} 
-              editData={editData} 
-              editType={editType} 
-              onEditComplete={() => { 
-                setEditData(null); 
-                setEditType(null); 
-                setActiveTab('listings'); 
-              }} 
+            <UnifiedPostingForm
+              showSuccess={showSuccess}
+              showError={showError}
+              editData={editData}
+              editType={editType}
+              onEditComplete={() => {
+                setEditData(null);
+                setEditType(null);
+                setActiveTab('listings');
+              }}
             />
           )}
           {activeTab === 'settings' && <Settings />}
@@ -630,7 +629,7 @@ const OwnerDashboard = () => {
 
       {/* Mobile Overlay - High Z-index */}
       {mobileMenuOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/60 z-[99999] lg:hidden backdrop-blur-sm"
           onClick={() => setMobileMenuOpen(false)}
         />

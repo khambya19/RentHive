@@ -37,10 +37,10 @@ export const AuthProvider = ({ children }) => {
 
       let didLogout = false;
       try {
-        // Fetch fresh profile from backend
+        // Fetch fresh profile from backend (suppress console errors for 401)
         const response = await fetch(`${API_BASE_URL}/auth/me`, {
           headers: { 'Authorization': `Bearer ${token}` }
-        });
+        }).catch(() => ({ ok: false, status: 401 }));
         if (response.ok) {
           const data = await response.json();
           if (data.success && data.user) {
@@ -50,14 +50,14 @@ export const AuthProvider = ({ children }) => {
           }
         } else {
           // If token is invalid (401), log out, but only once
-          if (response.status === 401 && user !== null && !didLogout) {
+          if (response.status === 401 && !didLogout) {
             didLogout = true;
             logout();
           }
         }
       } catch (err) {
-        console.error("Auth check failed", err);
-        // For now, let's just keep the optimistic user state from localStorage.
+        // Silently fail - user will need to log in
+        logout();
       } finally {
         setLoading(false);
       }
@@ -82,13 +82,13 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  const value = {
+  const value = React.useMemo(() => ({
     user,
     login,
     logout,
     loading,
     isAuthenticated: !!user
-  };
+  }), [user, loading]);
 
   return (
     <AuthContext.Provider value={value}>

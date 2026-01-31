@@ -25,8 +25,15 @@ const PaymentModal = ({ bookingData, onClose, onPaymentComplete }) => {
   const { type, id, vendorId, title, bookingDetails } = bookingData;
   const { grandTotal, duration, startDate, endDate } = bookingDetails;
   
-  // Payment Handlers
-  const handlePayment = async () => {
+   // Helper to format date or show fallback
+   const formatDate = (date) => {
+      if (!date) return <span className="text-red-400 font-bold">N/A</span>;
+      const d = new Date(date);
+      return isNaN(d) ? <span className="text-red-400 font-bold">Invalid</span> : d.toLocaleDateString();
+   };
+
+   // Payment Handlers
+   const handlePayment = async () => {
      if (!paymentMethod) return;
      setProcessing(true);
      setPaymentStep('processing');
@@ -88,7 +95,7 @@ const PaymentModal = ({ bookingData, onClose, onPaymentComplete }) => {
                    <div>
                       <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Payable For</p>
                       <h3 className="text-lg font-black text-gray-900 leading-tight">{title || 'Rental Booking'}</h3>
-                      <p className="text-sm text-gray-600 mt-1">{duration} Days • {startDate} to {endDate}</p>
+                      <p className="text-sm text-gray-600 mt-1">{duration ? `${duration} Days` : '? Days'} • {formatDate(startDate)} to {formatDate(endDate)}</p>
                    </div>
                    <div className="text-right">
                       <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Total Amount</p>
@@ -157,7 +164,7 @@ const PaymentModal = ({ bookingData, onClose, onPaymentComplete }) => {
                <div className="w-full max-w-xs bg-gray-100 h-2 rounded-full overflow-hidden">
                   <div className="h-full bg-orange-500 animate-progress"></div>
                </div>
-               <style jsx>{`
+               <style>{`
                  @keyframes progress {
                    0% { width: 0% }
                    100% { width: 100% }

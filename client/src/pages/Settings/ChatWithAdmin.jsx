@@ -7,7 +7,7 @@ import { useSocket } from '../../context/SocketContext';
 
 const ChatWithAdmin = () => {
   const { user } = useAuth();
-  const { socket, isConnected } = useSocket();
+  const { socket } = useSocket();
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [adminId, setAdminId] = useState(null); // We need to find an admin to chat with
@@ -25,24 +25,17 @@ const ChatWithAdmin = () => {
              headers: { Authorization: `Bearer ${token}` }
         });
         
-        let targetAdmin = null;
-        if (convoRes.data && convoRes.data.success && Array.isArray(convoRes.data.conversations)) {
-            targetAdmin = convoRes.data.conversations.find(c => c.partner?.type === 'super_admin')?.partner;
-        }
+        let targetAdmin = convoRes.data.conversations.find(c => c.partner?.type === 'super_admin')?.partner;
         
         if (!targetAdmin) {
              // If no chat yet, fetch support agent info
-             try {
-                const agentRes = await axios.get(`${API_BASE_URL}/chat/support-agent`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                if (agentRes.data.success && agentRes.data.admin) {
-                    setAdminId(agentRes.data.admin.id);
-                } else {
-                    setAdminId(6); // Default to super admin ID 6
-                }
-             } catch (agentErr) {
-                 setAdminId(6); // Fallback
+             const agentRes = await axios.get(`${API_BASE_URL}/chat/support-agent`, {
+                 headers: { Authorization: `Bearer ${token}` }
+             });
+             if (agentRes.data.success && agentRes.data.admin) {
+                 setAdminId(agentRes.data.admin.id);
+             } else {
+                 setAdminId(1);
              }
         } else {
              setAdminId(targetAdmin.id);
@@ -50,9 +43,8 @@ const ChatWithAdmin = () => {
         
       } catch (err) {
         console.error("Error init chat", err);
-        setAdminId(6); // Last resort fallback
-      } finally {
-          setLoading(false);
+        // Fallback
+        setAdminId(1);
       }
     };
     
@@ -79,21 +71,26 @@ const ChatWithAdmin = () => {
 
       fetchMessages();
 
-      // Socket setup (guarded)
-      if (socket && isConnected) {
-          socket.emit('register', user.id);
+      // Socket listener for real-time messages
+      if (socket) {
           const handleReceiveMessage = (data) => {
-              if (data.senderId === adminId || data.receiverId === user.id) {
-                  setMessages((prev) => [...prev, data]);
+              // Only add if message belongs to this conversation
+              if (data.senderId === adminId || (data.senderId === user.id && data.receiverId === adminId)) {
+                  // Prevent duplicate messages (since we add optimistically)
+                  setMessages((prev) => {
+                      if (prev.find(m => m.id === data.id)) return prev;
+                      return [...prev, data];
+                  });
               }
           };
+
           socket.on('receive_message', handleReceiveMessage);
+          
           return () => {
               socket.off('receive_message', handleReceiveMessage);
           };
       }
-      return undefined;
-  }, [adminId, user, socket, isConnected]);
+  }, [adminId, user, socket]);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -105,12 +102,9 @@ const ChatWithAdmin = () => {
 
     const msgData = {
         receiverId: adminId,
-        message: newMessage,
+        content: newMessage,
         senderId: user.id
     };
-    
-    // Optimistic UI
-    // setMessages(prev => [...prev, msgData]); // Wait for server to confirm ID etc
     
     try {
         const token = localStorage.getItem('token');
@@ -119,9 +113,13 @@ const ChatWithAdmin = () => {
         });
         
         if (res.data.success) {
-            setMessages(prev => [...prev, res.data.message]);
+            // Message state will be updated via socket listener or we can add it here
+            // To ensure immediate feedback and handle single updates:
+            setMessages(prev => {
+                if (prev.find(m => m.id === res.data.message.id)) return prev;
+                return [...prev, res.data.message];
+            });
             setNewMessage('');
-            if (socket) socket.emit('send_message', res.data.message);
         }
     } catch (err) {
         console.error("Send failed", err);
@@ -147,7 +145,6 @@ const ChatWithAdmin = () => {
                 <div className="text-center text-slate-400 py-10 text-sm">No messages yet. Say hello! 👋</div>
             ) : (
                 messages.map((msg, idx) => {
-                    if (!user) return null;
                     const isMe = msg.senderId === user.id;
                     return (
                         <div key={idx} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>

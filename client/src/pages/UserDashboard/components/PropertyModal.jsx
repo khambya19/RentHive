@@ -36,8 +36,11 @@ import {
 import { SERVER_BASE_URL } from '../../../config/api';
 import noImage from '../../../assets/no-image.png';
 
-const PropertyModal = ({ property, onClose, isSaved = false, onToggleSave, onReport, onEnquire, onBook }) => {
+const PropertyModal = ({ property, onClose, isSaved = false, onToggleSave, onReport, onReview, onContactOwner, onBook }) => {
+  const [showLightbox, setShowLightbox] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [booking, setBooking] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
 
   // Booking State
@@ -49,12 +52,87 @@ const PropertyModal = ({ property, onClose, isSaved = false, onToggleSave, onRep
   const [tax, setTax] = useState(0);
   const [grandTotal, setGrandTotal] = useState(0);
 
+  // Contact Owner handler
+  const handleContactOwner = () => {
+    if (onContactOwner) onContactOwner(property);
+  };
+
+  // Book Now handler
+  const handleBookNow = async () => {
+    if (booking) return;
+    
+    setBooking(true);
+    try {
+      const token = localStorage.getItem('token');
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5050/api';
+      
+      const isProperty = property.type === 'property';
+      const endpoint = isProperty 
+        ? `${API_BASE_URL}/properties/book`
+        : `${API_BASE_URL}/bikes/book`;
+      
+      const bookingData = isProperty 
+        ? {
+            propertyId: property.id,
+            moveInDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 7 days from now
+            message: `I'm interested in booking this property.`
+          }
+        : {
+            bikeId: property.id,
+            vendorId: property.vendorId || property.vendor?.id,
+            startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            message: `I'm interested in booking this bike.`
+          };
+      
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(bookingData)
+      });
+
+      if (response.ok) {
+        alert('Booking request sent successfully! The owner will contact you soon.');
+        onClose();
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to send booking request. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error booking:', error);
+      alert('Failed to send booking request. Please try again.');
+    } finally {
+      setBooking(false);
+    }
+  };
+
   if (!property) return null;
 
-  // Type helper
   const isProperty = property.type === 'property' || property.propertyType !== undefined;
+  const baseUrl = (import.meta.env.VITE_API_URL || API_BASE_URL)?.replace('/api', '') || 'http://localhost:5050';
+  
+  // Fix image path logic - handle both formats
+  const getImageUrl = (img) => {
+    if (!img) return null;
+    // Check if path already includes /uploads prefix
+    if (img.startsWith('/uploads')) {
+      return `${baseUrl}${img}`;
+    }
+    const folder = isProperty ? 'properties' : 'bikes';
+    return `${baseUrl}/uploads/${folder}/${img}`;
+  };
+
   const images = property.images || [];
   const hasImages = images.length > 0;
+  const galleryImages = images;
+
+  const openLightbox = (index) => {
+    setSelectedImageIndex(index);
+    setIsFullScreen(true);
+  };
 
   const nextImage = (e) => {
     e?.stopPropagation();
@@ -161,12 +239,16 @@ const PropertyModal = ({ property, onClose, isSaved = false, onToggleSave, onRep
   };
 
   return (
-    <div className="fixed inset-0 z-1000 flex items-center justify-center p-0 md:p-4 overflow-hidden">
-      {/* Darkened Backdrop */}
-      <div 
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity duration-300"
-        onClick={onClose}
-      />
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-[9999] p-0 sm:p-0 m-0" onClick={onClose}>
+      {/* Search Header and Scrollable Content are inside the relative div below */}
+        
+        {/* Close Button */}
+        <button 
+          className="absolute top-4 right-4 z-[1001] text-gray-800 rounded-full p-2 transition-all shadow-sm" style={{ background: 'rgba(244,251,253,0.8)' }}
+          onClick={onClose}
+        >
+          <X size={24} />
+        </button>
 
       {/* Full Screen Image View */}
       {isFullScreen && (
@@ -195,7 +277,10 @@ const PropertyModal = ({ property, onClose, isSaved = false, onToggleSave, onRep
       )}
 
       {/* Main Modal - Centered Vertical Scroll */}
-      <div className="relative w-full max-w-5xl h-full md:h-[90vh] bg-white md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300 transform-gpu">
+      <div 
+        className="relative w-full max-w-5xl h-full md:h-[90vh] bg-white md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300 transform-gpu"
+        onClick={e => e.stopPropagation()}
+      >
         
         {/* Sticky Header with Title */}
         <div className="sticky top-0 z-50 bg-white border-b border-gray-100 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between shadow-sm shrink-0">

@@ -193,6 +193,11 @@ exports.sendMessage = async (req, res) => {
     const io = req.app.get('io');
     if (io) {
       io.to(`user_${receiverId}`).emit('new_message', messageWithDetails);
+      io.to(`user_${receiverId}`).emit('receive_message', messageWithDetails);
+      io.to(`user_${receiverId}`).emit('refresh_counts');
+      // Also emit to sender so other tabs update
+      io.to(`user_${senderId}`).emit('receive_message', messageWithDetails);
+      io.to(`user_${senderId}`).emit('refresh_counts');
     }
 
     res.status(201).json(messageWithDetails);
@@ -239,7 +244,7 @@ exports.getUnreadCount = async (req, res) => {
       }
     });
 
-    res.json({ unreadCount });
+    res.json({ count: unreadCount, unreadCount });
   } catch (error) {
     console.error('Error fetching unread count:', error);
     res.status(500).json({ error: 'Failed to fetch unread count' });

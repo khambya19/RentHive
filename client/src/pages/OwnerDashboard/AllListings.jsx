@@ -130,25 +130,26 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
+      // Always send all fields from editForm (no fallback to old values)
+      const payload = { ...editForm };
       const response = await fetch(`${API_BASE_URL}/properties/${editingItem.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(editForm)
+        body: JSON.stringify(payload)
       });
 
       if (response.ok) {
-        const updatedProperty = await response.json();
-        setProperties(properties.map(p => p.id === editingItem.id ? updatedProperty : p));
         setShowEditModal(false);
         showSuccess('Success', 'Property updated successfully');
+        // Always fetch latest data after update
+        await fetchProperties();
       } else {
         showError('Error', 'Failed to update property');
       }
     } catch (error) {
-      // console.error('Error updating property:', error);
       showError('Error', 'Failed to update property');
     }
   };
@@ -157,25 +158,27 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
+      // Always send all fields from editForm (no fallback to old values)
+      const payload = { ...editForm };
       const response = await fetch(`${API_BASE_URL}/bikes/vendor/${editingItem.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(editForm)
+        body: JSON.stringify(payload)
       });
 
       if (response.ok) {
-        const updatedBike = await response.json();
-        setBikes(bikes.map(b => b.id === editingItem.id ? updatedBike : b));
         setShowEditModal(false);
         showSuccess('Success', 'Automobile updated successfully');
+        // Always fetch latest data after update
+        await fetchBikes();
       } else {
-        showError('Error', 'Failed to update automobile');
+        const errorData = await response.json();
+        showError('Error', errorData.error || 'Failed to update automobile');
       }
     } catch (error) {
-      // console.error('Error updating automobile:', error);
       showError('Error', 'Failed to update automobile');
     }
   };
@@ -228,7 +231,7 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
             <Home size={48} className="opacity-50" />
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60" />
+        <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent opacity-60" />
         <div className="absolute bottom-4 left-4 right-4 text-white">
           <h3 className="text-lg font-bold leading-tight truncate drop-shadow-md">{property.title}</h3>
           <p className="text-xs font-medium text-white/90 drop-shadow-md truncate">{property.city}, {property.address}</p>
@@ -293,7 +296,7 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
       <div className="h-48 overflow-hidden bg-gray-100 relative">
         {bike.images && bike.images.length > 0 ? (
           <img 
-            src={`${SERVER_BASE_URL}/uploads/bikes/${bike.images[0]}`} 
+            src={bike.images[0].startsWith('/uploads') ? `${SERVER_BASE_URL}${bike.images[0]}` : `${SERVER_BASE_URL}/uploads/bikes/${bike.images[0]}`}
             alt={`${bike.brand} ${bike.model}`}
             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
             onError={(e) => {
@@ -306,7 +309,7 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
             <Bike size={48} className="opacity-50" />
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60" />
+        <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent opacity-60" />
         <div className="absolute bottom-4 left-4 right-4 text-white">
           <h3 className="text-lg font-bold leading-tight truncate drop-shadow-md">{bike.name || `${bike.brand} ${bike.model}`}</h3>
           <p className="text-xs font-medium text-white/90 drop-shadow-md truncate flex items-center gap-1">
@@ -381,8 +384,8 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
       {/* Compact Stats Header */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
         {/* Total Listings - Gradient Card */}
-        <div onClick={() => setFilterType('all')} className={`relative bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-600 rounded-xl p-5 overflow-hidden group cursor-pointer transform hover:scale-[1.02] transition-all duration-300 shadow-xl hover:shadow-2xl ${filterType === 'all' ? 'ring-4 ring-purple-300' : ''}`}>
-          <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+        <div onClick={() => setFilterType('all')} className={`relative bg-linear-to-br from-violet-600 via-purple-600 to-fuchsia-600 rounded-xl p-5 overflow-hidden group cursor-pointer transform hover:scale-[1.02] transition-all duration-300 shadow-xl hover:shadow-2xl ${filterType === 'all' ? 'ring-4 ring-purple-300' : ''}`}>
+          <div className="absolute inset-0 bg-linear-to-br from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
           <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
           
           <div className="relative z-10">
@@ -406,11 +409,11 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
 
         {/* Properties Card */}
         <div onClick={() => setFilterType('properties')} className={`relative bg-white rounded-xl p-5 border-2 overflow-hidden group cursor-pointer transition-all duration-300 shadow-md hover:shadow-xl ${filterType === 'properties' ? 'border-indigo-500 ring-4 ring-indigo-200' : 'border-slate-200 hover:border-indigo-300'}`}>
-          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-indigo-50 to-transparent rounded-full -mr-12 -mt-12 group-hover:scale-125 transition-transform duration-500"></div>
+          <div className="absolute top-0 right-0 w-24 h-24 bg-linear-to-br from-indigo-50 to-transparent rounded-full -mr-12 -mt-12 group-hover:scale-125 transition-transform duration-500"></div>
           
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-3">
-              <div className="p-2 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg shadow-lg shadow-indigo-200/50 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
+              <div className="p-2 bg-linear-to-br from-indigo-500 to-indigo-600 rounded-lg shadow-lg shadow-indigo-200/50 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
                 <Home className="w-5 h-5 text-white" />
               </div>
               <div className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Properties</div>
@@ -433,11 +436,11 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
 
         {/* Automobiles Card */}
         <div onClick={() => setFilterType('automobiles')} className={`relative bg-white rounded-xl p-5 border-2 overflow-hidden group cursor-pointer transition-all duration-300 shadow-md hover:shadow-xl ${filterType === 'automobiles' ? 'border-blue-500 ring-4 ring-blue-200' : 'border-slate-200 hover:border-blue-300'}`}>
-          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-blue-50 to-transparent rounded-full -mr-12 -mt-12 group-hover:scale-125 transition-transform duration-500"></div>
+          <div className="absolute top-0 right-0 w-24 h-24 bg-linear-to-br from-blue-50 to-transparent rounded-full -mr-12 -mt-12 group-hover:scale-125 transition-transform duration-500"></div>
           
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-3">
-              <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg shadow-lg shadow-blue-200/50 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
+              <div className="p-2 bg-linear-to-br from-blue-500 to-blue-600 rounded-lg shadow-lg shadow-blue-200/50 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
                 <Bike className="w-5 h-5 text-white" />
               </div>
               <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Automobiles</div>
@@ -462,7 +465,7 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
       {/* Header with Title and Refresh */}
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-          <span className="w-1 h-5 bg-gradient-to-b from-indigo-600 to-purple-600 rounded-full"></span>
+          <span className="w-1 h-5 bg-linear-to-b from-indigo-600 to-purple-600 rounded-full"></span>
           {filterType === 'all' ? 'All Listings' : filterType === 'properties' ? 'Properties' : 'Automobiles'}
         </h2>
         <button 

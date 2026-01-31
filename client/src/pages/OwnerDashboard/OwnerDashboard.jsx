@@ -12,6 +12,7 @@ import UnifiedPostingForm from "./UnifiedPostingForm";
 import AllListings from "./AllListings";
 import Settings from "../Settings/Settings";
 import Messages from "./Messages";
+import Report from "./Report";
 import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
 import { 
   LayoutDashboard, 
@@ -20,7 +21,8 @@ import {
   CalendarDays, 
   CreditCard, 
   MessageSquare, 
-  LogOut, 
+  LogOut,
+  AlertTriangle, 
   ChevronLeft, 
   ChevronRight, 
   RefreshCw, 
@@ -33,7 +35,7 @@ import {
   User,
   Construction,
   Shield,
-  X
+  Menu
 } from 'lucide-react';
 import "./OwnerDashboard.css";
 
@@ -47,25 +49,94 @@ const OwnerDashboard = () => {
   const { user, logout, login } = useAuth();
   const { socket } = useSocket();
   const { notifications, removeNotification, showSuccess, showError } = useNotifications();
-
-  // Force refresh user profile on mount to ensure KYC status is accurate
+  const [activeTab, setActiveTab] = useState(() => {
+    // Initialize from sessionStorage
+    const storedTab = sessionStorage.getItem('dashboardTab');
+    return storedTab || 'overview';
+  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [messagesCount, setMessagesCount] = useState(0);
+  const [counts, setCounts] = useState({
+    bookings: 0,
+    payments: 0,
+    messages: 0,
+    reports: 0
+  });
+  
+  // Listen for tab changes from sessionStorage (for notifications)
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) return;
-        
-        // Use the generic /api/auth/me or similar if available, or just use the user-specific endpoint
-        // Since we don't have a guaranteed 'me' endpoint in the snippets, we rely on the fact that Context SHOULD cover it,
-        // but let's try to update explicitly if we can.
-        // Actually, let's just use the Notifications hook to trigger a "refresh" if we have one, or trust the socket listener.
-        // But to be 100% sure:
-        // (Assuming we don't have a direct 'refreshUser' in AuthContext, we normally rely on Context)
-      } catch (e) {
-        console.error(e);
+    const checkTabChange = () => {
+      const storedTab = sessionStorage.getItem('dashboardTab');
+      if (storedTab) {
+        setActiveTab(storedTab);
+        sessionStorage.removeItem('dashboardTab');
       }
     };
-    // fetchProfile(); 
+    
+    // Check immediately
+    checkTabChange();
+    
+    // Also listen for storage events (in case notification is clicked from another tab/window)
+    window.addEventListener('storage', checkTabChange);
+    
+    // Check periodically (as a fallback since storage event doesn't fire in same tab)
+    const interval = setInterval(checkTabChange, 100);
+    
+    return () => {
+      window.removeEventListener('storage', checkTabChange);
+      clearInterval(interval);
+    };
+  }, []);
+  
+  const fetchUnreadMessages = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const res = await fetch(`${API_BASE_URL}/messages/unread-count`, { 
+         headers: { Authorization: `Bearer ${token}` } 
+      });
+      if (res.ok) {
+         const data = await res.json();
+         setMessagesCount(data.count || 0);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+
+  const fetchAllDashboardCounts = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const headers = { Authorization: `Bearer ${token}` };
+
+      const [bookingsRes, paymentsRes, msgRes, reportsRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/owners/all-bookings`, { headers }),
+        fetch(`${API_BASE_URL}/payments/owner`, { headers }),
+        fetch(`${API_BASE_URL}/messages/unread-count`, { headers }),
+        fetch(`${API_BASE_URL}/reports/vendor`, { headers })
+      ]);
+
+      const [bookings, payments, msg, reports] = await Promise.all([
+        bookingsRes.ok ? bookingsRes.json() : { propertyBookings: [], bikeBookings: [] },
+        paymentsRes.ok ? paymentsRes.json() : [],
+        msgRes.ok ? msgRes.json() : { count: 0 },
+        reportsRes.ok ? reportsRes.json() : []
+      ]);
+
+      setCounts({
+        bookings: (bookings.propertyBookings || []).filter(b => b.status === 'Pending').length + 
+                  (bookings.bikeBookings || []).filter(b => b.status === 'Pending').length,
+        payments: (payments || []).filter(p => p.status === 'Pending' || p.status === 'Overdue').length,
+        messages: msg.count || 0,
+        reports: (reports || []).filter(r => r.status === 'pending').length
+      });
+      setMessagesCount(msg.count || 0);
+    } catch (err) {
+      console.error('Error fetching owner counts:', err);
+    }
   }, []);
 
   // Real-time KYC listener
@@ -73,15 +144,16 @@ const OwnerDashboard = () => {
     if (!socket || !user) return;
 
     socket.on('kyc-status-updated', (data) => {
-      // console.log('⚡ Your KYC status was updated by admin:', data.status);
+      // ... same logic ...
       const token = localStorage.getItem('token');
-      // Update local storage and context
       const updatedUser = { 
         ...user, 
         kycStatus: data.status,
         isVerified: data.isVerified 
       };
-      login(updatedUser, token);
+      if (typeof login === 'function') {
+        login(updatedUser, token);
+      }
       
       if (data.status === 'approved') {
         showSuccess('KYC Approved', 'Congratulations! You can now post listings.');
@@ -90,13 +162,24 @@ const OwnerDashboard = () => {
       }
     });
 
+    socket.on('new_message', () => {
+       setMessagesCount(prev => prev + 1);
+       showSuccess('New Message', 'You have received a new message.');
+    });
+
+    socket.on('refresh_counts', () => {
+       fetchAllDashboardCounts();
+    });
+
+    fetchUnreadMessages();
+    fetchAllDashboardCounts();
+
     return () => {
       socket.off('kyc-status-updated');
+      socket.off('new_message');
+      socket.off('refresh_counts');
     };
-  }, [socket, user, login, showSuccess, showError]);
-  const [activeTab, setActiveTab] = useState('overview');
-  // Removed sidebarCollapsed state to keep sidebar always expanded on desktop
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false); 
+  }, [socket, user, login, showSuccess, showError, fetchUnreadMessages, fetchAllDashboardCounts]);
   const [stats, setStats] = useState({
     totalProperties: 0,
     availableProperties: 0,
@@ -335,10 +418,9 @@ const OwnerDashboard = () => {
     );
   }
   return (
-
     <div className="owner-dashboard flex h-screen overflow-hidden bg-slate-50">
-      {/* Dashboard Notifications - Absolute position to avoid layout shift */}
-      <div className="absolute top-0 left-0 w-full z-[10002] pointer-events-none">
+      {/* Dashboard Notifications - Super high z-index to be above sidebar */}
+      <div className="fixed top-0 left-0 w-full z-[110000] pointer-events-none">
         <DashboardNotifications 
           notifications={notifications} 
           onRemove={removeNotification} 
@@ -347,27 +429,32 @@ const OwnerDashboard = () => {
 
       {/* Sidebar - Physically first in DOM for natural flex layout */}
       <aside 
-        style={{ backgroundColor: '#0f172a', zIndex: 9999 }}
         className={`
-          fixed inset-y-0 left-0 
-          text-white transition-transform duration-300 ease-in-out 
-          ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
-          lg:relative lg:translate-x-0 lg:w-64
-          w-64 flex flex-col shadow-2xl border-r border-slate-700/50 flex-shrink-0 h-full
+          renthive-sidebar 
+          fixed lg:sticky top-0 left-0 z-[100000] lg:z-30 
+          transition-transform duration-300 ease-in-out bg-[#0f172a]
+          ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          w-72 flex flex-col shadow-2xl border-r border-slate-800 flex-shrink-0 h-screen
         `}
       >
-        <div className="sidebar-header p-6 flex items-center justify-between border-b border-white/10">
+        <div className="sidebar-header p-6 flex items-center gap-4 border-b border-slate-800">
+          <button className="lg:hidden text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-colors cursor-pointer" onClick={() => setMobileMenuOpen(false)}>
+            <Menu size={24} />
+          </button>
           <div className="sidebar-brand flex items-center gap-3">
-            <div className="brand-icon-wrapper bg-indigo-500/20 p-2 rounded-lg backdrop-blur-sm border border-indigo-500/30">
-              <Hexagon className="brand-icon text-indigo-400" size={24} />
-            </div>
+            <img 
+              src="/src/assets/rentHivelogo.png" 
+              alt="RentHive Logo" 
+              className="w-8 h-8 object-contain"
+            />
             <span className="brand-name text-xl font-bold tracking-tight text-white">RentHive</span>
           </div>
-          {/* Close button removed */}
         </div>
 
-        <div className="user-profile p-6 border-b border-slate-100 flex items-center gap-4 bg-white">
-          <div className="user-avatar w-12 h-12 bg-indigo-500 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-lg ring-4 ring-slate-100 overflow-hidden">
+        <div
+          className="user-profile p-6 border-b border-slate-800 flex items-center gap-4 bg-indigo-100 rounded-2xl mx-4 mt-4 shadow-lg transition-all"
+        >
+          <div className="user-avatar w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-lg ring-4 ring-slate-800/50 overflow-hidden shadow-inner">
             {(user?.profilePic || user?.profileImage || user?.photo) ? (
               <img 
                 src={(user.profilePic || user.profileImage || user.photo).startsWith('http') 
@@ -381,8 +468,8 @@ const OwnerDashboard = () => {
             )}
           </div>
           <div className="user-info overflow-hidden">
-            <p className="user-name font-semibold truncate hover:text-clip text-slate-900">{user?.fullName || 'Owner'}</p>
-            <p className="user-role text-xs text-slate-500 uppercase tracking-wider font-medium">Property Owner</p>
+            <p className="user-name font-bold truncate text-slate-900" style={{color:'#1e293b'}}>{user?.fullName || 'Owner'}</p>
+            <p className="user-role text-[10px] text-slate-400 uppercase tracking-widest font-bold">Property Owner</p>
           </div>
         </div>
 
@@ -420,7 +507,12 @@ const OwnerDashboard = () => {
             title="Incoming Bookings"
           >
             <CalendarDays size={20} className={activeTab === 'bookings' ? 'text-white' : 'text-slate-400 group-hover:text-white transition-colors'} />
-            <span className="font-medium">Bookings</span>
+            <span className="font-medium flex-1">Bookings</span>
+            {counts.bookings > 0 && (
+              <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                {counts.bookings}
+              </span>
+            )}
           </button>
 
           <button 
@@ -429,7 +521,12 @@ const OwnerDashboard = () => {
             title="Payments & Finances"
           >
             <CreditCard size={20} className={activeTab === 'payments' ? 'text-white' : 'text-slate-400 group-hover:text-white transition-colors'} />
-            <span className="font-medium">Finances</span>
+            <span className="font-medium flex-1">Finances</span>
+            {counts.payments > 0 && (
+              <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                {counts.payments}
+              </span>
+            )}
           </button>
 
           <button 
@@ -438,7 +535,26 @@ const OwnerDashboard = () => {
             title="Messages"
           >
             <MessageSquare size={20} className={activeTab === 'messages' ? 'text-white' : 'text-slate-400 group-hover:text-white transition-colors'} />
-            <span className="font-medium">Messages</span>
+            <span className="font-medium flex-1">Messages</span>
+            {messagesCount > 0 && (
+              <span className="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm animate-bounce">
+                {messagesCount}
+              </span>
+            )}
+          </button>
+
+          <button 
+            className={`menu-item flex items-center gap-3 px-4 py-3 w-full text-left transition-all rounded-xl group ${activeTab === 'reports' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`} 
+            onClick={() => handleTabChange('reports')}
+            title="Reports"
+          >
+            <AlertTriangle size={20} className={activeTab === 'reports' ? 'text-white' : 'text-slate-400 group-hover:text-white transition-colors'} />
+            <span className="font-medium flex-1">Reports</span>
+            {counts.reports > 0 && (
+              <span className="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                {counts.reports}
+              </span>
+            )}
           </button>
 
           <button 
@@ -451,25 +567,23 @@ const OwnerDashboard = () => {
           </button>
         </nav>
 
-        <div className="sidebar-footer p-6 border-t border-white/10 bg-white/5">
-          <button className="logout-button flex items-center gap-3 w-full text-left text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 p-3 rounded-xl transition-all group" onClick={() => { logout(); navigate('/login'); }}>
+        <div className="sidebar-footer p-6 border-t border-slate-800 bg-slate-900/40">
+          <button className="logout-button flex items-center gap-3 w-full text-left text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 p-3 rounded-xl transition-all group" onClick={() => setShowLogoutModal(true)}>
             <LogOut size={20} className="group-hover:translate-x-1 transition-transform" />
             <span className="font-medium">Logout</span>
           </button>
         </div>
       </aside>
 
-      {/* Main Content Area */}
-      <main className="owner-main-content flex-1 flex flex-col h-screen overflow-hidden relative min-w-0 z-0" style={{ width: '100%', maxWidth: '100%' }}>
-        {/* Header: Relative, z-30 */}
-        <div className="content-header bg-white/80 backdrop-blur-md border-b border-gray-200/60 px-6 py-4 flex justify-between items-center shadow-sm relative z-30">
+      <main className="owner-main-content flex-1 flex flex-col h-screen overflow-hidden bg-white min-w-0">
+        <div className="content-header bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm z-10">
           <div className="header-left flex items-center gap-4">
              {/* Mobile/Tablet Menu Toggle */}
              <button 
-              className="lg:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer relative z-[1000] active:scale-95"
+              className="lg:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer active:scale-95"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
-              <List size={24} color={mobileMenuOpen ? 'white' : '#4b5563'} />
+              <Menu size={24} />
             </button>
 
             <div className="relative z-0">
@@ -479,6 +593,7 @@ const OwnerDashboard = () => {
                 {activeTab === 'bookings' && 'Bookings'}
                 {activeTab === 'payments' && 'Finance'}
                 {activeTab === 'messages' && 'Messages'}
+                {activeTab === 'reports' && 'Reports'}
                 {activeTab === 'add-listing' && 'Add Listing'}
                 {activeTab === 'settings' && 'Settings'}
               </h1>
@@ -494,8 +609,21 @@ const OwnerDashboard = () => {
           {activeTab === 'listings' && <AllListings showSuccess={showSuccess} showError={showError} onEdit={handleEditListing} />}
           {activeTab === 'bookings' && <OwnerBookings showSuccess={showSuccess} showError={showError} />}
           {activeTab === 'payments' && <PaymentManagement />}
-          {activeTab === 'messages' && <Messages />}
-          {activeTab === 'add-listing' && <UnifiedPostingForm showSuccess={showSuccess} showError={showError} editData={editData} editType={editType} onEditComplete={() => { setEditData(null); setEditType(null); setActiveTab('listings'); }} />}
+          {activeTab === 'messages' && <Messages onRead={fetchUnreadMessages} />}
+          {activeTab === 'reports' && <Report />}
+          {activeTab === 'add-listing' && (
+            <UnifiedPostingForm 
+              showSuccess={showSuccess} 
+              showError={showError} 
+              editData={editData} 
+              editType={editType} 
+              onEditComplete={() => { 
+                setEditData(null); 
+                setEditType(null); 
+                setActiveTab('listings'); 
+              }} 
+            />
+          )}
           {activeTab === 'settings' && <Settings />}
         </div>
       </main>
@@ -503,9 +631,38 @@ const OwnerDashboard = () => {
       {/* Mobile Overlay - High Z-index */}
       {mobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-black/60 z-[998] lg:hidden backdrop-blur-sm"
+          className="fixed inset-0 bg-black/60 z-[99999] lg:hidden backdrop-blur-sm"
           onClick={() => setMobileMenuOpen(false)}
         />
+      )}
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center">
+                <LogOut size={24} className="text-rose-600" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900">Confirm Logout</h3>
+            </div>
+            <p className="text-slate-600 mb-6">Are you sure you want to log out? You'll need to sign in again to access your dashboard.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLogoutModal(false)}
+                className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { logout(); window.location.href = '/login'; }}
+                className="flex-1 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl transition-colors"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

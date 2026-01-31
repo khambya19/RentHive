@@ -97,12 +97,8 @@ const BookingConfirmationModal = ({ listing, bookingDetails, onConfirm, onCancel
                 <span className="font-bold text-gray-900">Rs {Number(listing.securityDeposit || 0).toLocaleString()}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Service Fee (5%)</span>
-                <span className="font-bold text-gray-900">Rs {Math.round(totalCost * 0.05).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-sm">
                 <span className="text-gray-600">VAT (13%)</span>
-                <span className="font-bold text-gray-900">Rs {Math.round((totalCost + totalCost * 0.05) * 0.13).toLocaleString()}</span>
+                <span className="font-bold text-gray-900">Rs {Math.round(totalCost * 0.13).toLocaleString()}</span>
               </div>
               <div className="h-px bg-indigo-300 my-2"></div>
               <div className="flex justify-between items-center">

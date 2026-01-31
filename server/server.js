@@ -9,8 +9,8 @@ const { Server } = require('socket.io');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const sequelize = require('./config/db');
-// Import models for associations and usage
 const User = require('./models/User');
+// ... other models ...
 const Property = require('./models/Property');
 const Booking = require('./models/Booking');
 const PropertyView = require('./models/PropertyView');
@@ -21,6 +21,9 @@ const Payment = require('./models/Payment');
 const Message = require('./models/Message');
 const Report = require('./models/Report');
 const BookingApplication = require('./models/BookingApplication');
+
+// Routes
+const adminRoutes = require('./routes/adminRoutes');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const propertyRoutes = require('./routes/propertyRoutes');
@@ -30,195 +33,167 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const publicRoutes = require('./routes/publicRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const reviewRoutes = require('./routes/reviewRoutes');
 const bookingRoutes = require('./routes/bookingRoutes');
 
-
-
-// Create Express app and HTTP server
 const app = express();
-// Enable CORS for all origins (adjust as needed for production)
+const port = process.env.PORT || 5050; // Read port once
+
+// Express Middleware
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 }));
-// Parse JSON bodies
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Serve static uploads (images)
+// Serve static uploads
 app.use('/uploads/properties', express.static(path.join(__dirname, 'uploads/properties')));
 app.use('/uploads/bikes', express.static(path.join(__dirname, 'uploads/bikes')));
 app.use('/uploads/profiles', express.static(path.join(__dirname, 'uploads/profiles')));
 
-// Mount API routes - Public routes first (no auth required)
-app.use('/api/public', publicRoutes);
+// Socket.IO Setup
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+  allowEIO3: true 
+});
 
-// Protected routes
+app.set('io', io);
+
+// Mount API routes
+app.use('/api/public', publicRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/properties', propertyRoutes);
 app.use('/api/bikes', bikeRoutes);
 app.use('/api/owners', ownerRoutes);
-app.use('/api/bookings', bookingRoutes);
+app.use('/api/payments', require('./routes/paymentRoutes'));
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/messages', messageRoutes);
-app.use('/api/chat', require('./routes/chatRoutes'));
 app.use('/api/reports', reportRoutes);
-const adminRoutes = require('./routes/adminRoutes');
-app.use('/api/admin', adminRoutes);
 
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST'],
-  },
-});
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/bookings', bookingRoutes);
+app.use('/api/chat', require('./routes/chatRoutes'));
 
-// Make io accessible in routes/controllers
-app.set('io', io);
-
+// Socket.IO Logic
 const connectedUsers = new Map();
 
 io.on('connection', (socket) => {
   console.log('✅ Client connected:', socket.id);
 
-  socket.on('register', (userId) => {
-    if (!userId) {
-      console.warn('⚠️ Register attempt without userId from socket:', socket.id);
-      return;
-    }
+  socket.on('register', (userData) => {
+    const userId = typeof userData === 'object' ? userData.userId : userData;
+    const role = typeof userData === 'object' ? userData.role : null;
+
+    if (!userId) return;
 
     const userIdStr = userId.toString();
-    const existingSocketId = connectedUsers.get(userIdStr);
-    if (existingSocketId && existingSocketId !== socket.id) {
-      console.log(`ℹ️ User ${userId} was already registered on ${existingSocketId} — updating to ${socket.id}`);
-    }
     socket.userId = userIdStr;
     socket.join(`user_${userIdStr}`);
+
+    if (role === 'super_admin') {
+      socket.join('admins');
+    }
+
     connectedUsers.set(userIdStr, socket.id);
     console.log(`👤 User ${userId} registered to socket ${socket.id}`);
-    console.log(`📊 Total connected users: ${connectedUsers.size}`);
-  });
-
-  socket.on('join_chat', (chatId) => {
-    socket.join(chatId);
-    console.log(`📡 Socket ${socket.id} joined room: ${chatId}`);
-  });
-
-  socket.on('send_message', (data) => {
-    if (data.receiverId) {
-      console.log(`✉️ Relaying message from ${data.senderId} to user_${data.receiverId}`);
-      io.to(`user_${data.receiverId}`).emit('receive_message', data);
-    }
   });
 
   socket.on('disconnect', () => {
     if (socket.userId) {
       connectedUsers.delete(socket.userId);
-      console.log(`👋 User ${socket.userId} disconnected`);
     }
     console.log('❌ Client disconnected:', socket.id);
-    console.log(`📊 Total connected users: ${connectedUsers.size}`);
   });
 });
 
-// Start server & DB
-(async () => {
+// Database and Server Start
+const startServer = async () => {
   try {
+    // Auth and sync
     await sequelize.authenticate();
     console.log('✅ Database connected');
 
-    // Model associations
+    // Model associations (kept from original)
     User.hasMany(Property, { foreignKey: 'vendorId', as: 'properties' });
     Property.belongsTo(User, { foreignKey: 'vendorId', as: 'vendor' });
-
     User.hasMany(Booking, { foreignKey: 'tenantId', as: 'tenantBookings' });
     User.hasMany(Booking, { foreignKey: 'vendorId', as: 'vendorBookings' });
     Property.hasMany(Booking, { foreignKey: 'propertyId', as: 'bookings' });
     Booking.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
     Booking.belongsTo(User, { foreignKey: 'tenantId', as: 'tenant' });
     Booking.belongsTo(User, { foreignKey: 'vendorId', as: 'vendor' });
-
     Property.hasMany(PropertyView, { foreignKey: 'propertyId', as: 'views' });
     PropertyView.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
-
     Property.hasMany(Inquiry, { foreignKey: 'propertyId', as: 'inquiries' });
     Inquiry.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
     Inquiry.belongsTo(User, { foreignKey: 'userId', as: 'user' });
-
-    // Bike associations
     User.hasMany(Bike, { foreignKey: 'vendorId', as: 'bikes' });
     Bike.belongsTo(User, { foreignKey: 'vendorId', as: 'vendor' });
-
     User.hasMany(BikeBooking, { foreignKey: 'lessorId', as: 'lessorBikeBookings' });
     User.hasMany(BikeBooking, { foreignKey: 'vendorId', as: 'vendorBikeBookings' });
     Bike.hasMany(BikeBooking, { foreignKey: 'bikeId', as: 'bookings' });
     BikeBooking.belongsTo(Bike, { foreignKey: 'bikeId', as: 'bike' });
     BikeBooking.belongsTo(User, { foreignKey: 'lessorId', as: 'lessor' });
     BikeBooking.belongsTo(User, { foreignKey: 'vendorId', as: 'vendor' });
-
-    // Payments
     Payment.belongsTo(Booking, { foreignKey: 'bookingId' });
+    Payment.belongsTo(BikeBooking, { foreignKey: 'bikeBookingId', as: 'bikeBooking' });
     Payment.belongsTo(User, { foreignKey: 'tenantId', as: 'tenant' });
     Payment.belongsTo(User, { foreignKey: 'ownerId', as: 'owner' });
+    User.hasMany(BookingApplication, { foreignKey: 'userId', as: 'applications' });
+    BookingApplication.belongsTo(User, { foreignKey: 'userId', as: 'applicant' });
     Booking.hasMany(Payment, { foreignKey: 'bookingId' });
-
-    // Messages
+    BikeBooking.hasMany(Payment, { foreignKey: 'bikeBookingId' });
     Message.belongsTo(User, { foreignKey: 'senderId', as: 'sender' });
     Message.belongsTo(User, { foreignKey: 'receiverId', as: 'receiver' });
     Message.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
     Message.belongsTo(Bike, { foreignKey: 'bikeId', as: 'bike' });
     User.hasMany(Message, { foreignKey: 'senderId', as: 'sentMessages' });
     User.hasMany(Message, { foreignKey: 'receiverId', as: 'receivedMessages' });
-
-    // Reports
     Report.belongsTo(User, { foreignKey: 'reporterId', as: 'reporter' });
     User.hasMany(Report, { foreignKey: 'reporterId', as: 'reports' });
 
-    // Sync DB (safe mode - no force/alter unless you really need it)
-    await sequelize.sync({ alter: true }); // ← Updated to alter tables for new schema changes
+    await sequelize.sync({ alter: true });
     console.log('✅ Database synced');
 
-    // Payment scheduler
-    const paymentScheduler = require('./services/paymentScheduler');
+    // Scheduler
+    require('./services/paymentScheduler');
     const schedule = require('node-schedule');
-
-    // Daily at midnight
     schedule.scheduleJob('0 0 * * *', async () => {
-      console.log('🕒 Running daily payment scheduler...');
+      const paymentScheduler = require('./services/paymentScheduler');
       await paymentScheduler.createMonthlyPayments();
       await paymentScheduler.checkOverduePayments();
     });
 
-    // Reminders at 8 AM & 4 PM
-    schedule.scheduleJob('0 8,16 * * *', async () => {
-      console.log('🕒 Running payment reminder scheduler...');
-      await paymentScheduler.sendUpcomingPaymentReminders();
-    });
-
-    console.log('✅ Payment scheduler initialized');
-
-    const port = process.env.PORT || 5001;
     server.listen(port, () => {
-      console.log(`Server running on port ${port}`);
-      console.log('✅ Server is ready');
+      console.log(`🚀 Server running on http://localhost:${port}`);
+      console.log('✅ Socket.IO initialized and listening');
     });
 
   } catch (err) {
     console.error('❌ Failed to start server:', err);
     process.exit(1);
   }
-})();
+};
 
+startServer();
 
-
-
-
-// Global Error Handlers
+// Global Handlers
 process.on('unhandledRejection', (reason) => console.error('❌ Unhandled Rejection:', reason));
-process.on('uncaughtException', (error) => console.error('❌ Uncaught Exception:', error));
-process.on('exit', (code) => {
-  console.log(`Process exiting with code: ${code}`);
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  if (error.code === 'EADDRINUSE') {
+    process.exit(1);
+  }
 });
+
+module.exports = { app, server, io };

@@ -59,8 +59,12 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError, isEdit
         ...formData
       };
 
-      const url = isEditMode && editData ? `${API_BASE_URL}/properties/${editData.id}` : `${API_BASE_URL}/properties`;
-      const method = isEditMode && editData ? 'PUT' : 'POST';
+      // Use local state if prop is not set
+      const actualEditMode = isEditMode || !!editingProperty;
+      const actualEditData = editData || editingProperty;
+
+      const url = actualEditMode && actualEditData ? `${API_BASE_URL}/properties/${actualEditData.id}` : `${API_BASE_URL}/properties`;
+      const method = actualEditMode && actualEditData ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
         method: method,
@@ -71,10 +75,10 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError, isEdit
         body: JSON.stringify(propertyData),
       });
 
-      if (response.ok) {
+        if (response.ok) {
         if (!inlineMode) {
            const newProperty = await response.json();
-           if (isEditMode) {
+           if (actualEditMode) {
              setProperties(properties.map(p => p.id === newProperty.id ? newProperty : p));
            } else {
              setProperties([...properties, newProperty]); 
@@ -82,8 +86,8 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError, isEdit
         }
         setShowPropertyModal(false);
         resetForm();
-        if (showSuccess) showSuccess('Success', `Property ${isEditMode ? 'updated' : 'added'} successfully!`);
-        else alert(`Property ${isEditMode ? 'updated' : 'added'} successfully!`);
+        if (showSuccess) showSuccess('Success', `Property ${actualEditMode ? 'updated' : 'added'} successfully!`);
+        else alert(`Property ${actualEditMode ? 'updated' : 'added'} successfully!`);
 
         if (onEditComplete) onEditComplete();
       } else {
@@ -177,9 +181,6 @@ const PropertyManagement = ({ inlineMode = false, showSuccess, showError, isEdit
                 </span>
                 <span className="flex items-center gap-1.5 text-gray-600 text-sm font-medium">
                   <Bath size={18} className="text-gray-400" /> {property.bathrooms} <span className="hidden sm:inline">Bath</span>
-                </span>
-                <span className="flex items-center gap-1.5 text-gray-600 text-sm font-medium">
-                  <Ruler size={18} className="text-gray-400" /> {property.area} <span className="hidden sm:inline">sq.ft</span>
                 </span>
               </div>
               

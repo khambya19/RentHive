@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import axios from 'axios';
+import ReportModal from './ReportModal';
 import { useAuth } from '../../../context/AuthContext';
 import API_BASE_URL, { SERVER_BASE_URL } from '../../../config/api';
 import { 
@@ -20,6 +22,9 @@ import {
 import noImage from '../../../assets/no-image.png';
 
 const Browse = React.memo(({ onViewProperty, properties, bikes, loading, onRefresh, savedListings, onSave, onUnsave }) => {
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [selectedItemToReport, setSelectedItemToReport] = useState(null);
+  const [notification, setNotification] = useState(null);
   const { logout } = useAuth();
   const [filterType, setFilterType] = useState('all'); // 'all', 'properties', 'automobiles'
   const [animatingId, setAnimatingId] = useState(null); // Handle saving/unsaving logic
@@ -41,6 +46,16 @@ const Browse = React.memo(({ onViewProperty, properties, bikes, loading, onRefre
   // Props for save/unsave
   // Use props directly
   // ...existing code...
+
+  const handleReport = (item) => {
+    setSelectedItemToReport(item);
+    setReportModalOpen(true);
+  };
+
+  const handleReportSuccess = (message) => {
+    setNotification({ type: 'success', message });
+    setTimeout(() => setNotification(null), 5000);
+  };
 
   const handleRefresh = () => {
     if (onRefresh) onRefresh();
@@ -71,6 +86,14 @@ const Browse = React.memo(({ onViewProperty, properties, bikes, loading, onRefre
 
   return (
     <div className="browse-container w-full max-w-7xl mx-auto animate-in fade-in duration-700">
+      {/* Success Notification */}
+      {notification && (
+        <div className={`fixed top-4 right-4 z-50 px-6 py-4 rounded-xl shadow-lg backdrop-blur-md ${
+          notification.type === 'success' ? 'bg-green-500/90 text-white' : 'bg-red-500/90 text-white'
+        }`}>
+          <p className="font-semibold">{notification.message}</p>
+        </div>
+      )}
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
         <div className="space-y-2">
@@ -258,8 +281,8 @@ const Browse = React.memo(({ onViewProperty, properties, bikes, loading, onRefre
                         <span className="text-[10px] font-black text-slate-800 uppercase">{property.bathrooms} Baths</span>
                       </div>
                       <div className="flex flex-col items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 group-hover:bg-white transition-colors">
-                        <Ruler size={20} className="text-violet-500" />
-                        <span className="text-[10px] font-black text-slate-800 uppercase">{property.area} sqft</span>
+                        <Home size={20} className="text-violet-500" />
+                        <span className="text-[10px] font-black text-slate-800 uppercase truncate max-w-full">{property.propertyType}</span>
                       </div>
                     </div>
                   </div>
@@ -365,25 +388,13 @@ const Browse = React.memo(({ onViewProperty, properties, bikes, loading, onRefre
         )}
       </div>
 
-      {/* Empty States */}
-      {(filteredData.properties.length === 0 && filteredData.bikes.length === 0) && (
-        <div className="flex flex-col items-center justify-center py-32 text-center animate-in zoom-in duration-500">
-          <div className="w-32 h-32 bg-slate-50 rounded-full flex items-center justify-center mb-8 border border-slate-100 shadow-inner">
-            <ClipboardList size={56} className="text-slate-200" />
-          </div>
-          <h3 className="text-3xl font-black text-slate-800 mb-3 tracking-tighter">Deserted Hive!</h3>
-          <p className="text-slate-500 font-medium max-w-xs mx-auto text-lg leading-relaxed">
-            We couldn't find any active listings in this category. 
-            <br/>Try syncing data or checking back later!
-          </p>
-          <button 
-             onClick={handleRefresh}
-             className="mt-8 px-8 py-3 bg-slate-900 text-white font-black rounded-2xl hover:bg-indigo-600 transition-all shadow-xl active:scale-95"
-          >
-             SYNCHRONIZE NOW
-          </button>
-        </div>
-      )}
+      {/* Report Modal */}
+      <ReportModal
+        isOpen={reportModalOpen}
+        onClose={() => setReportModalOpen(false)}
+        item={selectedItemToReport}
+        onReportSuccess={handleReportSuccess}
+      />
     </div>
   );
 });

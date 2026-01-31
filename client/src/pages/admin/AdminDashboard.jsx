@@ -7,6 +7,7 @@ import AdminNotifications from './AdminNotifications';
 import PropertiesTable from './PropertiesTable';
 import AutomobilesTable from './AutomobilesTable';
 import ReportsTable from './ReportsTable';
+import PaymentsTable from './PaymentsTable';
 import './AdminDashboard.css';
 import API_BASE_URL from '../../config/api';
 import axios from 'axios';
@@ -43,7 +44,8 @@ const AdminDashboard = () => {
   const activeTab = searchParams.get('tab') || 'overview';
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalProperties: 0,
@@ -53,6 +55,7 @@ const AdminDashboard = () => {
 
   const setActiveTab = (tab) => {
     setSearchParams({ tab });
+    setMobileMenuOpen(false); // Close mobile menu on tab change
   };
 
   useEffect(() => {
@@ -62,6 +65,8 @@ const AdminDashboard = () => {
   const fetchAdminStats = async () => {
     try {
       const token = localStorage.getItem('token');
+      if (!token) return; // Skip if no token
+      
       const response = await axios.get(`${API_BASE_URL}/admin/stats`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -70,38 +75,60 @@ const AdminDashboard = () => {
         setStats(response.data.stats);
       }
     } catch (error) {
-      console.error('Error fetching admin stats:', error);
+      // Silently handle 401 errors (not authenticated)
+      if (error.response?.status !== 401) {
+        console.error('Error fetching admin stats:', error);
+      }
     }
   };
 
   const handleLogout = () => {
+    setShowLogoutModal(true);
+  };
+
+  const confirmLogout = () => {
     logout();
     window.location.href = '/login';
   };
 
   return (
     <div className="dashboard-container">
+      {/* Mobile Menu Overlay */}
+      {mobileMenuOpen && (
+        <div 
+          className="mobile-overlay"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className={`dashboard-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
+      <aside className={`dashboard-sidebar ${sidebarCollapsed ? 'collapsed' : ''} ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="sidebar-header">
           <div className="logo">
             <ShieldCheck size={28} />
-            {!sidebarCollapsed && <span>Admin Panel</span>}
+            {(!sidebarCollapsed || mobileMenuOpen) && <span>Admin Panel</span>}
           </div>
           <button 
-            className="collapse-btn" 
+            className="collapse-btn desktop-only" 
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           >
             {sidebarCollapsed ? <Menu size={20} /> : <X size={20} />}
           </button>
+          <button 
+            className="collapse-btn mobile-only" 
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <X size={20} />
+          </button>
         </div>
 
+        <div className="sidebar-nav">
           <button 
             className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`}
             onClick={() => setActiveTab('overview')}
           >
             <LayoutDashboard size={20} />
-            {!sidebarCollapsed && <span>Overview</span>}
+            {(!sidebarCollapsed || mobileMenuOpen) && <span>Overview</span>}
           </button>
 
           <button 
@@ -109,7 +136,7 @@ const AdminDashboard = () => {
             onClick={() => setActiveTab('owners')}
           >
             <Briefcase size={20} />
-            {!sidebarCollapsed && <span>Owner</span>}
+            {(!sidebarCollapsed || mobileMenuOpen) && <span>Owner</span>}
           </button>
 
           <button 
@@ -117,7 +144,7 @@ const AdminDashboard = () => {
             onClick={() => setActiveTab('users')}
           >
             <Users size={20} />
-            {!sidebarCollapsed && <span>User</span>}
+            {(!sidebarCollapsed || mobileMenuOpen) && <span>User</span>}
           </button>
 
           <button 
@@ -125,7 +152,7 @@ const AdminDashboard = () => {
             onClick={() => setActiveTab('properties')}
           >
             <Home size={20} />
-            {!sidebarCollapsed && <span>Properties</span>}
+            {(!sidebarCollapsed || mobileMenuOpen) && <span>Properties</span>}
           </button>
 
           <button 
@@ -133,7 +160,7 @@ const AdminDashboard = () => {
             onClick={() => setActiveTab('automobiles')}
           >
             <Bike size={20} />
-            {!sidebarCollapsed && <span>Automobiles</span>}
+            {(!sidebarCollapsed || mobileMenuOpen) && <span>Automobiles</span>}
           </button>
 
           <button 
@@ -141,7 +168,15 @@ const AdminDashboard = () => {
             onClick={() => setActiveTab('reports')}
           >
             <AlertTriangle size={20} />
-            {!sidebarCollapsed && <span>Report</span>}
+            {(!sidebarCollapsed || mobileMenuOpen) && <span>Report</span>}
+          </button>
+
+          <button 
+            className={`nav-item ${activeTab === 'payments' ? 'active' : ''}`}
+            onClick={() => setActiveTab('payments')}
+          >
+            <Banknote size={20} />
+            {(!sidebarCollapsed || mobileMenuOpen) && <span>Financials</span>}
           </button>
 
           <button 
@@ -149,7 +184,7 @@ const AdminDashboard = () => {
             onClick={() => setActiveTab('kyc')}
           >
             <FileCheck size={20} />
-            {!sidebarCollapsed && <span>KYC Requests</span>}
+            {(!sidebarCollapsed || mobileMenuOpen) && <span>KYC Requests</span>}
           </button>
 
           <button 
@@ -157,7 +192,7 @@ const AdminDashboard = () => {
             onClick={() => setActiveTab('chat')}
           >
             <MessageSquare size={20} />
-            {!sidebarCollapsed && <span>Support Chat</span>}
+            {(!sidebarCollapsed || mobileMenuOpen) && <span>Support Chat</span>}
           </button>
 
           <button 
@@ -165,55 +200,41 @@ const AdminDashboard = () => {
             onClick={() => setActiveTab('notifications')}
           >
             <Bell size={20} />
-            {!sidebarCollapsed && <span>Notification</span>}
+            {(!sidebarCollapsed || mobileMenuOpen) && <span>Notification</span>}
           </button>
+        </div>
 
         <div className="sidebar-footer">
-          <button 
-            className="nav-item" 
-            onClick={() => setShowSettings(!showSettings)}
-          >
-            <Settings size={20} />
-            {!sidebarCollapsed && <span>Settings</span>}
-          </button>
-
           <button className="nav-item logout" onClick={handleLogout}>
             <LogOut size={20} />
-            {!sidebarCollapsed && <span>Logout</span>}
+            {(!sidebarCollapsed || mobileMenuOpen) && <span>Logout</span>}
           </button>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="dashboard-main">
+      <main className={`dashboard-main ${sidebarCollapsed ? 'expanded' : ''}`}>
         {/* Top Bar */}
         <div className="dashboard-topbar">
-          <h1 className="page-title">
-            {activeTab === 'overview' && 'Admin Overview'}
-            {activeTab === 'owners' && 'Owner Management'}
-            {activeTab === 'users' && 'User (Tenant) Management'}
-            {activeTab === 'properties' && 'Property Management'}
-            {activeTab === 'automobiles' && 'Automobile Management'}
-            {activeTab === 'reports' && 'Reports & Issues'}
-            {activeTab === 'kyc' && 'KYC Verification Requests'}
-            {activeTab === 'notifications' && 'Notifications'}
-          </h1>
+          <div className="topbar-left">
+            <button className="mobile-menu-toggle" onClick={() => setMobileMenuOpen(true)}>
+              <Menu size={24} />
+            </button>
+            <h1 className="page-title">
+              {activeTab === 'overview' && 'Admin Overview'}
+              {activeTab === 'owners' && 'Owner Management'}
+              {activeTab === 'users' && 'All Users Management'}
+              {activeTab === 'properties' && 'Property Management'}
+              {activeTab === 'automobiles' && 'Automobile Management'}
+              {activeTab === 'reports' && 'Reports & Issues'}
+              {activeTab === 'kyc' && 'KYC Verification Requests'}
+              {activeTab === 'notifications' && 'Notifications'}
+              {activeTab === 'payments' && 'Financial Transactions'}
+            </h1>
+          </div>
 
           <div className="topbar-actions">
-            <div className="notification-bell">
-              <Bell size={24} />
-              {notifications.length > 0 && <span className="badge">{notifications.length}</span>}
-            </div>
-
-            <div className="user-profile">
-              <div className="user-avatar">
-                {user?.name?.charAt(0) || 'A'}
-              </div>
-              <div className="user-info">
-                <p className="user-name">{user?.name || 'Admin'}</p>
-                <p className="user-role">Super Admin</p>
-              </div>
-            </div>
+            {/* Removed notification bell and user profile */}
           </div>
         </div>
 
@@ -270,16 +291,46 @@ const AdminDashboard = () => {
             </>
           )}
 
-          {activeTab === 'owners' && <SuperAdmin initialRoleFilter="owner" />}
-          {activeTab === 'users' && <SuperAdmin initialRoleFilter="user" />}
+          {activeTab === 'owners' && <SuperAdmin initialRoleFilter="owners" />}
+          {activeTab === 'users' && <SuperAdmin initialRoleFilter="renters" />}
           {activeTab === 'properties' && <PropertiesTable />}
           {activeTab === 'automobiles' && <AutomobilesTable />}
           {activeTab === 'reports' && <ReportsTable />}
           {activeTab === 'kyc' && <SuperAdmin initialKycFilter="pending" />}
           {activeTab === 'chat' && <AdminChat />}
           {activeTab === 'notifications' && <AdminNotifications />}
+          {activeTab === 'payments' && <PaymentsTable />}
         </div>
       </main>
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center">
+                <LogOut size={24} className="text-rose-600" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900">Confirm Logout</h3>
+            </div>
+            <p className="text-slate-600 mb-6">Are you sure you want to log out? You'll need to sign in again to access your dashboard.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLogoutModal(false)}
+                className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmLogout}
+                className="flex-1 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl transition-colors"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

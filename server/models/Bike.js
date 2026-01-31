@@ -58,15 +58,6 @@ const Bike = sequelize.define('Bike', {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: false
   },
-  weeklyRate: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: true,
-    defaultValue: null
-  },
-  monthlyRate: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: true
-  },
   securityDeposit: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: false

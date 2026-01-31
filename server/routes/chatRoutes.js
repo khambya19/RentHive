@@ -9,7 +9,11 @@ const { protect } = require('../middleware/auth');
 router.get('/support-agent', protect, async (req, res) => {
   try {
      // Find the first super_admin
-     const admin = await User.findOne({ where: { type: 'super_admin' } });
+     const admin = await User.findOne({ 
+        where: { 
+           type: { [Op.or]: ['super_admin', 'admin', 'Super Admin'] }
+        } 
+     });
      if (!admin) {
         // Fallback or multiple admins logic could go here
         // If no super_admin in DB, maybe return a default ID or error
@@ -37,8 +41,8 @@ router.get('/conversations/list', protect, async (req, res) => {
             },
             order: [['createdAt', 'DESC']],
             include: [
-                { model: User, as: 'sender', attributes: ['id', 'name', 'email', 'profileImage', 'type'] },
-                { model: User, as: 'receiver', attributes: ['id', 'name', 'email', 'profileImage', 'type'] }
+                { model: User, as: 'sender', attributes: ['id', 'name', 'profileImage', 'type'] },
+                { model: User, as: 'receiver', attributes: ['id', 'name', 'profileImage', 'type'] }
             ]
         });
 
@@ -94,24 +98,40 @@ router.get('/:otherUserId', protect, async (req, res) => {
 router.post('/send', protect, async (req, res) => {
   try {
     const senderId = req.user.id;
-    const { receiverId, message } = req.body;
+    const { receiverId, content, message: msgContent } = req.body;
+    
+    // Support both 'content' and 'message' from frontend
+    const finalMessage = content || msgContent;
 
-    if (!message || !receiverId) {
-      return res.status(400).json({ error: 'Receiver and message required' });
+    if (!finalMessage || !receiverId) {
+      return res.status(400).json({ error: 'Receiver and message content required' });
     }
 
-    const newMessage = await Message.create({
+    // Generate conversation ID
+    const ids = [senderId, receiverId].sort((a, b) => a - b);
+    const conversationId = `conv_${ids[0]}_${ids[1]}`;
+
+    const message = await Message.create({
       senderId,
       receiverId,
-      message
+      message: finalMessage,
+      conversationId
     });
 
-    const fullMessage = await Message.findByPk(newMessage.id, {
+    const fullMessage = await Message.findByPk(message.id, {
         include: [
-            { model: User, as: 'sender', attributes: ['id', 'name', 'email', 'profileImage'] },
-            { model: User, as: 'receiver', attributes: ['id', 'name', 'email', 'profileImage'] }
+            { model: User, as: 'sender', attributes: ['id', 'name', 'profileImage'] },
+            { model: User, as: 'receiver', attributes: ['id', 'name', 'profileImage'] }
         ]
     });
+
+    // Emit real-time event
+    const io = req.app.get('io');
+    if (io) {
+        // Emit to both sender (confirmation) and receiver
+        io.to(`user_${receiverId}`).emit('receive_message', fullMessage);
+        io.to(`user_${senderId}`).emit('receive_message', fullMessage);
+    }
 
     res.json({ success: true, message: fullMessage });
   } catch (err) {

@@ -5,6 +5,7 @@ const Inquiry = require('../models/Inquiry');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { Op } = require('sequelize');
+const sendEmail = require('../utils/mailer');
 
 // Get all available properties for browsing (tenant/lessor)
 exports.getAvailableProperties = async (req, res) => {
@@ -17,8 +18,6 @@ exports.getAvailableProperties = async (req, res) => {
       type, 
       bedrooms, 
       bathrooms, 
-      minArea, 
-      maxArea, 
       amenities,
       sortBy = 'createdAt',
       sortOrder = 'DESC'
@@ -53,13 +52,6 @@ exports.getAvailableProperties = async (req, res) => {
       whereClause.bathrooms = parseInt(bathrooms);
     }
 
-    // Area range filter
-    if (minArea || maxArea) {
-      whereClause.area = {};
-      if (minArea) whereClause.area[Op.gte] = parseFloat(minArea);
-      if (maxArea) whereClause.area[Op.lte] = parseFloat(maxArea);
-    }
-
     // Amenities filter (check if property has all selected amenities)
     if (amenities) {
       const amenitiesList = amenities.split(',').map(a => a.trim());
@@ -80,7 +72,7 @@ exports.getAvailableProperties = async (req, res) => {
 
     // Determine sort order
     let orderClause = [];
-    const validSortFields = ['createdAt', 'rentPrice', 'area', 'bedrooms', 'bathrooms', 'title'];
+    const validSortFields = ['createdAt', 'rentPrice', 'bedrooms', 'bathrooms', 'title'];
     const validSortOrders = ['ASC', 'DESC'];
     
     if (validSortFields.includes(sortBy) && validSortOrders.includes(sortOrder.toUpperCase())) {
@@ -135,7 +127,6 @@ exports.getVendorProperties = async (req, res) => {
       city: p.city,
       bedrooms: p.bedrooms,
       bathrooms: p.bathrooms,
-      area: p.area,
       rentPrice: p.rentPrice,
       securityDeposit: p.securityDeposit,
       amenities: p.amenities,
@@ -151,14 +142,11 @@ exports.getVendorProperties = async (req, res) => {
       listingType: p.listingType,
       propertyCondition: p.propertyCondition,
       yearBuilt: p.yearBuilt,
-      lotSize: p.lotSize,
       garageSpaces: p.garageSpaces,
       hoaFees: p.hoaFees,
       furnished: p.furnished,
       petPolicy: p.petPolicy,
-      leaseTerms: p.leaseTerms,
-      virtualTourLink: p.virtualTourLink,
-      floorPlan: p.floorPlan
+      virtualTourLink: p.virtualTourLink
     })));
   } catch (error) {
     console.error('Error fetching vendor properties:', error);
@@ -245,69 +233,112 @@ exports.createProperty = async (req, res) => {
     }
 
     const {
-      title,
-      propertyType,
-      listingType,
-      address,
-      city,
-      bedrooms,
-      bathrooms,
-      area,
-      rentPrice,
-      securityDeposit,
-      amenities,
-      description,
-      images,
-      latitude,
-      longitude,
-      propertyCondition,
-      yearBuilt,
-      lotSize,
-      lotSizeUnit,
-      garageSpaces,
-      hoaFees,
-      hoaFeesFrequency,
-      furnished,
-      petPolicy,
-      petDetails,
-      leaseTerms,
-      virtualTourLink,
-      floorPlan
+      title, propertyType, listingType, address, city, bedrooms, bathrooms, rentPrice,
+      securityDeposit, amenities, description, latitude, longitude, propertyCondition,
+      yearBuilt, garageSpaces, halfBathrooms, parkingType, flooring, heatingSystem,
+      coolingSystem, appliancesIncluded, basementType, basementArea, fireplaceCount,
+      fireplaceType, exteriorMaterial, roofType, roofAge, poolSpa, fenceType, view,
+      propertyTaxes, hoaFees, hoaFeesFrequency, hoaName, maintenanceFees, furnished,
+      petPolicy, petDetails, solarPanels, energyEfficient, greenCertification,
+      zoningType, area, floorPlan, virtualTourLink, images
     } = req.body;
 
+    // Process uploaded image files or use provided image list
+    const imagePaths = req.files && req.files.length > 0 
+      ? req.files.map(file => file.filename) 
+      : (images || []);
+
+    // Parse JSON fields
+    const parseJSON = (val) => {
+      if (!val) return [];
+      if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch (e) { return val.split(',').map(s => s.trim()); }
+      }
+      return val;
+    };
+
     const property = await Property.create({
-      vendorId,
-      title,
-      propertyType,
+      vendorId, title, propertyType, address, city, description, virtualTourLink,
       listingType: listingType || 'For Rent',
-      address,
-      city,
-      bedrooms: parseInt(bedrooms),
-      bathrooms: parseInt(bathrooms),
-      area,
-      rentPrice: parseFloat(rentPrice),
+      bedrooms: parseInt(bedrooms) || 0,
+      bathrooms: parseInt(bathrooms) || 0,
+      rentPrice: parseFloat(rentPrice) || 0,
       securityDeposit: securityDeposit ? parseFloat(securityDeposit) : null,
-      amenities: amenities || [],
-      description,
-      images: images || [],
+      amenities: parseJSON(amenities),
+      images: imagePaths,
       status: 'Available',
       latitude: latitude ? parseFloat(latitude) : null,
       longitude: longitude ? parseFloat(longitude) : null,
       propertyCondition,
       yearBuilt: yearBuilt ? parseInt(yearBuilt) : null,
-      lotSize: lotSize ? String(lotSize) : null,
-      lotSizeUnit,
-      garageSpaces: garageSpaces ? parseInt(garageSpaces) : 0,
+      garageSpaces: parseInt(garageSpaces) || 0,
+      halfBathrooms: parseInt(halfBathrooms) || 0,
+      parkingType: parseJSON(parkingType),
+      flooring: parseJSON(flooring),
+      heatingSystem: parseJSON(heatingSystem),
+      coolingSystem: parseJSON(coolingSystem),
+      appliancesIncluded: parseJSON(appliancesIncluded),
+      basementType, basementArea,
+      fireplaceCount: parseInt(fireplaceCount) || 0,
+      fireplaceType,
+      exteriorMaterial: parseJSON(exteriorMaterial),
+      roofType, roofAge,
+      poolSpa: parseJSON(poolSpa),
+      fenceType,
+      view: parseJSON(view),
+      propertyTaxes,
       hoaFees: hoaFees ? parseFloat(hoaFees) : null,
-      hoaFeesFrequency,
+      hoaFeesFrequency, hoaName, maintenanceFees,
       furnished: furnished || 'No',
       petPolicy: petPolicy || 'No',
-      petDetails,
-      leaseTerms,
-      virtualTourLink,
-      floorPlan,
-      isApproved: true
+      petDetails, solarPanels, energyEfficient, greenCertification,
+      zoningType, area, floorPlan, isApproved: true
     });
+
+    // Notify ALL users about the new property listing
+    try {
+      const Notification = require('../models/Notification');
+      const allUsers = await User.findAll({ 
+        where: { 
+          userType: 'renter',
+          isVerified: true 
+        },
+        attributes: ['id']
+      });
+
+      const io = req.app.get('io');
+      
+      // Create notifications for all verified renters
+      const notifications = await Promise.all(
+        allUsers.map(async (renterUser) => {
+          const notification = await Notification.create({
+            userId: renterUser.id,
+            type: 'listing',
+            title: 'New Property Available! 🏠',
+            message: `${title} in ${city} is now available for rent at NPR ${rentPrice}/month`,
+            isRead: false,
+            metadata: {
+              propertyId: property.id,
+              propertyType,
+              city,
+              rentPrice
+            }
+          });
+
+          // Send real-time notification
+          if (io) {
+            io.to(`user_${renterUser.id}`).emit('new-notification', notification);
+          }
+
+          return notification;
+        })
+      );
+
+      console.log(`✅ Notified ${notifications.length} users about new property: ${title}`);
+    } catch (notifError) {
+      console.error('❌ Error sending notifications:', notifError);
+      // Don't fail the request if notifications fail
+    }
 
     return res.json({
       ...property.get({ plain: true })
@@ -330,67 +361,85 @@ exports.updateProperty = async (req, res) => {
     }
 
     const {
-      title,
-      propertyType,
-      listingType,
-      address,
-      city,
-      bedrooms,
-      bathrooms,
-      area,
-      rentPrice,
-      securityDeposit,
-      amenities,
-      description,
-      images,
-      status,
-      latitude,
-      longitude,
-      propertyCondition,
-      yearBuilt,
-      lotSize,
-      lotSizeUnit,
-      garageSpaces,
-      hoaFees,
-      hoaFeesFrequency,
-      furnished,
-      petPolicy,
-      petDetails,
-      leaseTerms,
-      virtualTourLink,
-      floorPlan
+      title, propertyType, listingType, address, city, bedrooms, bathrooms, rentPrice,
+      securityDeposit, amenities, description, status, latitude, longitude, propertyCondition,
+      yearBuilt, garageSpaces, halfBathrooms, parkingType, flooring, heatingSystem,
+      coolingSystem, appliancesIncluded, basementType, basementArea, fireplaceCount,
+      fireplaceType, exteriorMaterial, roofType, roofAge, poolSpa, fenceType, view,
+      propertyTaxes, hoaFees, hoaFeesFrequency, hoaName, maintenanceFees, furnished,
+      petPolicy, petDetails, solarPanels, energyEfficient, greenCertification,
+      zoningType, area, floorPlan, virtualTourLink, images
     } = req.body;
 
+    // Process uploaded image files if any, otherwise check for images in body (for JSON updates)
+    let imagePaths = property.images;
+    if (req.files && req.files.length > 0) {
+      imagePaths = req.files.map(file => file.filename);
+    } else if (images) {
+      // If images provided in JSON body, use those (allows reordering or removing images)
+      imagePaths = images;
+    }
+
+    // Helper for JSON fields
+    const parseUpdateJSON = (val, current) => {
+      if (val === undefined) return current;
+      if (!val) return [];
+      if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch (e) { return val.split(',').map(s => s.trim()); }
+      }
+      return val;
+    };
+
     await property.update({
-      title: title || property.title,
-      propertyType: propertyType || property.propertyType,
-      listingType: listingType || property.listingType,
+      title: title !== undefined ? title : property.title,
+      propertyType: propertyType !== undefined ? propertyType : property.propertyType,
+      listingType: listingType !== undefined ? listingType : property.listingType,
       address: address !== undefined ? address : property.address,
       city: city !== undefined ? city : property.city,
-      bedrooms: bedrooms ? parseInt(bedrooms) : property.bedrooms,
-      bathrooms: bathrooms ? parseInt(bathrooms) : property.bathrooms,
-      area: area || property.area,
-      rentPrice: rentPrice ? parseFloat(rentPrice) : property.rentPrice,
-      securityDeposit: securityDeposit ? parseFloat(securityDeposit) : property.securityDeposit,
-      amenities: amenities || property.amenities,
+      bedrooms: bedrooms !== undefined ? parseInt(bedrooms) : property.bedrooms,
+      bathrooms: bathrooms !== undefined ? parseInt(bathrooms) : property.bathrooms,
+      rentPrice: rentPrice !== undefined ? parseFloat(rentPrice) : property.rentPrice,
+      securityDeposit: securityDeposit !== undefined ? (securityDeposit ? parseFloat(securityDeposit) : null) : property.securityDeposit,
+      amenities: parseUpdateJSON(amenities, property.amenities),
       description: description !== undefined ? description : property.description,
-      images: images || property.images,
-      status: status || property.status,
+      images: imagePaths,
+      status: status !== undefined ? status : property.status,
       latitude: latitude !== undefined ? (latitude ? parseFloat(latitude) : null) : property.latitude,
       longitude: longitude !== undefined ? (longitude ? parseFloat(longitude) : null) : property.longitude,
-      propertyCondition: propertyCondition || property.propertyCondition,
-      yearBuilt: yearBuilt ? parseInt(yearBuilt) : property.yearBuilt,
-      lotSize: lotSize ? String(lotSize) : property.lotSize,
-      lotSizeUnit: lotSizeUnit || property.lotSizeUnit,
+      propertyCondition: propertyCondition !== undefined ? propertyCondition : property.propertyCondition,
+      yearBuilt: yearBuilt !== undefined ? (yearBuilt ? parseInt(yearBuilt) : null) : property.yearBuilt,
       garageSpaces: garageSpaces !== undefined ? parseInt(garageSpaces) : property.garageSpaces,
-      hoaFees: hoaFees ? parseFloat(hoaFees) : property.hoaFees,
-      hoaFeesFrequency: hoaFeesFrequency || property.hoaFeesFrequency,
-      furnished: furnished || property.furnished,
-      petPolicy: petPolicy || property.petPolicy,
+      halfBathrooms: halfBathrooms !== undefined ? parseInt(halfBathrooms) : property.halfBathrooms,
+      parkingType: parseUpdateJSON(parkingType, property.parkingType),
+      flooring: parseUpdateJSON(flooring, property.flooring),
+      heatingSystem: parseUpdateJSON(heatingSystem, property.heatingSystem),
+      coolingSystem: parseUpdateJSON(coolingSystem, property.coolingSystem),
+      appliancesIncluded: parseUpdateJSON(appliancesIncluded, property.appliancesIncluded),
+      basementType: basementType !== undefined ? basementType : property.basementType,
+      basementArea: basementArea !== undefined ? basementArea : property.basementArea,
+      fireplaceCount: fireplaceCount !== undefined ? parseInt(fireplaceCount) : property.fireplaceCount,
+      fireplaceType: fireplaceType !== undefined ? fireplaceType : property.fireplaceType,
+      exteriorMaterial: parseUpdateJSON(exteriorMaterial, property.exteriorMaterial),
+      roofType: roofType !== undefined ? roofType : property.roofType,
+      roofAge: roofAge !== undefined ? roofAge : property.roofAge,
+      poolSpa: parseUpdateJSON(poolSpa, property.poolSpa),
+      fenceType: fenceType !== undefined ? fenceType : property.fenceType,
+      view: parseUpdateJSON(view, property.view),
+      propertyTaxes: propertyTaxes !== undefined ? propertyTaxes : property.propertyTaxes,
+      hoaFees: hoaFees !== undefined ? (hoaFees ? parseFloat(hoaFees) : null) : property.hoaFees,
+      hoaFeesFrequency: hoaFeesFrequency !== undefined ? hoaFeesFrequency : property.hoaFeesFrequency,
+      hoaName: hoaName !== undefined ? hoaName : property.hoaName,
+      maintenanceFees: maintenanceFees !== undefined ? maintenanceFees : property.maintenanceFees,
+      furnished: furnished !== undefined ? furnished : property.furnished,
+      petPolicy: petPolicy !== undefined ? petPolicy : property.petPolicy,
       petDetails: petDetails !== undefined ? petDetails : property.petDetails,
-      leaseTerms: leaseTerms || property.leaseTerms,
-      virtualTourLink: virtualTourLink !== undefined ? virtualTourLink : property.virtualTourLink,
-      floorPlan: floorPlan !== undefined ? floorPlan : property.floorPlan
+      solarPanels: solarPanels !== undefined ? solarPanels : property.solarPanels,
+      energyEfficient: energyEfficient !== undefined ? energyEfficient : property.energyEfficient,
+      greenCertification: greenCertification !== undefined ? greenCertification : property.greenCertification,
+      zoningType: zoningType !== undefined ? zoningType : property.zoningType,
+      area: area !== undefined ? area : property.area,
+      floorPlan: floorPlan !== undefined ? floorPlan : property.floorPlan,
+      virtualTourLink: virtualTourLink !== undefined ? virtualTourLink : property.virtualTourLink
     });
 
     return res.json({
@@ -497,17 +546,72 @@ exports.updateBookingStatus = async (req, res) => {
     if (notificationTitle) {
       try {
         const notification = await Notification.create({
-          userId: booking.tenantId,
+          user_id: booking.tenantId,
           title: notificationTitle,
           message: notificationMessage,
           type: 'info',
-          isBroadcast: false,
-          link: `/tenant/dashboard?tab=applications`
+          is_broadcast: false,
+          link: `/user/dashboard?tab=applications`
         });
 
         console.log(`📧 STATUS UPDATE (${status}): Sending notification to TENANT (tenantId: ${booking.tenantId})`);
         console.log(`   Owner ID who ${status.toLowerCase()}: ${vendorId}`);
         console.log(`   This notification should ONLY go to tenant, NOT owner`);
+        
+        // Send email if booking is approved
+        if (status === 'Approved') {
+          try {
+            const tenant = await User.findByPk(booking.tenantId);
+            if (tenant && tenant.email) {
+              const moveInDate = new Date(booking.moveInDate).toLocaleDateString('en-US', {
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric'
+              });
+              const moveOutDate = booking.moveOutDate 
+                ? new Date(booking.moveOutDate).toLocaleDateString('en-US', {
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric'
+                  })
+                : 'Not specified';
+              
+              const emailHtml = `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <h2 style="color: #4F46E5;">🎉 Your Booking Has Been Approved!</h2>
+                  <p>Dear ${tenant.name},</p>
+                  <p>Great news! Your booking request has been approved by the property owner.</p>
+                  
+                  <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                    <h3 style="margin-top: 0; color: #1F2937;">Property Details</h3>
+                    <p><strong>Property:</strong> ${property.title}</p>
+                    <p><strong>Location:</strong> ${property.location || 'N/A'}</p>
+                    <p><strong>Monthly Rent:</strong> NPR ${parseInt(booking.monthlyRent).toLocaleString()}</p>
+                    <p><strong>Move-in Date:</strong> ${moveInDate}</p>
+                    <p><strong>Move-out Date:</strong> ${moveOutDate}</p>
+                  </div>
+                  
+                  <p>Please log in to your dashboard to view more details and complete the next steps.</p>
+                  <a href="http://localhost:5173/user/dashboard?tab=rentals" style="display: inline-block; background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">View My Bookings</a>
+                  
+                  <p style="color: #6B7280; font-size: 14px; margin-top: 30px;">Best regards,<br>RentHive Team</p>
+                </div>
+              `;
+              
+              await sendEmail({
+                to: tenant.email,
+                subject: `🎉 Booking Approved - ${property.title}`,
+                html: emailHtml,
+                text: `Your booking for ${property.title} has been approved! Move-in: ${moveInDate}, Monthly Rent: NPR ${parseInt(booking.monthlyRent).toLocaleString()}`
+              });
+              
+              console.log(`✅ Approval email sent to ${tenant.email}`);
+            }
+          } catch (emailError) {
+            console.error('Error sending approval email:', emailError);
+            // Don't fail the approval if email fails
+          }
+        }
         
         if (io && connectedUsers) {
           const socketId = connectedUsers.get(booking.tenantId.toString());
@@ -556,7 +660,11 @@ exports.uploadPropertyImages = async (req, res) => {
     });
   } catch (error) {
     console.error('Error uploading images:', error);
-    return res.status(500).json({ success: false, error: 'Failed to upload images' });
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Failed to upload images',
+      details: error.message 
+    });
   }
 };
 
@@ -625,8 +733,6 @@ exports.bookProperty = async (req, res) => {
 
     // Send notification to property owner
     try {
-      const { io, connectedUsers } = require('../server');
-      
       const moveInFormatted = new Date(moveInDate).toLocaleDateString('en-US', {
         month: 'long',
         day: 'numeric',
@@ -644,37 +750,44 @@ exports.bookProperty = async (req, res) => {
       const notificationTitle = '🏠 New Property Booking Request';
       const notificationMessage = `${tenant.name} wants to rent your property "${property.title}" from ${moveInFormatted}${moveOutDate ? ` to ${moveOutFormatted}` : ''}. Monthly rent: NPR ${parseInt(property.rentPrice).toLocaleString()}`;
 
-      // Create notification
+      // Create notification in database
       const notification = await Notification.create({
-        userId: property.vendorId,
+        user_id: property.vendorId,
         title: notificationTitle,
         message: notificationMessage,
         type: 'info',
-        isBroadcast: false,
-        link: `/owner/dashboard?tab=bookings`
+        is_broadcast: false,
+        link: `/owner/dashboard?tab=bookings`,
+        metadata: JSON.stringify({
+          bookingId: booking.id,
+          propertyId: property.id,
+          tenantId: tenant.id,
+          requiresAction: true
+        })
       });
 
       console.log('✅ Notification created:', notification.id);
-      console.log(`📧 BOOKING REQUEST: Sending notification to OWNER (vendorId: ${property.vendorId})`);
+      console.log(`📧 BOOKING REQUEST: Notification saved for OWNER (vendorId: ${property.vendorId})`);
       console.log(`   Tenant ID who booked: ${tenantId}`);
       console.log(`   This notification should ONLY go to owner, NOT tenant`);
 
-      // Emit real-time notification
-      if (io && connectedUsers) {
-        const socketId = connectedUsers.get(property.vendorId.toString());
-        if (socketId) {
-          io.to(socketId).emit('new-notification', {
-            id: notification.id,
-            title: notification.title,
-            message: notification.message,
-            type: notification.type,
-            link: notification.link,
-            is_read: false,
-            created_at: notification.created_at,
-            is_broadcast: false
-          });
-          console.log(`✅ Booking request notification sent to owner ${property.vendorId}`);
-        }
+      // Emit real-time notification via Socket.IO
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user_${property.vendorId}`).emit('new-notification', {
+          id: notification.id,
+          title: notification.title,
+          message: notification.message,
+          type: notification.type,
+          link: notification.link,
+          is_read: false,
+          created_at: notification.created_at,
+          is_broadcast: false,
+          metadata: notification.metadata
+        });
+        console.log(`✅ Real-time notification sent to owner ${property.vendorId}`);
+      } else {
+        console.log('⚠️ Socket.IO not available, notification saved to database only');
       }
     } catch (notificationError) {
       console.error('Error sending notification:', notificationError);

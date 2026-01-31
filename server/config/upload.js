@@ -68,18 +68,18 @@ const profileUpload = multer({
   limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
 
-// Property upload (up to 10 images, 10MB each)
+// Property upload (up to 50 images, 20MB each)
 const propertyUpload = multer({ 
   storage: propertyStorage,
   fileFilter: fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit per file
+  limits: { fileSize: 20 * 1024 * 1024 } // 20MB limit per file
 });
 
-// Bike upload (up to 10 images, 10MB each)
+// Bike upload (up to 50 images, 20MB each)
 const bikeUpload = multer({ 
   storage: bikeStorage,
   fileFilter: fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit per file
+  limits: { fileSize: 20 * 1024 * 1024 } // 20MB limit per file
 });
 
 module.exports = profileUpload;

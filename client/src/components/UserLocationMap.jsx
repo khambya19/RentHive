@@ -163,8 +163,8 @@ const UserLocationMap = ({
               <Popup>
                 <div className="map-popup">
                   <h4>Selected Location</h4>
-                  <p>Lat: {selectedLocation.lat.toFixed(6)}</p>
-                  <p>Lng: {selectedLocation.lng.toFixed(6)}</p>
+                  <p>Lat: {Number(selectedLocation.lat).toFixed(6)}</p>
+                  <p>Lng: {Number(selectedLocation.lng).toFixed(6)}</p>
                 </div>
               </Popup>
             </Marker>

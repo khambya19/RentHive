@@ -3,11 +3,11 @@ import axios from 'axios';
 import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
-import { Send, User as UserIcon, MessageSquare, Search, Eye } from 'lucide-react';
+import { Send, User as UserIcon, MessageSquare, Search } from 'lucide-react';
 
 const AdminChat = () => {
     const { user } = useAuth();
-    const { socket, isConnected } = useSocket();
+    const { socket } = useSocket();
     const [conversations, setConversations] = useState([]);
     const [activeChat, setActiveChat] = useState(null);
     const [messages, setMessages] = useState([]);
@@ -16,18 +16,22 @@ const AdminChat = () => {
     const [search, setSearch] = useState('');
 
     useEffect(() => {
-        if (!socket || !isConnected) return;
-
         // Fetch list of conversations
         fetchConversations();
+    }, []);
 
-        socket.emit('join_chat', 'admin_support');
-        socket.emit('register', user.id);
+    useEffect(() => {
+        if (!socket) return;
 
         const handleReceiveMessage = (data) => {
-             if (activeChat && (data.senderId === activeChat.partner.id || data.receiverId === activeChat.partner.id)) {
-                 setMessages(prev => [...prev, data]);
+             // If active chat is open with this user, append message
+             if (activeChat && (data.senderId === activeChat.partner.id || (data.senderId === user.id && data.receiverId === activeChat.partner.id))) {
+                 setMessages(prev => {
+                     if (prev.find(m => m.id === data.id)) return prev;
+                     return [...prev, data];
+                 });
              }
+             // Refresh list to update "last message"
              fetchConversations();
         };
 
@@ -36,7 +40,7 @@ const AdminChat = () => {
         return () => {
             socket.off('receive_message', handleReceiveMessage);
         };
-    }, [activeChat, user, socket, isConnected]);
+    }, [activeChat, user, socket]);
 
     const fetchConversations = async () => {
         try {
@@ -44,7 +48,7 @@ const AdminChat = () => {
             const res = await axios.get(`${API_BASE_URL}/chat/conversations/list`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            if (res.data.success) {
+            if (res.data.success && res.data.conversations) {
                 setConversations(res.data.conversations);
             }
         } catch (err) {
@@ -59,7 +63,7 @@ const AdminChat = () => {
             const res = await axios.get(`${API_BASE_URL}/chat/${convo.partner.id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setMessages(res.data.messages);
+            setMessages(res.data.messages || []);
         } catch (err) {
             console.error(err);
         }
@@ -69,22 +73,25 @@ const AdminChat = () => {
         e.preventDefault();
         if (!newMessage.trim() || !activeChat) return;
 
-        const msgData = {
-            receiverId: activeChat.partner.id,
-            message: newMessage,
-            senderId: user.id
-        };
-
         try {
             const token = localStorage.getItem('token');
-            const res = await axios.post(`${API_BASE_URL}/chat/send`, msgData, {
-                headers: { Authorization: `Bearer ${token}` }
+            const res = await axios.post(`${API_BASE_URL}/chat/send`, {
+                receiverId: activeChat.partner.id,
+                message: newMessage
+            }, {
+                headers: { 
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
             });
 
             if (res.data.success) {
-                setMessages(prev => [...prev, res.data.message]);
+                const sentMessage = res.data.message;
+                setMessages(prev => {
+                    if (prev.find(m => m.id === sentMessage.id)) return prev;
+                    return [...prev, sentMessage];
+                });
                 setNewMessage('');
-                socket.emit('send_message', res.data.message);
                 fetchConversations(); // Update list order
             }
         } catch (err) {
@@ -104,17 +111,34 @@ const AdminChat = () => {
         <div className="flex h-[calc(100vh-140px)] bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
             {/* Sidebar List */}
             <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
-                <div className="p-4 border-b border-slate-100">
+                 <div className="p-4 border-b border-slate-100">
                      <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
                          <MessageSquare size={18} className="text-indigo-600"/> Messages
                      </h3>
-                </div>
+                     <div className="relative">
+                         <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+                         <input 
+                             className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                             placeholder="Search users..."
+                             value={search}
+                             onChange={e => setSearch(e.target.value)}
+                         />
+                     </div>
+                 </div>
                  
                  <div className="flex-1 overflow-y-auto">
-                     {conversations.length === 0 ? (
-                         <div className="p-8 text-center text-slate-400 text-sm">No conversations found.</div>
+                     {filteredConvos.length === 0 ? (
+                         <div className="p-8 text-center">
+                             <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                 <MessageSquare size={28} className="text-slate-400" />
+                             </div>
+                             <p className="text-slate-600 font-semibold mb-2">No Messages Yet</p>
+                             <p className="text-sm text-slate-400 px-4">
+                                 Users can reach out to you from the Settings → Support Chat section. All conversations will appear here and be saved in the database.
+                             </p>
+                         </div>
                      ) : (
-                         conversations.map((convo, idx) => (
+                         filteredConvos.map((convo, idx) => (
                              <div 
                                 key={idx}
                                 onClick={() => handleSelectChat(convo)}
@@ -130,16 +154,13 @@ const AdminChat = () => {
                                              </div>
                                          )}
                                      </div>
-                                     <div className="flex-1 min-w-0">
-                                         <div className="flex justify-between items-start mb-1">
-                                             <div className="overflow-hidden mr-2">
-                                                <h4 className="font-bold text-slate-900 truncate text-sm leading-tight">{convo.partner.name}</h4>
-                                                <p className="text-[10px] text-slate-500 truncate leading-tight">{convo.partner.email}</p>
-                                             </div>
-                                             <span className="text-[10px] text-slate-400 shrink-0">{new Date(convo.lastMessage.createdAt).toLocaleDateString()}</span>
-                                         </div>
-                                         <p className="text-xs text-slate-500 truncate">{convo.lastMessage.message || convo.lastMessage.content}</p>
-                                     </div>
+                                      <div className="flex-1 min-w-0">
+                                          <div className="flex justify-between items-baseline mb-1">
+                                              <h4 className="font-bold text-slate-900 truncate text-sm">{convo.partner?.name || 'Unknown'}</h4>
+                                              <span className="text-[10px] text-slate-400">{convo.lastMessage ? new Date(convo.lastMessage.createdAt).toLocaleDateString() : ''}</span>
+                                          </div>
+                                          <p className="text-xs text-slate-500 truncate">{convo.lastMessage?.message || convo.lastMessage?.content || 'No message content'}</p>
+                                      </div>
                                  </div>
                              </div>
                          ))
@@ -171,7 +192,6 @@ const AdminChat = () => {
                         {/* Messages */}
                         <div className="flex-1 overflow-y-auto p-6 space-y-4">
                             {messages.map((msg, idx) => {
-                                if (!user) return null;
                                 const isMe = msg.senderId === user.id;
                                 return (
                                     <div key={idx} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>

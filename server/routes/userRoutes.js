@@ -23,7 +23,6 @@ router.get('/admin/users', protect, superAdminOnly, userController.getAllUsers);
 router.get('/admin/users/:id', protect, superAdminOnly, userController.getUserById);
 router.patch('/admin/users/:id/block', protect, superAdminOnly, userController.toggleBlockUser); 
 router.delete('/admin/users/:id', protect, superAdminOnly, userController.softDeleteUser);
-router.post('/admin/users/:id/reset-password', protect, superAdminOnly, userController.resetUserPassword);
 
 // --- Public/Protected Getters ---
 router.get('/stats', userController.getVendorStats);

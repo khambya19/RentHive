@@ -167,8 +167,8 @@ const PropertyLocationMap = ({
                 <div className="p-1 min-w-[200px]">
                   <h4 className="font-bold text-gray-900 mb-2 border-b border-gray-100 pb-2">Selected Location</h4>
                   <div className="space-y-1 text-sm text-gray-600">
-                    <p><span className="font-medium text-gray-800">Lat:</span> {selectedLocation.lat.toFixed(6)}</p>
-                    <p><span className="font-medium text-gray-800">Lng:</span> {selectedLocation.lng.toFixed(6)}</p>
+                    <p><span className="font-medium text-gray-800">Lat:</span> {Number(selectedLocation.lat).toFixed(6)}</p>
+                    <p><span className="font-medium text-gray-800">Lng:</span> {Number(selectedLocation.lng).toFixed(6)}</p>
                     {selectedLocation.address && (
                       <p className="mt-2 text-xs bg-gray-50 p-2 rounded border border-gray-100">{selectedLocation.address}</p>
                     )}

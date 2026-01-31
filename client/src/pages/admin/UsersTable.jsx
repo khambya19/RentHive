@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import UserProfileModal from './UserProfileModal';
 import API_BASE_URL from '../../config/api';
 import axios from 'axios';
-import { Lock, Unlock, Trash2, Key, Eye, FileCheck } from 'lucide-react';
+import { Lock, Unlock, Trash2, Eye, FileCheck } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
 
 const UsersTable = ({ initialKycFilter = 'all', initialRoleFilter = 'all' }) => {
@@ -13,7 +13,7 @@ const UsersTable = ({ initialKycFilter = 'all', initialRoleFilter = 'all' }) => 
   const [loading, setLoading] = useState(true);
 
   // Determine fixed modes
-  const isKycMode = initialRoleFilter === 'all';
+  const isKycMode = initialKycFilter === 'pending';
   const isSpecificRoleMode = initialRoleFilter !== 'all';
 
   const fetchUsers = useCallback(async () => {
@@ -23,7 +23,14 @@ const UsersTable = ({ initialKycFilter = 'all', initialRoleFilter = 'all' }) => 
       const params = new URLSearchParams();
       
       // Enforce filters based on the tab context (props)
-      if (initialRoleFilter !== 'all') params.append('role', initialRoleFilter);
+      if (initialRoleFilter === 'owners') {
+        params.append('role', 'owner,lessor,vendor');
+      } else if (initialRoleFilter === 'renters') {
+        params.append('role', 'renter,user');
+      } else if (initialRoleFilter !== 'all') {
+        params.append('role', initialRoleFilter);
+      }
+      
       if (initialKycFilter !== 'all') params.append('kycStatus', initialKycFilter); // This handles 'pending' for KYC tab
       
       const response = await axios.get(`${API_BASE_URL}/admin/users?${params.toString()}`, {
@@ -87,29 +94,20 @@ const UsersTable = ({ initialKycFilter = 'all', initialRoleFilter = 'all' }) => 
   };
 
   const handleDelete = async (userId) => {
-    if (!window.confirm('Are you sure you want to delete this user?')) return;
+    if (!window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) return;
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`${API_BASE_URL}/admin/users/${userId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      fetchUsers();
-    } catch (err) {
-      alert('Failed to delete user');
-    }
-  };
-
-  const handleResetPassword = async (userId) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.post(`${API_BASE_URL}/admin/users/${userId}/reset-password`, {}, {
+      const response = await axios.delete(`${API_BASE_URL}/admin/users/${userId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.data.success) {
-        alert(`Temporary password: ${response.data.tempPassword}\n\nPlease save this and share it with the user.`);
+        alert('User deleted successfully');
+        fetchUsers();
       }
     } catch (err) {
-      alert('Failed to reset password');
+      console.error('Delete user error:', err);
+      const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Failed to delete user. Please try again.';
+      alert(errorMsg);
     }
   };
 
@@ -125,8 +123,8 @@ const UsersTable = ({ initialKycFilter = 'all', initialRoleFilter = 'all' }) => 
           <thead className="bg-slate-50 text-slate-500 uppercase font-bold text-xs tracking-wider">
             <tr>
               <th className="px-6 py-4">User</th>
-              <th className="px-6 py-4">Role</th>
-              <th className="px-6 py-4">Status</th>
+              <th className="px-6 py-4 hide-mobile">Role</th>
+              <th className="px-6 py-4 hide-mobile">Status</th>
               <th className="px-6 py-4">KYC</th>
               <th className="px-6 py-4 text-right">Actions</th>
             </tr>
@@ -135,111 +133,83 @@ const UsersTable = ({ initialKycFilter = 'all', initialRoleFilter = 'all' }) => 
             {users.length === 0 ? (
               <tr>
                 <td colSpan="5" className="px-6 py-12 text-center text-slate-400 font-medium">
-                   {initialKycFilter === 'pending' && 'No pending KYC requests found.'}
-                   {initialKycFilter === 'approved' && 'No approved KYC records found.'}
-                   {initialKycFilter === 'rejected' && 'No rejected KYC records found.'}
-                   {initialKycFilter === 'all' && 'No KYC submissions found.'}
-                   {!initialKycFilter && 'No users found.'}
+                   {isKycMode ? 'No pending KYC requests found.' : 'No users found.'}
                 </td>
               </tr>
             ) : (
-              users.map(user => (
-                <tr key={user.id} className="hover:bg-slate-50/80 transition-colors group">
+              users
+                .filter(u => !['admin', 'superadmin', 'super_admin'].includes(u.role?.toLowerCase()))
+                .map(user => (
+                  <tr key={user.id} className="hover:bg-slate-50/80 transition-colors group">
                   <td className="px-6 py-4">
-                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-                           {user.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                           <p className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors cursor-pointer" onClick={() => { setSelectedUser(user); setShowProfile(true); }}>{user.name}</p>
-                           <p className="text-xs text-slate-500">{user.email}</p>
-                        </div>
-                     </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                        {user.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p
+                          className={`font-bold transition-colors cursor-pointer ${initialRoleFilter === 'owners' ? 'text-indigo-600' : 'text-slate-900 group-hover:text-indigo-600'}`}
+                          onClick={() => { setSelectedUser(user); setShowProfile(true); }}
+                        >
+                          {user.name}
+                        </p>
+                        <p className="text-xs text-slate-500 hide-mobile">{user.email}</p>
+                      </div>
+                    </div>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 hide-mobile">
                      <span className={`px-2 py-1 rounded text-xs font-bold uppercase tracking-wider ${
                         user.role === 'owner' ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700'
                      }`}>
                         {user.role}
                      </span>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 hide-mobile">
                      {user.active ? 
                         <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Active</span> : 
                         <span className="flex items-center gap-1.5 text-xs font-bold text-red-600"><span className="w-2 h-2 rounded-full bg-red-500"></span> Blocked</span>
                      }
                   </td>
                   <td className="px-6 py-4">
-                      {isKycMode ? (
-                        // Show KYC status only in KYC mode
-                        <>
-                          {user.kyc_status === 'approved' && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-50 text-green-700 border border-green-100">Verified</span>}
-                          {user.kyc_status === 'pending' && (
-                            <button 
-                              onClick={() => { setSelectedUser(user); setShowProfile(true); }}
-                              className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200 animate-pulse hover:bg-amber-200 transition-colors shadow-sm"
-                            >
-                              <FileCheck size={12} /> Review
-                            </button>
-                          )}
-                          {user.kyc_status === 'rejected' && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-50 text-red-700 border border-red-100">Rejected</span>}
-                          {(!user.kyc_status || user.kyc_status === 'not_submitted') && <span className="text-xs text-slate-400 font-medium">Not Submitted</span>}
-                        </>
-                      ) : (
-                        // Show simplified KYC badge in User/Owner mode
-                        <>
-                          {user.kyc_status === 'approved' && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-50 text-green-700 border border-green-100">✓ Verified</span>}
-                          {user.kyc_status !== 'approved' && <span className="text-xs text-slate-400 font-medium">-</span>}
-                        </>
+                      {user.kyc_status === 'approved' && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-50 text-green-700 border border-green-100">Verified</span>}
+                      {user.kyc_status === 'pending' && (
+                        <button 
+                          onClick={() => { setSelectedUser(user); setShowProfile(true); }}
+                          className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200 animate-pulse hover:bg-amber-200 transition-colors shadow-sm"
+                        >
+                          <FileCheck size={12} /> Review
+                        </button>
                       )}
+                      {user.kyc_status === 'rejected' && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-50 text-red-700 border border-red-100">Rejected</span>}
+                      {(!user.kyc_status || user.kyc_status === 'not_submitted') && <span className="text-xs text-slate-400 font-medium whitespace-nowrap">Not Submitted</span>}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2">
-                      {isKycMode ? (
-                        // KYC Mode: Only View Profile button
-                        <button 
-                          className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
-                          onClick={() => { setSelectedUser(user); setShowProfile(true); }}
-                          title="View Profile & Review KYC"
-                        >
-                          <Eye size={18} />
-                        </button>
-                      ) : (
-                        // User/Owner Mode: View + Block/Unblock + Actions
-                        <>
-                          <button 
-                            className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
-                            onClick={() => { setSelectedUser(user); setShowProfile(true); }}
-                            title="View Profile"
-                          >
-                            <Eye size={18} />
-                          </button>
-                          
-                          <div className="w-px h-6 bg-slate-200 mx-1 self-center"></div>
+                      <button 
+                        className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                        onClick={() => { setSelectedUser(user); setShowProfile(true); }}
+                        title="View Profile"
+                      >
+                        <Eye size={18} />
+                      </button>
+                      
+                      <div className="w-px h-6 bg-slate-200 mx-1 self-center hide-mobile"></div>
 
-                           <button 
-                             className={`p-2 rounded-lg transition-colors ${user.active ? 'text-slate-400 hover:text-red-600 hover:bg-red-50' : 'text-slate-400 hover:text-green-600 hover:bg-green-50'}`} 
-                             onClick={() => handleBlockToggle(user.id)}
-                             title={user.active ? 'Block User' : 'Unblock User'}
-                           >
-                             {user.active ? <Lock size={18} /> : <Unlock size={18} />}
-                           </button>
-                           <button 
-                             className="p-2 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" 
-                             onClick={() => handleResetPassword(user.id)}
-                             title="Reset Password"
-                           >
-                             <Key size={18} />
-                           </button>
-                           <button 
-                             className="p-2 rounded-lg text-slate-400 hover:text-red-900 hover:bg-red-50 transition-colors" 
-                             onClick={() => handleDelete(user.id)}
-                             title="Delete User"
-                           >
-                             <Trash2 size={18} />
-                           </button>
-                        </>
-                      )}
+                       <button 
+                         className={`p-2 rounded-lg transition-colors ${user.active ? 'text-slate-400 hover:text-red-600 hover:bg-red-50' : 'text-slate-400 hover:text-green-600 hover:bg-green-50'}`} 
+                         onClick={() => handleBlockToggle(user.id)}
+                         title={user.active ? 'Block User' : 'Unblock User'}
+                       >
+                         {user.active ? <Lock size={18} /> : <Unlock size={18} />}
+                       </button>
+                       
+                       <button 
+                         className="p-2 rounded-lg text-slate-400 hover:text-red-900 hover:bg-red-50 transition-colors" 
+                         onClick={() => handleDelete(user.id)}
+                         title="Delete User"
+                       >
+                         <Trash2 size={18} />
+                       </button>
                     </div>
                   </td>
                 </tr>

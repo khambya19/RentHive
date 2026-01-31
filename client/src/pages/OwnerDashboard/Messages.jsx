@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, User, Search, ChevronLeft, Image as ImageIcon, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
 import API_BASE_URL from '../../config/api';
 
-const Messages = () => {
+const Messages = ({ onRead }) => {
+  const { user } = useAuth();
+  const { socket } = useSocket();
   const [conversations, setConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -12,45 +15,43 @@ const Messages = () => {
   const [sending, setSending] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const messagesEndRef = useRef(null);
-  const { user } = useAuth();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Fetch conversations
   useEffect(() => {
     fetchConversations();
   }, []);
 
-  // Scroll to bottom when messages change
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  // Listen for new messages via Socket.IO
   useEffect(() => {
-    const socket = window.socket;
     if (!socket) return;
 
     const handleNewMessage = (message) => {
-      // If message is for current conversation, add it
       if (selectedConversation && 
           (message.senderId === selectedConversation.otherUser.id || 
            message.receiverId === selectedConversation.otherUser.id)) {
-        setMessages(prev => [...prev, message]);
+        setMessages(prev => {
+            if (prev.find(m => m.id === message.id)) return prev;
+            return [...prev, message];
+        });
         markAsRead(selectedConversation.otherUser.id);
       }
-      // Refresh conversations to update last message
       fetchConversations();
     };
 
+    socket.on('receive_message', handleNewMessage);
     socket.on('new_message', handleNewMessage);
 
     return () => {
+      socket.off('receive_message', handleNewMessage);
       socket.off('new_message', handleNewMessage);
     };
-  }, [selectedConversation]);
+  }, [selectedConversation, socket]);
 
   const fetchConversations = async () => {
     try {
@@ -113,9 +114,12 @@ const Messages = () => {
 
       if (response.ok) {
         const sentMessage = await response.json();
-        setMessages(prev => [...prev, sentMessage]);
+        setMessages(prev => {
+          if (prev.find(m => m.id === sentMessage.id)) return prev;
+          return [...prev, sentMessage];
+        });
         setNewMessage('');
-        fetchConversations(); // Update conversations list
+        fetchConversations(); 
       }
     } catch (error) {
       console.error('Error sending message:', error);
@@ -133,6 +137,7 @@ const Messages = () => {
           'Authorization': `Bearer ${token}`
         }
       });
+      if (onRead) onRead();
     } catch (error) {
       console.error('Error marking as read:', error);
     }
@@ -334,11 +339,11 @@ const Messages = () => {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
-              {messages.map((msg) => {
+              {messages.map((msg, index) => {
                 const isSent = msg.senderId === user.id;
                 return (
                   <div
-                    key={msg.id}
+                    key={`${msg.id}-${index}`}
                     className={`mb-4 flex ${isSent ? 'justify-end' : 'justify-start'}`}
                   >
                     <div className={`max-w-[70%] ${isSent ? 'order-2' : 'order-1'}`}>

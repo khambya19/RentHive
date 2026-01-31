@@ -30,16 +30,21 @@ const AutomobilesTable = () => {
   }, [fetchBikes]);
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this vehicle details? This cannot be undone.')) return;
+    if (!window.confirm('Are you sure you want to delete this vehicle? This action cannot be undone.')) return;
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`${API_BASE_URL}/admin/automobiles/${id}`, {
+      const response = await axios.delete(`${API_BASE_URL}/admin/automobiles/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setBikes(prev => prev.filter(b => b.id !== id));
-      if (selectedBike && selectedBike.id === id) setSelectedBike(null);
+      if (response.data.success) {
+        alert('Vehicle deleted successfully');
+        setBikes(prev => prev.filter(b => b.id !== id));
+        if (selectedBike && selectedBike.id === id) setSelectedBike(null);
+      }
     } catch (err) {
-      alert('Failed to delete vehicle');
+      console.error('Delete vehicle error:', err);
+      const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Failed to delete vehicle';
+      alert(errorMsg);
     }
   };
 
@@ -59,7 +64,7 @@ const AutomobilesTable = () => {
           <thead className="bg-slate-50 text-slate-500 uppercase font-bold text-xs tracking-wider">
             <tr>
               <th className="px-6 py-4">Vehicle</th>
-              <th className="px-6 py-4">Owner</th>
+              <th className="px-6 py-4 hide-mobile">Owner</th>
               <th className="px-6 py-4">Type</th>
               <th className="px-6 py-4">Daily Rate</th>
               {/* Removed Status Column */}
@@ -81,7 +86,7 @@ const AutomobilesTable = () => {
                      </p>
                      <p className="text-xs text-slate-500">{bike.year} • {bike.color}</p>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 hide-mobile">
                      <p className="font-bold text-slate-800">{bike.vendor?.name || 'Unknown'}</p>
                      <p className="text-xs text-slate-500">{bike.vendor?.email}</p>
                   </td>

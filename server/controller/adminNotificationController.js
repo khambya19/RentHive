@@ -2,16 +2,6 @@ const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { Op } = require('sequelize');
 
-// Helper to get socket.io instance safely
-const getSocketIO = () => {
-  try {
-    const { io, connectedUsers } = require('../server');
-    return { io, connectedUsers };
-  } catch (err) {
-    console.warn('Socket.IO not available:', err.message);
-    return { io: null, connectedUsers: null };
-  }
-};
 
 /**
  * Send bulk notifications to users by type (renter/owner/lessor/vendor)
@@ -58,14 +48,10 @@ const sendBulkNotifications = async (req, res) => {
     console.log(`📧 Bulk notification sent to ${users.length} ${recipientType}s`);
 
     // Emit to connected users via socket.io
-    const { io, connectedUsers } = getSocketIO();
-    if (io && connectedUsers) {
-      users.forEach(user => {
-        const socketId = connectedUsers.get(String(user.id));
-        if (socketId) {
-          const notification = notifications.find(n => n.user_id === user.id);
-          if (notification) {
-            io.to(socketId).emit('new-notification', {
+    const io = req.app.get('io');
+    if (io) {
+      notifications.forEach(notification => {
+          io.to(`user_${notification.user_id}`).emit('new-notification', {
               id: notification.id,
               title: notification.title,
               message: notification.message,
@@ -73,9 +59,7 @@ const sendBulkNotifications = async (req, res) => {
               link: notification.link,
               isRead: false,
               createdAt: notification.created_at,
-            });
-          }
-        }
+          });
       });
     }
 

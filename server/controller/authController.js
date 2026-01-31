@@ -23,7 +23,7 @@ function validateRegisterBody(body) {
   const { type, fullName, email, phone, password, confirmPassword } = body;
     // Nepali phone validation: must be 10 digits, start with 9
     if (!phone || !/^9\d{9}$/.test(phone)) return 'Phone must be a valid Nepali number (10 digits, starts with 9)';
-  if (!type || !['lessor', 'owner', 'vendor', 'renter'].includes(type)) return 'Invalid type';
+  if (!type || !['lessor', 'owner', 'vendor', 'renter', 'user'].includes(type)) return 'Invalid type';
   if (!fullName) return 'Name required';
   if (!email) return 'Email required';
   if (!password) return 'Password required';

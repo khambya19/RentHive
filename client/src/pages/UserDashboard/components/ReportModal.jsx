@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, AlertTriangle } from 'lucide-react';
 import axios from 'axios';
+import API_BASE_URL from '../../../config/api';
 
 const ReportModal = ({ isOpen, onClose, item, onReportSuccess }) => {
   const [reason, setReason] = useState('');
@@ -30,13 +31,12 @@ const ReportModal = ({ isOpen, onClose, item, onReportSuccess }) => {
     setError('');
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
       const token = localStorage.getItem('token');
 
       await axios.post(
-        `${apiUrl}/reports`,
+        `${API_BASE_URL}/reports`,
         {
-          listingType: item.type,
+          listingType: item.type === 'bike' ? 'bike' : 'property',
           listingId: item.id,
           reason,
           description
@@ -65,7 +65,7 @@ const ReportModal = ({ isOpen, onClose, item, onReportSuccess }) => {
   const isProperty = item.type === 'property';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[11000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div 
         className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}

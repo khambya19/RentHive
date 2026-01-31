@@ -1,10 +1,12 @@
 import noImage from '../../assets/no-image.png';
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
 // import './AllListings.css'; // Commented out to use Tailwind
 import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
 import { RefreshCw, Edit, Trash2, MapPin, ClipboardList, Home, Bike, BedDouble, Bath, Ruler, Calendar, Palette, Hash, X, Check, Upload, Image as ImageIcon } from 'lucide-react';
 import ComprehensiveEditModal from '../../components/ComprehensiveEditModal';
+import ConfirmationModal from '../../components/ConfirmationModal';
 
 
 const PROPERTY_AMENITIES = ['WiFi', 'Parking', 'AC', 'Heating', 'Furnished', 'Kitchen', 'Laundry', 'Balcony', 'Garden', 'Security', 'Elevator', 'Pet Friendly'];
@@ -21,6 +23,9 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
   const [editingItem, setEditingItem] = useState(null);
   const [editingType, setEditingType] = useState(null); // 'property' or 'automobile'
   const [editForm, setEditForm] = useState({});
+  const [confirmModal, setConfirmModal] = useState({ show: false, type: 'property', id: null });
+  const [ownerApplications, setOwnerApplications] = useState([]);
+  const [rentedMap, setRentedMap] = useState({});
 
   const fetchProperties = useCallback(async () => {
     try {
@@ -28,7 +33,7 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
       const response = await fetch(`${API_BASE_URL}/properties`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         setProperties(Array.isArray(data) ? data.filter(Boolean) : []); // Filter nulls
@@ -47,7 +52,7 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
       const response = await fetch(`${API_BASE_URL}/bikes/vendor`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         setBikes(Array.isArray(data) ? data.filter(Boolean) : []); // Filter nulls
@@ -60,19 +65,69 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
     }
   }, []);
 
+  const fetchOwnerApplications = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/bookings/owner/applications`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setOwnerApplications(Array.isArray(data) ? data.filter(Boolean) : []);
+        // compute rented counts: count applications with status approved or paid
+        const map = {};
+        (data || []).forEach(app => {
+          const status = (app.status || '').toString().toLowerCase();
+          if (['approved', 'paid'].includes(status)) {
+            // normalize server listingType: server may return 'bike' while UI uses 'automobile'
+            let typeKey = (app.type || app.listingType || '').toString().toLowerCase();
+            if (typeKey === 'bike') typeKey = 'automobile';
+            const listingId = app.listingId || (app.listing && app.listing.id);
+            const key = `${typeKey}-${listingId}`;
+            map[key] = (map[key] || 0) + 1;
+          }
+        });
+        setRentedMap(map);
+      } else {
+        setOwnerApplications([]);
+        setRentedMap({});
+      }
+    } catch (error) {
+      setOwnerApplications([]);
+      setRentedMap({});
+    }
+  }, []);
+
   const fetchAllListings = useCallback(async () => {
     setLoading(true);
-    await Promise.all([fetchProperties(), fetchBikes()]);
+    await Promise.all([fetchProperties(), fetchBikes(), fetchOwnerApplications()]);
     setLoading(false);
-  }, [fetchProperties, fetchBikes]);
+  }, [fetchProperties, fetchBikes, fetchOwnerApplications]);
 
   useEffect(() => {
     fetchAllListings();
   }, [fetchAllListings]);
 
-  const handleDeleteProperty = async (propertyId) => {
-    if (!window.confirm('Are you sure you want to delete this property?')) return;
+  // Real-time updates: refresh rented counts when server signals changes
+  const { socket } = useSocket();
+  useEffect(() => {
+    if (!socket) return;
+    const handler = () => {
+      // refresh applications and listings to update rented badges
+      fetchOwnerApplications();
+      fetchProperties();
+      fetchBikes();
+    };
+    socket.on('refresh_counts', handler);
+    return () => { socket.off('refresh_counts', handler); };
+  }, [socket, fetchOwnerApplications, fetchProperties, fetchBikes]);
 
+  const handleDeleteProperty = (propertyId) => {
+    setConfirmModal({ show: true, type: 'property', id: propertyId });
+  };
+
+  const confirmDeleteProperty = async (propertyId) => {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/properties/${propertyId}`, {
@@ -87,14 +142,15 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
         showError('Error', 'Failed to delete property');
       }
     } catch (error) {
-      // console.error('Error deleting property:', error);
       showError('Error', 'Failed to delete property');
     }
   };
 
-  const handleDeleteBike = async (bikeId) => {
-    if (!window.confirm('Are you sure you want to delete this automobile?')) return;
+  const handleDeleteBike = (bikeId) => {
+    setConfirmModal({ show: true, type: 'automobile', id: bikeId });
+  };
 
+  const confirmDeleteBike = async (bikeId) => {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/bikes/vendor/${bikeId}`, {
@@ -109,7 +165,6 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
         showError('Error', 'Failed to delete automobile');
       }
     } catch (error) {
-      // console.error('Error deleting automobile:', error);
       showError('Error', 'Failed to delete automobile');
     }
   };
@@ -185,7 +240,7 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
 
   const getFilteredListings = () => {
     const allListings = [];
-    
+
     if (filterType === 'all' || filterType === 'properties') {
       (properties || []).forEach(property => {
         if (property) {
@@ -193,7 +248,7 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
         }
       });
     }
-    
+
     if (filterType === 'all' || filterType === 'automobiles') {
       (bikes || []).forEach(bike => {
         if (bike) {
@@ -201,7 +256,7 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
         }
       });
     }
-    
+
     return allListings.sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
       const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
@@ -217,8 +272,8 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
       </div>
       <div className="h-48 overflow-hidden bg-gray-100 relative">
         {property.images && property.images.length > 0 ? (
-          <img 
-            src={`${SERVER_BASE_URL}/uploads/properties/${property.images[0]}`} 
+          <img
+            src={`${SERVER_BASE_URL}/uploads/properties/${property.images[0]}`}
             alt={property.title}
             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
             onError={(e) => {
@@ -237,13 +292,12 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
           <p className="text-xs font-medium text-white/90 drop-shadow-md truncate">{property.city}, {property.address}</p>
         </div>
       </div>
-      
+
       <div className="p-5 flex-1 flex flex-col">
         <div className="flex items-center justify-between mb-4">
-          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
-            property.status === 'Available' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${property.status === 'Available' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
             property.status === 'Rented' ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-amber-50 text-amber-600 border-amber-100'
-          }`}>
+            }`}>
             {property.status}
           </span>
           <p className="text-xl font-bold text-slate-800">
@@ -269,19 +323,25 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
         </div>
 
         <div className="flex items-center gap-3 mt-auto pt-4 border-t border-slate-100">
-          <button 
+          <button
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-200 transition-all group/btn"
             onClick={() => handleEditProperty(property)}
           >
             <Edit size={14} className="group-hover/btn:scale-110 transition-transform" /> Edit
           </button>
-          <button 
+          <button
             className="flex items-center justify-center p-2 bg-white border border-slate-200 text-rose-500 rounded-xl hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-all group/delete"
             onClick={() => handleDeleteProperty(property.id)}
             title="Delete Property"
           >
             <Trash2 size={18} className="group-hover/delete:scale-110 transition-transform" />
           </button>
+          {/* rented badge (no count) */}
+          { (rentedMap[`property-${property.id}`] || 0) > 0 && (
+            <div className="absolute top-4 right-4 bg-rose-50 text-rose-600 text-xs font-semibold px-2 py-1 rounded-full shadow-sm">
+              Rented
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -295,8 +355,8 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
       </div>
       <div className="h-48 overflow-hidden bg-gray-100 relative">
         {bike.images && bike.images.length > 0 ? (
-          <img 
-            src={bike.images[0].startsWith('/uploads') ? `${SERVER_BASE_URL}${bike.images[0]}` : `${SERVER_BASE_URL}/uploads/bikes/${bike.images[0]}`}
+          <img
+            src={`${SERVER_BASE_URL}/uploads/bikes/${bike.images[0]}`}
             alt={`${bike.brand} ${bike.model}`}
             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
             onError={(e) => {
@@ -321,10 +381,9 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
 
       <div className="p-5 flex-1 flex flex-col">
         <div className="flex items-center justify-between mb-4">
-          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
-            bike.status === 'Available' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${bike.status === 'Available' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
             bike.status === 'Rented' ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-amber-50 text-amber-600 border-amber-100'
-          }`}>
+            }`}>
             {bike.status}
           </span>
           <p className="text-xl font-bold text-slate-800">
@@ -350,19 +409,25 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
         </div>
 
         <div className="flex items-center gap-3 mt-auto pt-4 border-t border-slate-100">
-          <button 
+          <button
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-50 hover:text-blue-600 hover:border-blue-200 transition-all group/btn"
             onClick={() => handleEditBike(bike)}
           >
             <Edit size={14} className="group-hover/btn:scale-110 transition-transform" /> Edit
           </button>
-          <button 
+          <button
             className="flex items-center justify-center p-2 bg-white border border-slate-200 text-rose-500 rounded-xl hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-all group/delete"
             onClick={() => handleDeleteBike(bike.id)}
             title="Delete Automobile"
           >
             <Trash2 size={18} className="group-hover/delete:scale-110 transition-transform" />
           </button>
+          {/* rented badge (no count) */}
+          { (rentedMap[`automobile-${bike.id}`] || 0) > 0 && (
+            <div className="absolute top-4 right-4 bg-rose-50 text-rose-600 text-xs font-semibold px-2 py-1 rounded-full shadow-sm">
+              Rented
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -379,6 +444,19 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
 
   const filteredListings = getFilteredListings();
 
+  // Compute rented/available counts using both listing.status and owner application map (rentedMap)
+  const rentedPropertyCount = (properties || []).reduce((acc, p) => {
+    const key = `property-${p.id}`;
+    return acc + ((p && p.status === 'Rented') || (rentedMap[key] || 0) > 0 ? 1 : 0);
+  }, 0);
+  const availablePropertyCount = Math.max(0, (properties || []).length - rentedPropertyCount);
+
+  const rentedBikeCount = (bikes || []).reduce((acc, b) => {
+    const key = `automobile-${b.id}`;
+    return acc + ((b && b.status === 'Rented') || (rentedMap[key] || 0) > 0 ? 1 : 0);
+  }, 0);
+  const availableBikeCount = Math.max(0, (bikes || []).length - rentedBikeCount);
+
   return (
     <div className="w-full h-full">
       {/* Compact Stats Header */}
@@ -387,7 +465,7 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
         <div onClick={() => setFilterType('all')} className={`relative bg-linear-to-br from-violet-600 via-purple-600 to-fuchsia-600 rounded-xl p-5 overflow-hidden group cursor-pointer transform hover:scale-[1.02] transition-all duration-300 shadow-xl hover:shadow-2xl ${filterType === 'all' ? 'ring-4 ring-purple-300' : ''}`}>
           <div className="absolute inset-0 bg-linear-to-br from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
           <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-          
+
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-2">
               <div className="p-2 bg-white/20 backdrop-blur-sm rounded-lg">
@@ -409,8 +487,8 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
 
         {/* Properties Card */}
         <div onClick={() => setFilterType('properties')} className={`relative bg-white rounded-xl p-5 border-2 overflow-hidden group cursor-pointer transition-all duration-300 shadow-md hover:shadow-xl ${filterType === 'properties' ? 'border-indigo-500 ring-4 ring-indigo-200' : 'border-slate-200 hover:border-indigo-300'}`}>
-          <div className="absolute top-0 right-0 w-24 h-24 bg-linear-to-br from-indigo-50 to-transparent rounded-full -mr-12 -mt-12 group-hover:scale-125 transition-transform duration-500"></div>
-          
+          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-indigo-50 to-transparent rounded-full -mr-12 -mt-12 group-hover:scale-125 transition-transform duration-500"></div>
+
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-3">
               <div className="p-2 bg-linear-to-br from-indigo-500 to-indigo-600 rounded-lg shadow-lg shadow-indigo-200/50 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
@@ -423,12 +501,12 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
             <div className="flex items-center gap-2 text-[10px]">
               <div className="flex items-center gap-1 text-emerald-600">
                 <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-                <span className="font-semibold">{properties.filter(p => p.status === 'Available').length} Available</span>
+                <span className="font-semibold">{availablePropertyCount} Available</span>
               </div>
               <div className="text-slate-300">•</div>
               <div className="flex items-center gap-1 text-rose-600">
                 <div className="w-1.5 h-1.5 bg-rose-500 rounded-full"></div>
-                <span className="font-semibold">{properties.filter(p => p.status === 'Rented').length} Rented</span>
+                <span className="font-semibold">{rentedPropertyCount} Rented</span>
               </div>
             </div>
           </div>
@@ -436,8 +514,8 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
 
         {/* Automobiles Card */}
         <div onClick={() => setFilterType('automobiles')} className={`relative bg-white rounded-xl p-5 border-2 overflow-hidden group cursor-pointer transition-all duration-300 shadow-md hover:shadow-xl ${filterType === 'automobiles' ? 'border-blue-500 ring-4 ring-blue-200' : 'border-slate-200 hover:border-blue-300'}`}>
-          <div className="absolute top-0 right-0 w-24 h-24 bg-linear-to-br from-blue-50 to-transparent rounded-full -mr-12 -mt-12 group-hover:scale-125 transition-transform duration-500"></div>
-          
+          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-blue-50 to-transparent rounded-full -mr-12 -mt-12 group-hover:scale-125 transition-transform duration-500"></div>
+
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-3">
               <div className="p-2 bg-linear-to-br from-blue-500 to-blue-600 rounded-lg shadow-lg shadow-blue-200/50 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
@@ -450,12 +528,12 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
             <div className="flex items-center gap-2 text-[10px]">
               <div className="flex items-center gap-1 text-emerald-600">
                 <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-                <span className="font-semibold">{bikes.filter(b => b.status === 'Available').length} Available</span>
+                <span className="font-semibold">{availableBikeCount} Available</span>
               </div>
               <div className="text-slate-300">•</div>
               <div className="flex items-center gap-1 text-rose-600">
                 <div className="w-1.5 h-1.5 bg-rose-500 rounded-full"></div>
-                <span className="font-semibold">{bikes.filter(b => b.status === 'Rented').length} Rented</span>
+                <span className="font-semibold">{rentedBikeCount} Rented</span>
               </div>
             </div>
           </div>
@@ -468,7 +546,7 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
           <span className="w-1 h-5 bg-linear-to-b from-indigo-600 to-purple-600 rounded-full"></span>
           {filterType === 'all' ? 'All Listings' : filterType === 'properties' ? 'Properties' : 'Automobiles'}
         </h2>
-        <button 
+        <button
           className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-200 transition-all flex items-center gap-1.5 shadow-sm"
           onClick={fetchAllListings}
         >
@@ -487,9 +565,9 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
             <p className="text-gray-500 max-w-md mx-auto mb-8 text-lg">You haven't posted any properties or automobiles yet. Start by adding a new listing to reach more customers!</p>
           </div>
         ) : (
-          filteredListings.map(listing => 
-            listing.type === 'property' 
-              ? renderPropertyCard(listing) 
+          filteredListings.map(listing =>
+            listing.type === 'property'
+              ? renderPropertyCard(listing)
               : renderBikeCard(listing)
           )
         )}
@@ -503,6 +581,15 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
         editForm={editForm}
         setEditForm={setEditForm}
         onSubmit={editingType === 'property' ? handleUpdateProperty : handleUpdateBike}
+      />
+
+      <ConfirmationModal
+        isOpen={confirmModal.show}
+        onClose={() => setConfirmModal({ show: false, type: 'property', id: null })}
+        onConfirm={() => confirmModal.type === 'property' ? confirmDeleteProperty(confirmModal.id) : confirmDeleteBike(confirmModal.id)}
+        title={confirmModal.type === 'property' ? "Delete Property" : "Delete Automobile"}
+        message={`Are you sure you want to remove this ${confirmModal.type}? This action cannot be undone.`}
+        confirmText="Remove"
       />
     </div>
   );

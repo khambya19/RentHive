@@ -24,21 +24,25 @@ const ProtectedRoute = ({ children, allowedTypes }) => {
         return <Navigate to="/login" replace />;
     }
     // Check both user.type and user.role for compatibility
-    const userType = user.type || user.role;
-    if (allowedTypes && !allowedTypes.includes(userType)) {
-        // Redirect based on user type
-        if (userType === 'renter' || userType === 'user') {
-            return <Navigate to="/user/dashboard" replace />;
-        } else if (['owner', 'vendor', 'lessor'].includes(userType)) {
+    const userRole = user.type || user.role;
+
+    // Check if the user's role is in the allowed types
+    if (allowedTypes && !allowedTypes.includes(userRole)) {
+        // Redirect based on user role to their correct dashboard
+        if (userRole === 'owner') {
             return <Navigate to="/owner/dashboard" replace />;
-        } else if (['admin', 'super_admin'].includes(userType)) {
+        } else if (['user', 'renter', 'lessor'].includes(userRole)) {
+            return <Navigate to="/user/dashboard" replace />;
+        } else if (userRole === 'vendor') {
+            return <Navigate to="/vendor/dashboard" replace />;
+        } else if (['admin', 'super_admin'].includes(userRole)) {
             return <Navigate to="/admin/dashboard" replace />;
         } else {
             // DEBUGGING: Show why access is denied
             return (
                 <div style={{ padding: 20, textAlign: 'center', marginTop: 50 }}>
                     <h2>Access Denied</h2>
-                    <p>Current User Type: <strong>{userType || 'undefined'}</strong></p>
+                    <p>Current User Type: <strong>{userRole || 'undefined'}</strong></p>
                     <p>Allowed Types: <strong>{allowedTypes ? allowedTypes.join(', ') : 'None'}</strong></p>
                     <p>User ID: {user.id}</p>
                     <button onClick={() => window.location.href = '/'}>Go Home</button>
@@ -56,19 +60,19 @@ function AppContent() {
     // console.log("AppContent rendered");
     const location = useLocation();
     // Hide footer on auth pages AND dashboard pages
-    const showFooter = location.pathname !== '/login' && 
-                       location.pathname !== '/register' &&
-                       location.pathname !== '/register-user' && 
-                       location.pathname !== '/register-owner' &&
-                       location.pathname !== '/forgot-password' &&
-                       !location.pathname.startsWith('/user/dashboard') &&
-                       !location.pathname.startsWith('/owner/dashboard') &&
-                       !location.pathname.startsWith('/admin/dashboard');
+    const showFooter = location.pathname !== '/login' &&
+        location.pathname !== '/register' &&
+        location.pathname !== '/register-user' &&
+        location.pathname !== '/register-owner' &&
+        location.pathname !== '/forgot-password' &&
+        !location.pathname.startsWith('/user/dashboard') &&
+        !location.pathname.startsWith('/owner/dashboard') &&
+        !location.pathname.startsWith('/admin/dashboard');
 
     // Hide navbar on dashboard pages
     const showNavBar = !location.pathname.startsWith('/user/dashboard') &&
-                       !location.pathname.startsWith('/owner/dashboard') &&
-                       !location.pathname.startsWith('/admin/dashboard');
+        !location.pathname.startsWith('/owner/dashboard') &&
+        !location.pathname.startsWith('/admin/dashboard');
 
     return (
         <div className="App">
@@ -81,12 +85,12 @@ function AppContent() {
                 <Route path="/register-user" element={<RegisterUser />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/user/dashboard" element={
-                    <ProtectedRoute allowedTypes={['renter', 'user']}>
+                    <ProtectedRoute allowedTypes={['user', 'renter', 'lessor']}>
                         <UserDashboard />
                     </ProtectedRoute>
                 } />
                 <Route path="/owner/dashboard" element={
-                    <ProtectedRoute allowedTypes={['owner', 'vendor', 'lessor']}>
+                    <ProtectedRoute allowedTypes={['owner', 'vendor']}>
                         <OwnerDashboard />
                     </ProtectedRoute>
                 } />
@@ -97,7 +101,7 @@ function AppContent() {
                     </ProtectedRoute>
                 } />
                 <Route path="/user/ratings" element={
-                    <ProtectedRoute allowedTypes={['renter', 'user']}>
+                    <ProtectedRoute allowedTypes={['user', 'renter']}>
                         <RatingPage />
                     </ProtectedRoute>
                 } />
@@ -110,15 +114,15 @@ function AppContent() {
 
 
 function App() {
-        return (
-            <AuthProvider>
-                <SocketProvider>
-                    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-                        <AppContent />
-                    </BrowserRouter>
-                </SocketProvider>
-            </AuthProvider>
-        );
+    return (
+        <AuthProvider>
+            <SocketProvider>
+                <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                    <AppContent />
+                </BrowserRouter>
+            </SocketProvider>
+        </AuthProvider>
+    );
 }
 
 export default App;

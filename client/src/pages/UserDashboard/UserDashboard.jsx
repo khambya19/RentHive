@@ -13,7 +13,7 @@ import Saved from './components/Saved';
 import Report from './components/Report';
 import UserMessages from './components/UserMessages';
 import ListingDetail from './components/ListingDetail';
-import PropertyModal from './components/PropertyModal'; 
+import PropertyModal from './components/PropertyModal';
 import PaymentModal from './components/PaymentModal';
 import BookingConfirmationModal from './components/BookingConfirmationModal';
 import ReportModal from './components/ReportModal';
@@ -22,7 +22,6 @@ import './UserDashboard.css';
 
 const UserDashboard = () => {
   const { user, loading, logout } = useAuth();
-  
   // Tab and UI State
   const [activeTab, setActiveTab] = useState(() => {
     // Initialize from sessionStorage
@@ -49,16 +48,16 @@ const UserDashboard = () => {
         sessionStorage.removeItem('dashboardTab');
       }
     };
-    
+
     // Check immediately
     checkTabChange();
-    
+
     // Also listen for storage events (in case notification is clicked from another tab/window)
     window.addEventListener('storage', checkTabChange);
-    
+
     // Check periodically (as a fallback since storage event doesn't fire in same tab)
     const interval = setInterval(checkTabChange, 100);
-    
+
     return () => {
       window.removeEventListener('storage', checkTabChange);
       clearInterval(interval);
@@ -129,7 +128,6 @@ const UserDashboard = () => {
   }, []);
 
   const fetchApplications = useCallback(async (force = false) => {
-    /* ... existing application fetch logic ... */
     if (hasFetchedApplications.current && !force) return;
     setApplicationsLoading(true);
     hasFetchedApplications.current = true;
@@ -152,19 +150,19 @@ const UserDashboard = () => {
   }, []);
 
   const fetchUnreadMessages = useCallback(async () => {
-     try {
-       const token = localStorage.getItem('token');
-       if (!token) return;
-       const res = await fetch(`${API_BASE_URL}/messages/unread-count`, { 
-          headers: { Authorization: `Bearer ${token}` } 
-       });
-       if (res.ok) {
-          const data = await res.json();
-          setMessagesCount(data.count || 0);
-       }
-     } catch (err) {
-       console.error(err);
-     }
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const res = await fetch(`${API_BASE_URL}/messages/unread-count`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMessagesCount(data.count || 0);
+      }
+    } catch (err) {
+      console.error(err);
+    }
   }, []);
 
   const fetchRentals = useCallback(async (force = false) => {
@@ -201,7 +199,6 @@ const UserDashboard = () => {
         const data = await res.json();
         const props = (data.properties || []).map(p => ({ ...p, type: 'property' }));
         const bikes = (data.bikes || []).map(b => ({ ...b, type: 'bike' }));
-        // Ensure uniqueness when setting state
         const combined = [...props, ...bikes];
         const unique = combined.filter((v, i, a) => a.findIndex(t => (t.id === v.id && t.type === v.type)) === i);
         setSavedListings(unique);
@@ -213,43 +210,6 @@ const UserDashboard = () => {
       console.error('❌ Network error fetching saved listings:', err);
     }
   }, []);
-
-  // --- Tab-Based Lazy Fetching ---
-  // Only fetch data when the user actually navigates to the tab
-  useEffect(() => {
-    if (!user?.id) return;
-
-    // Fetch initial data if not already done
-    if (!hasFetchedSavedListings.current) {
-      fetchSavedListings();
-    }
-
-    // Lazy load other sections based on navigation
-    // Use guards directly in effect to be 100% safe
-    if (activeTab === 'browse' && !hasFetchedMarketData.current) {
-      fetchMarketListings();
-    }
-    if (activeTab === 'applications' && !hasFetchedApplications.current) {
-      fetchApplications();
-    }
-    if (activeTab === 'rentals' && !hasFetchedRentals.current) {
-      fetchRentals();
-    }
-    if (activeTab === 'overview') {
-      if (!hasFetchedApplications.current) fetchApplications();
-      if (!hasFetchedRentals.current) fetchRentals();
-    }
-  }, [activeTab, user?.id, fetchMarketListings, fetchApplications, fetchRentals, fetchSavedListings]);
-
-  // Handle initial transition state
-  useEffect(() => {
-    if (user?.id) {
-       // Mark initial load as "done" when we have a user
-       setIsInitialLoadDone(true);
-       fetchUnreadMessages(); /* Initial fetch */
-       fetchAllDashboardCounts();
-    }
-  }, [user?.id, fetchUnreadMessages]);
 
   const fetchAllDashboardCounts = useCallback(async () => {
     try {
@@ -289,31 +249,68 @@ const UserDashboard = () => {
     }
   }, []);
 
+  // --- Tab-Based Lazy Fetching ---
+  // Only fetch data when the user actually navigates to the tab
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // Fetch initial data if not already done
+    if (!hasFetchedSavedListings.current) {
+      fetchSavedListings();
+    }
+
+    // Lazy load other sections based on navigation
+    // Use guards directly in effect to be 100% safe
+    if (activeTab === 'browse' && !hasFetchedMarketData.current) {
+      fetchMarketListings();
+    }
+    if (activeTab === 'applications' && !hasFetchedApplications.current) {
+      fetchApplications();
+    }
+    if (activeTab === 'rentals' && !hasFetchedRentals.current) {
+      fetchRentals();
+    }
+    if (activeTab === 'overview') {
+      if (!hasFetchedApplications.current) fetchApplications();
+      if (!hasFetchedRentals.current) fetchRentals();
+    }
+  }, [activeTab, user?.id, fetchMarketListings, fetchApplications, fetchRentals, fetchSavedListings]);
+
+  // Handle initial transition state
+  useEffect(() => {
+    if (user?.id) {
+      // Mark initial load as "done" when we have a user
+      setIsInitialLoadDone(true);
+      fetchUnreadMessages(); /* Initial fetch */
+      fetchAllDashboardCounts();
+    }
+  }, [user?.id, fetchUnreadMessages, fetchAllDashboardCounts]);
+
   // Real-time Listeners
   useEffect(() => {
-     if (!socket) return;
-     
-     socket.on('new_message', () => {
-         setMessagesCount(prev => prev + 1);
-         showToast('New message received!', 'info');
-     });
+    if (!socket) return;
 
-     socket.on('booking_updated', () => {
-         fetchApplications(true);
-         // Optionally refresh rentals if status changed to active
-         fetchRentals(true); 
-         showToast('Booking status updated', 'info');
-     });
+    socket.on('new_message', () => {
+      setMessagesCount(prev => prev + 1);
+      showToast('New message received!', 'info');
+    });
 
-     socket.on('refresh_counts', () => {
-         fetchAllDashboardCounts();
-     });
+    socket.on('booking_updated', () => {
+      fetchApplications(true);
+      // Optionally refresh rentals if status changed to active
+      fetchRentals(true);
+      showToast('Booking status updated', 'info');
+    });
 
-     return () => {
-         socket.off('new_message');
-         socket.off('booking_updated');
-         socket.off('refresh_counts');
-     };
+    socket.on('refresh_counts', () => {
+      fetchAllDashboardCounts();
+    });
+
+    return () => {
+      socket.off('new_message');
+      socket.off('booking_updated');
+      socket.off('refresh_counts');
+    };
   }, [socket, fetchApplications, fetchRentals, showToast, fetchAllDashboardCounts]);
 
   // --- Handlers ---
@@ -334,12 +331,12 @@ const UserDashboard = () => {
           body: JSON.stringify({ listingId: listing.id, listingType: listingType })
         });
         if (!res.ok) {
-           setSavedListings(prev => [...prev, listing]);
-           setToast({ type: 'error', message: 'Failed to remove from favorites' });
+          setSavedListings(prev => [...prev, listing]);
+          setToast({ type: 'error', message: 'Failed to remove from favorites' });
         } else {
-           setToast({ type: 'success', message: 'Removed from favorites' });
-           // Refresh counts
-           fetchAllDashboardCounts();
+          setToast({ type: 'success', message: 'Removed from favorites' });
+          // Refresh counts
+          fetchAllDashboardCounts();
         }
       } catch (err) {
         setSavedListings(prev => [...prev, listing]);
@@ -353,7 +350,7 @@ const UserDashboard = () => {
         if (prev.some(l => String(l.id) === String(listing.id) && l.type === listingType)) return prev;
         return [...prev, simplifiedListing];
       });
-      
+
       try {
         const token = localStorage.getItem('token');
         const res = await fetch(`${API_BASE_URL}/users/save-listing`, {
@@ -383,18 +380,18 @@ const UserDashboard = () => {
   // Culprit Fix: Memoize the KYC check so the Browse component doesn't 
   // get destroyed every time the user object updates (e.g. notifications sync)
   const isKycApproved = React.useMemo(() => user?.kycStatus === 'approved', [user?.kycStatus]);
-  
+
   // Handler for opening property detailed view from Browse
   const handleViewProperty = useCallback((listing) => {
     // Prevent multiple rapid clicks
     if (isViewingDetails.current) return;
     isViewingDetails.current = true;
-    
+
     // Better type detection: properties have 'title', bikes have 'dailyRate' or 'brand'
     const type = listing.type || (listing.dailyRate ? 'bike' : 'property');
     // Set immediately with available data to show detail view
     setSelectedListing({ ...listing, type });
-    
+
     // Reset after a short delay
     setTimeout(() => {
       isViewingDetails.current = false;
@@ -426,18 +423,18 @@ const UserDashboard = () => {
 
   const handleConfirmBooking = useCallback(async () => {
     if (!confirmationData) return;
-    
+
     try {
       const token = localStorage.getItem('token');
       const { bookingDetails, type, ...listing } = confirmationData;
-      
+
       // Submit booking application
       const rawType = type || (listing.title ? 'property' : 'bike');
       const normalizedType = (rawType === 'automobile' || rawType === 'bike') ? 'bike' : 'property';
 
       const response = await fetch(`${API_BASE_URL}/bookings/apply`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
@@ -450,7 +447,7 @@ const UserDashboard = () => {
           totalAmount: bookingDetails.grandTotal || 0
         })
       });
-      
+
       if (response.ok) {
         setConfirmationData(null);
         setSelectedListing(null);
@@ -462,12 +459,12 @@ const UserDashboard = () => {
       } else {
         const errorData = await response.json().catch(() => ({}));
         console.error('❌ Booking Application Failed:', errorData);
-        
+
         let displayMessage = errorData.message || 'Failed to submit application';
         if (displayMessage.includes('already has a booking')) {
           displayMessage = 'These dates are already reserved or paid for by another user. Please choose different dates.';
         }
-        
+
         showToast(displayMessage, 'error');
       }
     } catch (error) {
@@ -480,7 +477,7 @@ const UserDashboard = () => {
     setBookingData(null);
     setActiveTab('rentals');
   }, []);
-  
+
   const handlePaymentInitiate = useCallback((application) => {
     console.log("Initiating payment for application:", application);
     // Convert application to booking data format for PaymentModal
@@ -591,9 +588,9 @@ const UserDashboard = () => {
       // Send initial message to start conversation
       const token = localStorage.getItem('token');
       const API_BASE_URL = (await import('../../config/api')).default;
-      
+
       const initialMessage = `Hi! I'm interested in your ${property.type === 'property' ? 'property' : 'bike'}: ${property.title || property.brand || ''}. Could you provide more details?`;
-      
+
       await fetch(`${API_BASE_URL}/messages/send`, {
         method: 'POST',
         headers: {
@@ -620,9 +617,9 @@ const UserDashboard = () => {
 
   return (
     <div className="user-dashboard flex h-screen min-h-screen bg-slate-50 overflow-hidden relative">
-      <Sidebar 
-        activeTab={activeTab} 
-        setActiveTab={handleSetActiveTab} 
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={handleSetActiveTab}
         collapsed={sidebarCollapsed}
         setCollapsed={setSidebarCollapsed}
         mobileMenuOpen={mobileMenuOpen}
@@ -637,16 +634,16 @@ const UserDashboard = () => {
       />
       <main className="user-main-content flex-1 flex flex-col h-screen overflow-hidden bg-slate-50 relative min-w-0">
         <Header
-          activeTab={activeTab} 
+          activeTab={activeTab}
           setMobileMenuOpen={handleSetMobileMenuOpen}
           mobileMenuOpen={mobileMenuOpen}
         />
         <div className="flex-1 overflow-y-auto bg-linear-to-br from-slate-50 via-white to-blue-50/30 px-6 sm:px-10 py-6">
           <div className="w-full max-w-full">
             {activeTab === 'overview' && (
-              <Overview 
-                fullWidth 
-                setActiveTab={setActiveTab} 
+              <Overview
+                fullWidth
+                setActiveTab={setActiveTab}
                 stats={{
                   activeRentals: rentals.length,
                   pendingApplications: applications.filter(a => a.status === 'Pending').length,
@@ -658,7 +655,7 @@ const UserDashboard = () => {
             {/* Browse - Requires KYC */}
             {activeTab === 'browse' && (
               isKycApproved ? (
-                <Browse 
+                <Browse
                   onViewProperty={handleViewProperty}
                   properties={marketProperties}
                   bikes={marketBikes}
@@ -675,10 +672,10 @@ const UserDashboard = () => {
                   </div>
                   <h2 className="text-2xl font-bold text-gray-800 mb-4">KYC Verification Required</h2>
                   <p className="text-gray-600 mb-6">
-                    To browse and view property listings, you need to complete your KYC verification first. 
+                    To browse and view property listings, you need to complete your KYC verification first.
                     This helps us ensure a safe and trusted community.
                   </p>
-                  <button 
+                  <button
                     onClick={() => setActiveTab('settings')}
                     className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-all"
                   >
@@ -690,7 +687,7 @@ const UserDashboard = () => {
             {/* Applications - Requires KYC */}
             {activeTab === 'applications' && (
               isKycApproved ? (
-                <Applications 
+                <Applications
                   onPaymentInitiate={handlePaymentInitiate}
                   onViewDetails={handleViewApplicationDetails}
                   applications={applications}
@@ -708,7 +705,7 @@ const UserDashboard = () => {
                     You need to verify your identity before you can submit rental applications.
                     Complete your KYC verification in Settings.
                   </p>
-                  <button 
+                  <button
                     onClick={() => setActiveTab('settings')}
                     className="px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg transition-all"
                   >
@@ -719,7 +716,7 @@ const UserDashboard = () => {
             )}
             {/* Rentals */}
             {activeTab === 'rentals' && (
-              <Rentals 
+              <Rentals
                 rentals={rentals}
                 loading={rentalsLoading}
                 onRefresh={handleRefreshRentals}
@@ -731,8 +728,8 @@ const UserDashboard = () => {
             {activeTab === 'payments' && <Payments />}
             {/* Saved */}
             {activeTab === 'saved' && (
-              <Saved 
-                savedListings={savedListings} 
+              <Saved
+                savedListings={savedListings}
                 handleUnsaveListing={handleUnsaveListing}
                 onViewProperty={handleViewProperty}
               />
@@ -751,13 +748,28 @@ const UserDashboard = () => {
             )}
           </div>
         </div>
+        {bookingData && (
+          <PaymentModal
+            bookingData={bookingData}
+            onClose={() => setBookingData(null)}
+            onPaymentComplete={handlePaymentComplete}
+          />
+        )}
+        {confirmationData && (
+          <BookingConfirmationModal
+            listing={confirmationData}
+            bookingDetails={confirmationData.bookingDetails}
+            onConfirm={handleConfirmBooking}
+            onCancel={() => setConfirmationData(null)}
+          />
+        )}
       </main>
 
       {/* Full Screen Overlay for Details - High Z-Index to cover Sidebar */}
       {selectedListing && (
         <div className="fixed inset-0 lg:left-72 bg-white z-[10001] animate-in fade-in zoom-in duration-300 overflow-hidden flex flex-col">
-          <ListingDetail 
-            listing={selectedListing} 
+          <ListingDetail
+            listing={selectedListing}
             onBack={handleCloseDetail}
             onToggleSave={handleToggleSave}
             isSaved={savedListings.some(l => String(l.id) === String(selectedListing.id) && l.type === (selectedListing.type || (selectedListing.dailyRate ? 'bike' : 'property')))}
@@ -773,27 +785,27 @@ const UserDashboard = () => {
       {/* Modals - Must be at root level for proper Z-Index stacking */}
       {bookingData && (
         <div className="fixed inset-0 z-[10005]">
-          <PaymentModal 
-            bookingData={bookingData} 
+          <PaymentModal
+            bookingData={bookingData}
             onClose={() => setBookingData(null)}
             onPaymentComplete={handlePaymentComplete}
           />
         </div>
       )}
-      
+
       {confirmationData && (
         <div className="fixed inset-0 z-[10005]">
-            <BookingConfirmationModal
-                listing={confirmationData}
-                bookingDetails={confirmationData.bookingDetails}
-                onConfirm={handleConfirmBooking}
-                onCancel={() => setConfirmationData(null)}
-            />
+          <BookingConfirmationModal
+            listing={confirmationData}
+            bookingDetails={confirmationData.bookingDetails}
+            onConfirm={handleConfirmBooking}
+            onCancel={() => setConfirmationData(null)}
+          />
         </div>
       )}
 
       {reportModalOpen && itemToReport && (
-        <ReportModal 
+        <ReportModal
           isOpen={reportModalOpen}
           onClose={() => setReportModalOpen(false)}
           item={itemToReport}
@@ -807,7 +819,7 @@ const UserDashboard = () => {
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-rose-600"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-rose-600"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
               </div>
               <h3 className="text-xl font-bold text-slate-900">Confirm Logout</h3>
             </div>

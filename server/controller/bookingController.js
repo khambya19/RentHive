@@ -8,6 +8,7 @@ const Booking = require('../models/Booking');
 const BikeBooking = require('../models/BikeBooking');
 const Payment = require('../models/Payment');
 const sendEmail = require('../utils/mailer');
+const getOwnerStats = require('../utils/ownerStats');
 
 // Submit a booking application
 exports.applyForBooking = async (req, res) => {
@@ -28,11 +29,11 @@ exports.applyForBooking = async (req, res) => {
     // Verify listing exists
     const Model = listingType === 'property' ? Property : Bike;
     const listing = await Model.findByPk(listingId);
-    
+
     if (!listing || (listing.status && listing.status.toLowerCase() !== 'available')) {
-      return res.status(400).json({ 
-        message: 'Listing is not available', 
-        details: `Current status: ${listing?.status || 'Unknown'}` 
+      return res.status(400).json({
+        message: 'Listing is not available',
+        details: `Current status: ${listing?.status || 'Unknown'}`
       });
     }
 
@@ -61,8 +62,8 @@ exports.applyForBooking = async (req, res) => {
 
     if (overlapping) {
       const statusMsg = overlapping.status === 'paid' ? 'already booked and paid for' : 'already has a pending request for';
-      return res.status(400).json({ 
-        message: `This listing is ${statusMsg} the selected dates. Please try other dates.` 
+      return res.status(400).json({
+        message: `This listing is ${statusMsg} the selected dates. Please try other dates.`
       });
     }
 
@@ -134,7 +135,7 @@ exports.getMyApplications = async (req, res) => {
           // Actually listing.id would overwrite nothing if we act carefully.
           // But listing has 'id'.
           // Let's explicitly preserve detailed listing info if needed.
-          listingId: app.listingId, 
+          listingId: app.listingId,
           listingDetails: listing?.toJSON() // Better practice: nest it to avoid collisions entirely
         };
       })
@@ -294,7 +295,7 @@ exports.updateApplicationStatus = async (req, res) => {
     }
 
     const application = await BookingApplication.findByPk(id);
-    
+
     if (!application) {
       return res.status(404).json({ message: 'Application not found' });
     }
@@ -302,7 +303,7 @@ exports.updateApplicationStatus = async (req, res) => {
     // Verify ownership
     const Model = application.listingType === 'property' ? Property : Bike;
     const listing = await Model.findByPk(application.listingId);
-    
+
     if (!listing || listing.vendorId !== vendorId) {
       return res.status(403).json({ message: 'Unauthorized' });
     }
@@ -311,11 +312,146 @@ exports.updateApplicationStatus = async (req, res) => {
       return res.status(400).json({ message: 'Can only update pending applications' });
     }
 
+    // If owner is approving, ensure no overlapping approved/paid applications or active rentals exist
+    if (status === 'approved') {
+      // Check for overlapping applications (approved or paid) excluding current
+      const overlappingApp = await BookingApplication.findOne({
+        where: {
+          listingId: application.listingId,
+          listingType: application.listingType,
+          status: { [Op.in]: ['approved', 'paid'] },
+          id: { [Op.ne]: id },
+          [Op.or]: [
+            { startDate: { [Op.between]: [application.startDate, application.endDate] } },
+            { endDate: { [Op.between]: [application.startDate, application.endDate] } },
+            { [Op.and]: [{ startDate: { [Op.lte]: application.startDate } }, { endDate: { [Op.gte]: application.endDate } }] }
+          ]
+        }
+      });
+
+      if (overlappingApp) {
+        return res.status(400).json({ message: 'Listing already has an approved or paid booking for the selected dates.' });
+      }
+
+      // Also check for existing active Booking/BikeBooking records that overlap
+      if (application.listingType === 'property') {
+        const activeBooking = await Booking.findOne({
+          where: {
+            propertyId: application.listingId,
+            status: 'Active',
+            [Op.or]: [
+              { moveInDate: { [Op.between]: [application.startDate, application.endDate] } },
+              { moveOutDate: { [Op.between]: [application.startDate, application.endDate] } },
+              { [Op.and]: [{ moveInDate: { [Op.lte]: application.startDate } }, { moveOutDate: { [Op.gte]: application.endDate } }] }
+            ]
+          }
+        });
+
+        if (activeBooking) {
+          return res.status(400).json({ message: 'Listing already has an active rental overlapping the selected dates.' });
+        }
+      } else {
+        const activeBikeBooking = await BikeBooking.findOne({
+          where: {
+            bikeId: application.listingId,
+            status: 'Active',
+            [Op.or]: [
+              { startDate: { [Op.between]: [application.startDate, application.endDate] } },
+              { endDate: { [Op.between]: [application.startDate, application.endDate] } },
+              { [Op.and]: [{ startDate: { [Op.lte]: application.startDate } }, { endDate: { [Op.gte]: application.endDate } }] }
+            ]
+          }
+        });
+
+        if (activeBikeBooking) {
+          return res.status(400).json({ message: 'Listing already has an active rental overlapping the selected dates.' });
+        }
+      }
+    }
+
     application.status = status;
     if (status === 'rejected' && rejectionReason) {
       application.rejectionReason = rejectionReason;
     }
     await application.save();
+
+    // If owner approved the application, mark the underlying listing as Rented
+    if (status === 'approved' && listing) {
+      try {
+        listing.status = 'Rented';
+        await listing.save();
+      } catch (err) {
+        console.error('Failed to mark listing as Rented:', err);
+      }
+    }
+
+    // If owner approved, create the underlying rental record immediately so the listing
+    // is considered rented (avoid duplicate creation if one already exists).
+    if (status === 'approved' && listing) {
+      try {
+        if (application.listingType === 'property') {
+          // Create Booking if not already present for same property/date/tenant
+          const existingBooking = await Booking.findOne({
+            where: {
+              propertyId: listing.id,
+              tenantId: application.userId,
+              moveInDate: application.startDate
+            }
+          });
+
+          if (!existingBooking) {
+            await Booking.create({
+              propertyId: listing.id,
+              tenantId: application.userId,
+              vendorId: listing.vendorId,
+              moveInDate: application.startDate,
+              moveOutDate: application.endDate,
+              monthlyRent: application.totalAmount,
+              status: 'Active',
+              message: 'Created on owner approval'
+            });
+          }
+        } else if (application.listingType === 'bike') {
+          const existingBikeBooking = await BikeBooking.findOne({
+            where: {
+              bikeId: listing.id,
+              lessorId: application.userId,
+              startDate: application.startDate
+            }
+          });
+
+          if (!existingBikeBooking) {
+            await BikeBooking.create({
+              lessorId: application.userId,
+              vendorId: listing.vendorId,
+              bikeId: listing.id,
+              startDate: application.startDate,
+              endDate: application.endDate,
+              totalDays: application.duration,
+              dailyRate: Number(application.totalAmount) / (application.duration || 1),
+              totalAmount: application.totalAmount,
+              securityDeposit: listing.securityDeposit || 0,
+              status: 'Active',
+              message: 'Created on owner approval'
+            });
+          }
+        }
+      } catch (createErr) {
+        console.error('Failed to create rental on approval:', createErr);
+      }
+    }
+
+    // Emit updated owner stats (rented counts) so frontend updates immediately
+    try {
+      const io = req.app.get('io');
+      if (io && listing) {
+        const vendorId = listing.vendorId;
+        const stats = await getOwnerStats(vendorId);
+        io.to(`user_${vendorId}`).emit('owner_stats_updated', stats);
+      }
+    } catch (emitErr) {
+      console.error('Failed to emit owner_stats_updated:', emitErr);
+    }
 
     // --- NOTIFICATION & EMAIL LOGIC ---
     try {
@@ -323,7 +459,7 @@ exports.updateApplicationStatus = async (req, res) => {
       const listingTitle = listing.title || (listing.brand + ' ' + listing.model);
       const notifTitle = `Application ${status === 'approved' ? 'Approved' : 'Rejected'}`;
       const notifMessage = `Your application for "${listingTitle}" has been ${status}.${status === 'rejected' ? ` Reason: ${rejectionReason}` : ''}`;
-      
+
       // 1. Create DB Notification
       const notification = await Notification.create({
         user_id: application.userId, // snake_case as per model
@@ -335,19 +471,19 @@ exports.updateApplicationStatus = async (req, res) => {
 
       // 2. Emit Socket Event
       if (io) {
-         io.to(`user_${application.userId}`).emit('notification', notification);
-         io.to(`user_${application.userId}`).emit('refresh_counts');
-         io.to(`user_${vendorId}`).emit('refresh_counts');
+        io.to(`user_${application.userId}`).emit('new-notification', notification);
+        io.to(`user_${application.userId}`).emit('refresh_counts');
+        io.to(`user_${vendorId}`).emit('refresh_counts');
       }
 
       // 3. Send Email
       const applicant = await User.findByPk(application.userId);
       if (applicant && applicant.email) {
-          await sendEmail({
-            to: applicant.email,
-            subject: `RentHive - ${notifTitle}`,
-            text: notifMessage,
-            html: `
+        await sendEmail({
+          to: applicant.email,
+          subject: `RentHive - ${notifTitle}`,
+          text: notifMessage,
+          html: `
               <div style="font-family: Arial, sans-serif; color: #333;">
                 <h2>${notifTitle}</h2>
                 <p>Hello ${applicant.name},</p>
@@ -357,11 +493,11 @@ exports.updateApplicationStatus = async (req, res) => {
                 <p>Best regards,<br/>RentHive Team</p>
               </div>
             `
-          }).catch(err => console.error('Failed to send email:', err.message));
+        }).catch(err => console.error('Failed to send email:', err.message));
       }
     } catch (notifErr) {
-       console.error('Notification failed:', notifErr);
-       // Don't block the response
+      console.error('Notification failed:', notifErr);
+      // Don't block the response
     }
     // ----------------------------------
 
@@ -408,87 +544,131 @@ exports.payForApplication = async (req, res) => {
     if (application.listingType === 'property') {
       const property = await Property.findByPk(application.listingId);
       if (!property) return res.status(404).json({ message: 'Property not found' });
-      
-      rental = await Booking.create({
-        propertyId: property.id,
-        tenantId: userId,
-        vendorId: property.vendorId,
-        moveInDate: application.startDate,
-        moveOutDate: application.endDate,
-        monthlyRent: application.totalAmount,
-        status: 'Active',
-        message: 'Created from paid application'
+
+      // Reuse existing booking created on approval if present
+      rental = await Booking.findOne({
+        where: {
+          propertyId: property.id,
+          tenantId: userId,
+          moveInDate: application.startDate
+        }
       });
-      
+
+      if (!rental) {
+        rental = await Booking.create({
+          propertyId: property.id,
+          tenantId: userId,
+          vendorId: property.vendorId,
+          moveInDate: application.startDate,
+          moveOutDate: application.endDate,
+          monthlyRent: application.totalAmount,
+          status: 'Active',
+          message: 'Created from paid application'
+        });
+      }
+
       paymentData.bookingId = rental.id;
       paymentData.ownerId = property.vendorId;
+
+      // Ensure property is marked as Rented after payment/rental creation
+      try {
+        property.status = 'Rented';
+        await property.save();
+      } catch (err) {
+        console.error('Failed to mark property as Rented after payment:', err);
+      }
+
     } else if (application.listingType === 'bike') {
       const bike = await Bike.findByPk(application.listingId);
       if (!bike) return res.status(404).json({ message: 'Bike not found' });
-      
-      rental = await BikeBooking.create({
-        lessorId: userId,
-        vendorId: bike.vendorId,
-        bikeId: bike.id,
-        startDate: application.startDate,
-        endDate: application.endDate,
-        totalDays: application.duration,
-        dailyRate: Number(application.totalAmount) / application.duration,
-        totalAmount: application.totalAmount,
-        securityDeposit: bike.securityDeposit || 0,
-        status: 'Active',
-        message: 'Created from paid application'
+
+      // Reuse existing bike booking if created during approval
+      rental = await BikeBooking.findOne({
+        where: {
+          bikeId: bike.id,
+          lessorId: userId,
+          startDate: application.startDate
+        }
       });
-      
+
+      if (!rental) {
+        rental = await BikeBooking.create({
+          lessorId: userId,
+          vendorId: bike.vendorId,
+          bikeId: bike.id,
+          startDate: application.startDate,
+          endDate: application.endDate,
+          totalDays: application.duration,
+          dailyRate: Number(application.totalAmount) / application.duration,
+          totalAmount: application.totalAmount,
+          securityDeposit: bike.securityDeposit || 0,
+          status: 'Active',
+          message: 'Created from paid application'
+        });
+      }
+
       paymentData.bikeBookingId = rental.id;
       paymentData.ownerId = bike.vendorId;
+
+      // Ensure bike is marked as Rented after payment/rental creation
+      try {
+        bike.status = 'Rented';
+        await bike.save();
+      } catch (err) {
+        console.error('Failed to mark bike as Rented after payment:', err);
+      }
+
     } else {
       return res.status(400).json({ message: 'Invalid listing type' });
     }
 
     // Create the Payment record
     const payment = await Payment.create(paymentData);
-    
+
     // Link payment to application
     application.paymentId = payment.id;
+    // Also link booking/payment if a booking record existed prior to payment
+    if (rental && rental.id) {
+      // No bookingId column on application model; we can store in payment bookingId fields already handled above
+    }
     await application.save();
 
     // --- NOTIFICATION LOGIC (Payment Success) ---
     try {
       const io = req.app.get('io');
       const vendorId = paymentData.ownerId;
-      
+
       // Get listing details for email
-      const listingTitle = application.listingType === 'property' 
-        ? (await Property.findByPk(application.listingId))?.title 
+      const listingTitle = application.listingType === 'property'
+        ? (await Property.findByPk(application.listingId))?.title
         : (await Bike.findByPk(application.listingId))?.name || `${(await Bike.findByPk(application.listingId))?.brand} ${(await Bike.findByPk(application.listingId))?.model}`;
-      
+
       // Notify Owner
       const ownerNotifTitle = 'New Payment Received';
       const ownerNotifMessage = `You received Rs. ${application.totalAmount} from user #${userId}.`;
-      
+
       const ownerNotif = await Notification.create({
-         user_id: vendorId,
-         title: ownerNotifTitle,
-         message: ownerNotifMessage,
-         type: 'success'
+        user_id: vendorId,
+        title: ownerNotifTitle,
+        message: ownerNotifMessage,
+        type: 'success'
       });
-      
+
       if (io) {
-        io.to(`user_${vendorId}`).emit('notification', ownerNotif);
+        io.to(`user_${vendorId}`).emit('new-notification', ownerNotif);
         io.to(`user_${vendorId}`).emit('refresh_counts');
       }
 
       // Notify Tenant (User)
       const userNotif = await Notification.create({
-         user_id: userId,
-         title: 'Payment Successful',
-         message: `Your payment of Rs. ${application.totalAmount} was successful. Rental is now active!`,
-         type: 'success'
+        user_id: userId,
+        title: 'Payment Successful',
+        message: `Your payment of Rs. ${application.totalAmount} was successful. Rental is now active!`,
+        type: 'success'
       });
 
       if (io) {
-        io.to(`user_${userId}`).emit('notification', userNotif);
+        io.to(`user_${userId}`).emit('new-notification', userNotif);
         io.to(`user_${userId}`).emit('refresh_counts');
       }
 

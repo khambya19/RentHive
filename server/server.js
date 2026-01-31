@@ -172,6 +172,7 @@ const startServer = async () => {
       const paymentScheduler = require('./services/paymentScheduler');
       await paymentScheduler.createMonthlyPayments();
       await paymentScheduler.checkOverduePayments();
+      await paymentScheduler.checkAndCloseCompletedRentals();
     });
 
     server.listen(port, () => {
@@ -185,7 +186,10 @@ const startServer = async () => {
   }
 };
 
-startServer();
+// Only start the server when not running tests
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}
 
 // Global Handlers
 process.on('unhandledRejection', (reason) => console.error('❌ Unhandled Rejection:', reason));

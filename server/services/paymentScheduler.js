@@ -205,8 +205,85 @@ const checkOverduePayments = async () => {
   }
 };
 
+// Close completed rentals and revert listing status to Available
+const checkAndCloseCompletedRentals = async () => {
+  try {
+    console.log('🔁 Checking for completed rentals to close...');
+    const today = new Date().toISOString().split('T')[0];
+
+    // Properties: bookings whose moveOutDate is before today and still Active
+    const completedBookings = await Booking.findAll({
+      where: {
+        status: 'Active',
+        moveOutDate: { [Op.lt]: today }
+      }
+    });
+
+    for (const booking of completedBookings) {
+      try {
+        booking.status = 'Completed';
+        await booking.save();
+
+        // Re-open property
+        const property = await booking.getProperty();
+        if (property) {
+          property.status = 'Available';
+          await property.save();
+        }
+
+        // Optionally create notifications here
+        await Notification.create({
+          userId: booking.tenantId,
+          type: 'booking_completed',
+          title: 'Rental Completed',
+          message: `Your rental for booking #${booking.id} has been marked completed. Thank you!`,
+          read: false
+        }).catch(() => {});
+      } catch (err) {
+        console.error('Failed to close booking or revert property status:', err);
+      }
+    }
+
+    // Bikes: bike bookings whose endDate is before today and still Active
+    const completedBikeBookings = await require('../models/BikeBooking').findAll({
+      where: {
+        status: 'Active',
+        endDate: { [Op.lt]: today }
+      }
+    });
+
+    for (const bb of completedBikeBookings) {
+      try {
+        bb.status = 'Completed';
+        await bb.save();
+
+        // Re-open bike
+        const BikeModel = require('../models/Bike');
+        const bike = await BikeModel.findByPk(bb.bikeId);
+        if (bike) {
+          bike.status = 'Available';
+          await bike.save();
+        }
+
+        await Notification.create({
+          userId: bb.lessorId,
+          type: 'rental_completed',
+          title: 'Bike Rental Completed',
+          message: `Your bike rental #${bb.id} has been marked completed.`,
+          read: false
+        }).catch(() => {});
+      } catch (err) {
+        console.error('Failed to close bike booking or revert bike status:', err);
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error closing completed rentals:', error);
+  }
+};
+
 module.exports = {
   createMonthlyPayments,
   sendUpcomingPaymentReminders,
-  checkOverduePayments
+  checkOverduePayments,
+  checkAndCloseCompletedRentals
 };

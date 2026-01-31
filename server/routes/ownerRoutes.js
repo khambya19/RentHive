@@ -19,26 +19,60 @@ router.get('/stats', async (req, res) => {
     console.log('📊 Fetching owner stats for user ID:', ownerId);
 
     // Get properties owned by this owner
-    const totalProperties = await Property.count({ 
-      where: { vendorId: ownerId } 
+    const totalProperties = await Property.count({
+      where: { vendorId: ownerId }
     });
     console.log('🏠 Total properties:', totalProperties);
-    
-    const availableProperties = await Property.count({ 
-      where: { vendorId: ownerId, status: 'Available' } 
+
+    const availableProperties = await Property.count({
+      where: { vendorId: ownerId, status: 'Available' }
     });
     console.log('✅ Available properties:', availableProperties);
 
     // Get bikes owned by this owner
-    const totalBikes = await Bike.count({ 
-      where: { vendorId: ownerId } 
+    const totalBikes = await Bike.count({
+      where: { vendorId: ownerId }
     });
     console.log('🚲 Total bikes:', totalBikes);
-    
-    const availableBikes = await Bike.count({ 
-      where: { vendorId: ownerId, status: 'Available' } 
+
+    const availableBikes = await Bike.count({
+      where: { vendorId: ownerId, status: 'Available' }
     });
     console.log('✅ Available bikes:', availableBikes);
+
+    // Get all properties and bikes owned by this vendor
+    const propertyIds = (await Property.findAll({ where: { vendorId: ownerId }, attributes: ['id'] })).map(p => p.id);
+    const bikeIds = (await Bike.findAll({ where: { vendorId: ownerId }, attributes: ['id'] })).map(b => b.id);
+
+    // Compute rented counts robustly from multiple sources
+    // 1) Listings explicitly marked 'Rented'
+    const rentedPropFromStatus = await Property.findAll({ where: { vendorId: ownerId, status: 'Rented' }, attributes: ['id'] });
+    const rentedPropStatusIds = (rentedPropFromStatus || []).map(p => p.id);
+
+    const rentedBikeFromStatus = await Bike.findAll({ where: { vendorId: ownerId, status: 'Rented' }, attributes: ['id'] });
+    const rentedBikeStatusIds = (rentedBikeFromStatus || []).map(b => b.id);
+
+    // 2) Active bookings/bookings (old Booking / BikeBooking)
+    const activeBookings = await Booking.findAll({ where: { vendorId: ownerId, status: 'Active' }, attributes: ['propertyId'] });
+    const activeBookingPropIds = (activeBookings || []).map(b => b.propertyId);
+
+    const activeBikeBookings = await BikeBooking.findAll({ where: { vendorId: ownerId, status: 'Active' }, attributes: ['bikeId'] });
+    const activeBikeIds = (activeBikeBookings || []).map(b => b.bikeId);
+
+    // 3) New BookingApplication approved/paid
+    const BookingApplication = require('../models/BookingApplication');
+    const approvedPropApps = await BookingApplication.findAll({ where: { listingId: { [Op.in]: propertyIds }, listingType: 'property', status: { [Op.in]: ['approved', 'paid'] } }, attributes: ['listingId'] });
+    const approvedPropAppIds = (approvedPropApps || []).map(a => a.listingId);
+
+    const approvedBikeApps = await BookingApplication.findAll({ where: { listingId: { [Op.in]: bikeIds }, listingType: 'bike', status: { [Op.in]: ['approved', 'paid'] } }, attributes: ['listingId'] });
+    const approvedBikeAppIds = (approvedBikeApps || []).map(a => a.listingId);
+
+    // Union all sources to compute unique counts
+    const rentedPropSet = new Set([...rentedPropStatusIds, ...activeBookingPropIds, ...approvedPropAppIds]);
+    const rentedBikeSet = new Set([...rentedBikeStatusIds, ...activeBikeIds, ...approvedBikeAppIds]);
+
+    const rentedProperties = rentedPropSet.size;
+    const rentedBikes = rentedBikeSet.size;
 
     // Calculate total listings (properties + bikes)
     const totalListings = totalProperties + totalBikes;
@@ -47,16 +81,28 @@ router.get('/stats', async (req, res) => {
     console.log('✅ Total available:', availableListings);
 
     // Get property bookings (where lessor is the property owner)
-    const totalBookings = await Booking.count({ 
-      where: { vendorId: ownerId } 
+    const oldPropertyBookings = await Booking.count({
+      where: { vendorId: ownerId }
     });
-    console.log('📅 Total property bookings:', totalBookings);
+
+    const newPropertyApplications = await BookingApplication.count({
+      where: { listingId: { [Op.in]: propertyIds }, listingType: 'property' }
+    });
+
+    const totalBookings = oldPropertyBookings + newPropertyApplications;
+    console.log('📅 Total property bookings (merged):', totalBookings);
 
     // Get bike rentals (where owner is the bike vendor)
-    const bikeRentals = await BikeBooking.count({ 
-      where: { vendorId: ownerId } 
+    const oldBikeRentals = await BikeBooking.count({
+      where: { vendorId: ownerId }
     });
-    console.log('🏍️ Total bike rentals:', bikeRentals);
+
+    const newBikeApplications = await BookingApplication.count({
+      where: { listingId: { [Op.in]: bikeIds }, listingType: 'bike' }
+    });
+
+    const bikeRentals = oldBikeRentals + newBikeApplications;
+    console.log('🏍️ Total bike rentals (merged):', bikeRentals);
 
     // Calculate monthly revenue from Paid payments (actual cash flow)
     const startOfMonth = new Date();
@@ -70,7 +116,7 @@ router.get('/stats', async (req, res) => {
         created_at: { [Op.gte]: startOfMonth }
       }
     }) || 0;
-    
+
     console.log('💰 Monthly revenue (Paid payments):', monthlyRevenue);
 
     return res.json({
@@ -84,7 +130,9 @@ router.get('/stats', async (req, res) => {
         properties: totalProperties,
         bikes: totalBikes,
         availableProperties,
-        availableBikes
+        availableBikes,
+        rentedProperties,
+        rentedBikes
       }
     });
   } catch (error) {
@@ -264,8 +312,8 @@ router.get('/all-bookings', async (req, res) => {
             endDate: app.endDate,
             duration: app.duration || (Math.ceil(Math.abs(new Date(app.endDate) - new Date(app.startDate)) / (1000 * 60 * 60 * 24)) + 1),
             totalAmount: app.totalAmount,
-            status: app.status === 'pending' ? 'Pending' : app.status === 'approved' ? 'Approved' : app.status === 'rejected' ? 'Rejected' : 'Pending',
-            message: `Application for ${app.duration || (Math.ceil(Math.abs(new Date(app.endDate) - new Date(app.startDate)) / (1000 * 60 * 60 * 24)) + 1)} days`,
+            status: app.status === 'pending' ? 'Pending' : app.status === 'approved' ? 'Approved' : app.status === 'rejected' ? 'Rejected' : app.status === 'paid' ? 'Confirmed' : 'Pending',
+            message: app.status === 'paid' ? 'Booking Confirmed and Paid' : `Application for ${app.duration || (Math.ceil(Math.abs(new Date(app.endDate) - new Date(app.startDate)) / (1000 * 60 * 60 * 24)) + 1)} days`,
             createdAt: app.createdAt,
             isApplication: true,
             renter: app.applicant ? {
@@ -290,8 +338,8 @@ router.get('/all-bookings', async (req, res) => {
             duration: app.duration || (Math.ceil(Math.abs(new Date(app.endDate) - new Date(app.startDate)) / (1000 * 60 * 60 * 24)) + 1),
             totalDays: app.duration || (Math.ceil(Math.abs(new Date(app.endDate) - new Date(app.startDate)) / (1000 * 60 * 60 * 24)) + 1),
             totalAmount: app.totalAmount,
-            status: app.status === 'pending' ? 'Pending' : app.status === 'approved' ? 'Approved' : app.status === 'rejected' ? 'Rejected' : 'Pending',
-            message: `Application for ${app.duration || (Math.ceil(Math.abs(new Date(app.endDate) - new Date(app.startDate)) / (1000 * 60 * 60 * 24)) + 1)} days`,
+            status: app.status === 'pending' ? 'Pending' : app.status === 'approved' ? 'Approved' : app.status === 'rejected' ? 'Rejected' : app.status === 'paid' ? 'Confirmed' : 'Pending',
+            message: app.status === 'paid' ? 'Booking Confirmed and Paid' : `Application for ${app.duration || (Math.ceil(Math.abs(new Date(app.endDate) - new Date(app.startDate)) / (1000 * 60 * 60 * 24)) + 1)} days`,
             createdAt: app.createdAt,
             isApplication: true,
             lessor: app.applicant ? {
@@ -414,7 +462,54 @@ router.patch('/bookings/:bookingId/approve', async (req, res) => {
       // OLD SYSTEM - Booking
       booking.status = 'Active';
       await booking.save();
-      
+
+      // Mark underlying property as Rented
+      try {
+        const property = await Property.findByPk(booking.propertyId);
+        if (property) {
+          property.status = 'Rented';
+          await property.save();
+        }
+      } catch (err) {
+        console.error('Failed to mark property as Rented (old booking):', err);
+      }
+
+      // Emit updated owner stats so dashboard updates immediately
+      try {
+        const io = req.app.get('io');
+        if (io) {
+          const vendorId = ownerId;
+          const propertyIds = (await Property.findAll({ where: { vendorId }, attributes: ['id'] })).map(p => p.id);
+          const bikeIds = (await Bike.findAll({ where: { vendorId }, attributes: ['id'] })).map(b => b.id);
+
+          const rentedPropFromStatus = await Property.findAll({ where: { vendorId, status: 'Rented' }, attributes: ['id'] });
+          const rentedPropStatusIds = (rentedPropFromStatus || []).map(p => p.id);
+          const rentedBikeFromStatus = await Bike.findAll({ where: { vendorId, status: 'Rented' }, attributes: ['id'] });
+          const rentedBikeStatusIds = (rentedBikeFromStatus || []).map(b => b.id);
+
+          const activeBookings = await Booking.findAll({ where: { vendorId, status: 'Active' }, attributes: ['propertyId'] });
+          const activeBookingPropIds = (activeBookings || []).map(b => b.propertyId);
+          const activeBikeBookings = await BikeBooking.findAll({ where: { vendorId, status: 'Active' }, attributes: ['bikeId'] });
+          const activeBikeIds = (activeBikeBookings || []).map(b => b.bikeId);
+
+          const BookingApplication = require('../models/BookingApplication');
+          const approvedPropApps = await BookingApplication.findAll({ where: { listingId: { [Op.in]: propertyIds }, listingType: 'property', status: { [Op.in]: ['approved', 'paid'] } }, attributes: ['listingId'] });
+          const approvedPropAppIds = (approvedPropApps || []).map(a => a.listingId);
+          const approvedBikeApps = await BookingApplication.findAll({ where: { listingId: { [Op.in]: bikeIds }, listingType: 'bike', status: { [Op.in]: ['approved', 'paid'] } }, attributes: ['listingId'] });
+          const approvedBikeAppIds = (approvedBikeApps || []).map(a => a.listingId);
+
+          const rentedPropSet = new Set([...rentedPropStatusIds, ...activeBookingPropIds, ...approvedPropAppIds]);
+          const rentedBikeSet = new Set([...rentedBikeStatusIds, ...activeBikeIds, ...approvedBikeAppIds]);
+
+          const rentedProperties = rentedPropSet.size;
+          const rentedBikes = rentedBikeSet.size;
+
+          io.to(`user_${vendorId}`).emit('owner_stats_updated', { breakdown: { rentedProperties, rentedBikes } });
+        }
+      } catch (err) {
+        console.error('Failed to emit owner_stats_updated (old booking):', err);
+      }
+
       // Send notification to the applicant
       if (booking.tenant) {
         const notification = await Notification.create({
@@ -427,9 +522,11 @@ router.patch('/bookings/:bookingId/approve', async (req, res) => {
 
         if (io) {
           io.to(`user_${booking.tenant.id}`).emit('new-notification', notification);
+          io.to(`user_${booking.tenant.id}`).emit('refresh_counts');
+          io.to(`user_${ownerId}`).emit('refresh_counts');
         }
       }
-      
+
       console.log(`✅ Booking ${bookingId} approved and set to Active (old system)`);
       return res.json({ message: 'Booking approved successfully', booking });
     }
@@ -438,12 +535,12 @@ router.patch('/bookings/:bookingId/approve', async (req, res) => {
     const application = await BookingApplication.findByPk(bookingId, {
       include: [{ model: User, as: 'applicant' }]
     });
-    
+
     if (application) {
       // Verify ownership
       const Model = application.listingType === 'property' ? Property : Bike;
       const listing = await Model.findByPk(application.listingId);
-      
+
       if (!listing || listing.vendorId !== ownerId) {
         return res.status(403).json({ error: 'Unauthorized' });
       }
@@ -451,7 +548,51 @@ router.patch('/bookings/:bookingId/approve', async (req, res) => {
       // NEW SYSTEM - BookingApplication
       application.status = 'approved';
       await application.save();
-      
+
+      // Mark listing as Rented so owner dashboard reflects immediately
+      try {
+        listing.status = 'Rented';
+        await listing.save();
+      } catch (err) {
+        console.error('Failed to mark listing as Rented (application approval):', err);
+      }
+
+      // Emit updated owner stats so dashboard updates immediately
+      try {
+        const io = req.app.get('io');
+        if (io) {
+          const vendorId = ownerId;
+          const propertyIds = (await Property.findAll({ where: { vendorId }, attributes: ['id'] })).map(p => p.id);
+          const bikeIds = (await Bike.findAll({ where: { vendorId }, attributes: ['id'] })).map(b => b.id);
+
+          const rentedPropFromStatus = await Property.findAll({ where: { vendorId, status: 'Rented' }, attributes: ['id'] });
+          const rentedPropStatusIds = (rentedPropFromStatus || []).map(p => p.id);
+          const rentedBikeFromStatus = await Bike.findAll({ where: { vendorId, status: 'Rented' }, attributes: ['id'] });
+          const rentedBikeStatusIds = (rentedBikeFromStatus || []).map(b => b.id);
+
+          const activeBookings = await Booking.findAll({ where: { vendorId, status: 'Active' }, attributes: ['propertyId'] });
+          const activeBookingPropIds = (activeBookings || []).map(b => b.propertyId);
+          const activeBikeBookings = await BikeBooking.findAll({ where: { vendorId, status: 'Active' }, attributes: ['bikeId'] });
+          const activeBikeIds = (activeBikeBookings || []).map(b => b.bikeId);
+
+          const BookingApplication = require('../models/BookingApplication');
+          const approvedPropApps = await BookingApplication.findAll({ where: { listingId: { [Op.in]: propertyIds }, listingType: 'property', status: { [Op.in]: ['approved', 'paid'] } }, attributes: ['listingId'] });
+          const approvedPropAppIds = (approvedPropApps || []).map(a => a.listingId);
+          const approvedBikeApps = await BookingApplication.findAll({ where: { listingId: { [Op.in]: bikeIds }, listingType: 'bike', status: { [Op.in]: ['approved', 'paid'] } }, attributes: ['listingId'] });
+          const approvedBikeAppIds = (approvedBikeApps || []).map(a => a.listingId);
+
+          const rentedPropSet = new Set([...rentedPropStatusIds, ...activeBookingPropIds, ...approvedPropAppIds]);
+          const rentedBikeSet = new Set([...rentedBikeStatusIds, ...activeBikeIds, ...approvedBikeAppIds]);
+
+          const rentedProperties = rentedPropSet.size;
+          const rentedBikes = rentedBikeSet.size;
+
+          io.to(`user_${vendorId}`).emit('owner_stats_updated', { breakdown: { rentedProperties, rentedBikes } });
+        }
+      } catch (err) {
+        console.error('Failed to emit owner_stats_updated (application):', err);
+      }
+
       // Send notification to the specific applicant
       if (application.applicant) {
         const listingTitle = listing.title || listing.brand || 'the listing';
@@ -470,9 +611,11 @@ router.patch('/bookings/:bookingId/approve', async (req, res) => {
 
         if (io) {
           io.to(`user_${application.applicant.id}`).emit('new-notification', notification);
+          io.to(`user_${application.applicant.id}`).emit('refresh_counts');
+          io.to(`user_${ownerId}`).emit('refresh_counts');
         }
       }
-      
+
       console.log(`✅ Application ${bookingId} approved (new system)`);
       return res.json({ message: 'Application approved successfully', booking: application });
     }
@@ -503,7 +646,7 @@ router.patch('/bookings/:bookingId/reject', async (req, res) => {
       // OLD SYSTEM - Booking
       booking.status = 'Rejected';
       await booking.save();
-      
+
       // Send notification to the applicant
       if (booking.tenant) {
         const notification = await Notification.create({
@@ -518,7 +661,7 @@ router.patch('/bookings/:bookingId/reject', async (req, res) => {
           io.to(`user_${booking.tenant.id}`).emit('new-notification', notification);
         }
       }
-      
+
       console.log(`✅ Booking ${bookingId} rejected (old system)`);
       return res.json({ message: 'Booking rejected successfully', booking });
     }
@@ -527,12 +670,12 @@ router.patch('/bookings/:bookingId/reject', async (req, res) => {
     const application = await BookingApplication.findByPk(bookingId, {
       include: [{ model: User, as: 'applicant' }]
     });
-    
+
     if (application) {
       // Verify ownership
       const Model = application.listingType === 'property' ? Property : Bike;
       const listing = await Model.findByPk(application.listingId);
-      
+
       if (!listing || listing.vendorId !== ownerId) {
         return res.status(403).json({ error: 'Unauthorized' });
       }
@@ -540,7 +683,7 @@ router.patch('/bookings/:bookingId/reject', async (req, res) => {
       // NEW SYSTEM - BookingApplication
       application.status = 'rejected';
       await application.save();
-      
+
       // Send notification to the specific applicant
       if (application.applicant) {
         const listingTitle = listing.title || listing.brand || 'the listing';
@@ -561,7 +704,7 @@ router.patch('/bookings/:bookingId/reject', async (req, res) => {
           io.to(`user_${application.applicant.id}`).emit('new-notification', notification);
         }
       }
-      
+
       console.log(`✅ Application ${bookingId} rejected (new system)`);
       return res.json({ message: 'Application rejected successfully', booking: application });
     }

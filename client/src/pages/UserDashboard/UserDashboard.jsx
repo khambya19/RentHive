@@ -128,7 +128,6 @@ const UserDashboard = () => {
   }, []);
 
   const fetchApplications = useCallback(async (force = false) => {
-    /* ... existing application fetch logic ... */
     if (hasFetchedApplications.current && !force) return;
     setApplicationsLoading(true);
     hasFetchedApplications.current = true;
@@ -200,7 +199,6 @@ const UserDashboard = () => {
         const data = await res.json();
         const props = (data.properties || []).map(p => ({ ...p, type: 'property' }));
         const bikes = (data.bikes || []).map(b => ({ ...b, type: 'bike' }));
-        // Ensure uniqueness when setting state
         const combined = [...props, ...bikes];
         const unique = combined.filter((v, i, a) => a.findIndex(t => (t.id === v.id && t.type === v.type)) === i);
         setSavedListings(unique);
@@ -212,43 +210,6 @@ const UserDashboard = () => {
       console.error('❌ Network error fetching saved listings:', err);
     }
   }, []);
-
-  // --- Tab-Based Lazy Fetching ---
-  // Only fetch data when the user actually navigates to the tab
-  useEffect(() => {
-    if (!user?.id) return;
-
-    // Fetch initial data if not already done
-    if (!hasFetchedSavedListings.current) {
-      fetchSavedListings();
-    }
-
-    // Lazy load other sections based on navigation
-    // Use guards directly in effect to be 100% safe
-    if (activeTab === 'browse' && !hasFetchedMarketData.current) {
-      fetchMarketListings();
-    }
-    if (activeTab === 'applications' && !hasFetchedApplications.current) {
-      fetchApplications();
-    }
-    if (activeTab === 'rentals' && !hasFetchedRentals.current) {
-      fetchRentals();
-    }
-    if (activeTab === 'overview') {
-      if (!hasFetchedApplications.current) fetchApplications();
-      if (!hasFetchedRentals.current) fetchRentals();
-    }
-  }, [activeTab, user?.id, fetchMarketListings, fetchApplications, fetchRentals, fetchSavedListings]);
-
-  // Handle initial transition state
-  useEffect(() => {
-    if (user?.id) {
-      // Mark initial load as "done" when we have a user
-      setIsInitialLoadDone(true);
-      fetchUnreadMessages(); /* Initial fetch */
-      fetchAllDashboardCounts();
-    }
-  }, [user?.id, fetchUnreadMessages]);
 
   const fetchAllDashboardCounts = useCallback(async () => {
     try {
@@ -287,6 +248,43 @@ const UserDashboard = () => {
       console.error('Error fetching all counts:', err);
     }
   }, []);
+
+  // --- Tab-Based Lazy Fetching ---
+  // Only fetch data when the user actually navigates to the tab
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // Fetch initial data if not already done
+    if (!hasFetchedSavedListings.current) {
+      fetchSavedListings();
+    }
+
+    // Lazy load other sections based on navigation
+    // Use guards directly in effect to be 100% safe
+    if (activeTab === 'browse' && !hasFetchedMarketData.current) {
+      fetchMarketListings();
+    }
+    if (activeTab === 'applications' && !hasFetchedApplications.current) {
+      fetchApplications();
+    }
+    if (activeTab === 'rentals' && !hasFetchedRentals.current) {
+      fetchRentals();
+    }
+    if (activeTab === 'overview') {
+      if (!hasFetchedApplications.current) fetchApplications();
+      if (!hasFetchedRentals.current) fetchRentals();
+    }
+  }, [activeTab, user?.id, fetchMarketListings, fetchApplications, fetchRentals, fetchSavedListings]);
+
+  // Handle initial transition state
+  useEffect(() => {
+    if (user?.id) {
+      // Mark initial load as "done" when we have a user
+      setIsInitialLoadDone(true);
+      fetchUnreadMessages(); /* Initial fetch */
+      fetchAllDashboardCounts();
+    }
+  }, [user?.id, fetchUnreadMessages, fetchAllDashboardCounts]);
 
   // Real-time Listeners
   useEffect(() => {

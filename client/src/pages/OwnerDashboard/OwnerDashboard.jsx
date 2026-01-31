@@ -48,7 +48,7 @@ const OwnerDashboard = () => {
   const [searchParams] = useSearchParams();
   const { user, logout, login } = useAuth();
   const { socket } = useSocket();
-  const { notifications, removeNotification, showSuccess, showError } = useNotifications();
+  const { notifications, removeNotification, showSuccess, showError, showInfo } = useNotifications();
   const [activeTab, setActiveTab] = useState(() => {
     // Initialize from sessionStorage
     const storedTab = sessionStorage.getItem('dashboardTab');
@@ -64,6 +64,19 @@ const OwnerDashboard = () => {
     messages: 0,
     reports: 0
   });
+
+  const [stats, setStats] = useState({
+    totalProperties: 0,
+    availableProperties: 0,
+    totalBookings: 0,
+    monthlyRevenue: 0,
+    bikeRentals: 0,
+  });
+  const [loading, setLoading] = useState(true);
+
+  // Edit mode state
+  const [editData, setEditData] = useState(null);
+  const [editType, setEditType] = useState(null); // 'property' or 'automobile'
 
   // Listen for tab changes from sessionStorage (for notifications)
   useEffect(() => {
@@ -139,12 +152,39 @@ const OwnerDashboard = () => {
     }
   }, []);
 
+  const fetchDashboardData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        navigate('/login');
+        return;
+      }
+
+      const headers = { 'Authorization': `Bearer ${token}` };
+      const response = await fetch(`${API_BASE_URL}/owners/stats`, { headers });
+
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data);
+      } else {
+        const errorText = await response.text();
+        console.error('❌ Failed to load dashboard data:', response.status, errorText);
+        showError('Error', `Failed to load dashboard data: ${response.status} ${errorText}`);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching dashboard data:', error);
+      showError('Error', 'Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  }, [navigate, showError]);
+
   // Real-time KYC listener
   useEffect(() => {
     if (!socket || !user) return;
 
     socket.on('kyc-status-updated', (data) => {
-      // ... same logic ...
       const token = localStorage.getItem('token');
       const updatedUser = {
         ...user,
@@ -166,8 +206,42 @@ const OwnerDashboard = () => {
       showSuccess('New Message', 'You have received a new message.');
     });
 
-    socket.on('refresh_counts', () => {
+    socket.on('new-notification', (notification) => {
+      if (notification.type === 'booking' || notification.type === 'listing' || notification.type === 'success') {
+        showSuccess(notification.title, notification.message);
+      } else {
+        showInfo(notification.title, notification.message);
+      }
+      // Refresh counts and overview stats
       fetchAllDashboardCounts();
+      fetchDashboardData();
+    });
+
+    // Update rented counts instantly when server emits owner_stats_updated
+    socket.on('owner_stats_updated', (data) => {
+      try {
+        if (data && data.breakdown) {
+          setStats(prev => ({
+            ...prev,
+            breakdown: {
+              ...(prev.breakdown || {}),
+              ...data.breakdown
+            }
+          }));
+        }
+        // Ensure we refresh the full overview counts so `availableProperties` and other fields update
+        // (some server emits only include rented counts). Fetch the authoritative /owners/stats endpoint.
+        fetchAllDashboardCounts();
+        fetchDashboardData();
+      } catch (err) {
+        console.error('Failed to apply owner_stats_updated:', err);
+      }
+    });
+
+    socket.on('refresh_counts', () => {
+      // Refresh both quick counts and the overview stats so rented/available numbers update
+      fetchAllDashboardCounts();
+      fetchDashboardData();
     });
 
     fetchUnreadMessages();
@@ -177,20 +251,9 @@ const OwnerDashboard = () => {
       socket.off('kyc-status-updated');
       socket.off('new_message');
       socket.off('refresh_counts');
+      socket.off('owner_stats_updated');
     };
   }, [socket, user, login, showSuccess, showError, fetchUnreadMessages, fetchAllDashboardCounts]);
-  const [stats, setStats] = useState({
-    totalProperties: 0,
-    availableProperties: 0,
-    totalBookings: 0,
-    monthlyRevenue: 0,
-    bikeRentals: 0,
-  });
-  const [loading, setLoading] = useState(true);
-
-  // Edit mode state
-  const [editData, setEditData] = useState(null);
-  const [editType, setEditType] = useState(null); // 'property' or 'automobile'
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
@@ -217,34 +280,6 @@ const OwnerDashboard = () => {
     }
   }, [searchParams]);
 
-  const fetchDashboardData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        navigate('/login');
-        return;
-      }
-
-      const headers = { 'Authorization': `Bearer ${token}` };
-      const response = await fetch(`${API_BASE_URL}/owners/stats`, { headers });
-
-      if (response.ok) {
-        const data = await response.json();
-        // console.log('📊 Dashboard Stats Received:', data);
-        setStats(data);
-      } else {
-        const errorText = await response.text();
-        console.error('❌ Failed to load dashboard data:', response.status, errorText);
-        showError('Error', `Failed to load dashboard data: ${response.status} ${errorText}`);
-      }
-    } catch (error) {
-      console.error('❌ Error fetching dashboard data:', error);
-      showError('Error', 'Failed to load dashboard data');
-    } finally {
-      setLoading(false);
-    }
-  }, [navigate, showError]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -276,16 +311,28 @@ const OwnerDashboard = () => {
       {/* Stats Grid */}
       <div className="stats-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         {/* Total Properties */}
-        <div className="stat-card bg-white p-5 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-all">
+        <div className="stat-card properties-card bg-white p-8 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-all">
           <div className="flex justify-between items-start mb-4">
-            <div className="p-3 bg-indigo-50 rounded-xl text-indigo-600 group-hover:scale-110 transition-transform">
-              <Home size={22} />
+            <div className="icon-box p-3 bg-indigo-600/10 rounded-2xl text-indigo-600 group-hover:scale-110 transition-transform">
+              <div className="icon-inner bg-indigo-600 text-white rounded-lg p-2"><Home size={18} /></div>
             </div>
-            <span className="text-xs font-bold px-2 py-1 bg-slate-100 text-slate-500 rounded-lg">TOTAL</span>
+            <span className="properties-label text-xs font-bold px-2 py-1 text-indigo-600 uppercase tracking-wide">PROPERTIES</span>
           </div>
           <div>
-            <h3 className="text-2xl md:text-3xl font-black text-slate-800 mb-1">{stats.totalProperties}</h3>
-            <p className="text-sm font-medium text-slate-500">{stats.availableProperties} Available Now</p>
+            {/* Prefer per-type breakdown (properties only). Fallback to aggregated fields if breakdown unavailable. */}
+            <h3 className="text-2xl md:text-3xl font-black text-slate-800 mb-1">{stats.breakdown?.properties ?? stats.totalProperties}</h3>
+            <p className="text-sm font-medium text-slate-500">{stats.breakdown?.availableProperties ?? stats.availableProperties} Available Now</p>
+            <div className="mt-3 flex items-center gap-3 text-[13px]">
+              <div className="flex items-center gap-2 text-emerald-600">
+                <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                <span className="font-semibold">{stats.breakdown?.availableProperties ?? stats.availableProperties ?? 0} Available</span>
+              </div>
+              <div className="text-slate-300">•</div>
+              <div className="flex items-center gap-2 text-rose-600">
+                <div className="w-2 h-2 bg-rose-500 rounded-full"></div>
+                <span className="font-semibold">{stats.breakdown?.rentedProperties ?? ( (stats.breakdown?.properties ?? stats.totalProperties ?? 0) - (stats.breakdown?.availableProperties ?? stats.availableProperties ?? 0) )} Rented</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -331,6 +378,17 @@ const OwnerDashboard = () => {
           <div>
             <h3 className="text-2xl md:text-3xl font-black text-slate-800 mb-1">{stats.bikeRentals}</h3>
             <p className="text-sm font-medium text-slate-500">Active Bike Rentals</p>
+            <div className="mt-3 flex items-center gap-3 text-[13px]">
+              <div className="flex items-center gap-2 text-emerald-600">
+                <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                <span className="font-semibold">{stats.breakdown?.availableBikes ?? 0} Available</span>
+              </div>
+              <div className="text-slate-300">•</div>
+              <div className="flex items-center gap-2 text-rose-600">
+                <div className="w-2 h-2 bg-rose-500 rounded-full"></div>
+                <span className="font-semibold">{stats.breakdown?.rentedBikes ?? 0} Rented</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

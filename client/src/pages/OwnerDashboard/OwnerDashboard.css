@@ -1,3 +1,115 @@
+/* Styling for Owner Dashboard components - complements Tailwind classes and provides fallback styling */
 
-/* Replaced by Tailwind CSS in OwnerDashboard.jsx. 
-   Keeping the file but empty to avoid import errors until reference is removed. */
+/* Welcome banner */
+.welcome-banner {
+  border-radius: 1rem;
+  padding: 1.25rem 1.5rem;
+  background: linear-gradient(90deg, #6b46c1 0%, #b83280 100%);
+  color: #fff;
+  box-shadow: 0 8px 30px rgba(11, 22, 39, 0.06);
+  overflow: hidden;
+}
+
+/* Stats grid: responsive fallback if Tailwind isn't applied */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: stretch;
+}
+
+@media (min-width: 640px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1.25rem;
+  }
+}
+
+/* Individual stat card */
+.stat-card {
+  background: #fff;
+  padding: 1rem;
+  border-radius: 0.9rem;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 88px;
+}
+
+.stat-card .p-3 {
+  padding: 0.75rem !important;
+}
+
+.stat-card h3 {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: #0f172a;
+}
+
+.stat-card p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+/* Small badge/labels inside cards */
+.stat-card .badge {
+  display: inline-block;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(15,23,42,0.04);
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Responsive utilities for the quick-actions row */
+@media (max-width: 768px) {
+  .welcome-banner { padding: 1rem; }
+  .stat-card { padding: 0.85rem; }
+}
+
+/* Polishing: card icons container fallback */
+.stat-card .icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+}
+
+/* Ensure header refresh button looks consistent */
+.refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid rgba(15,23,42,0.05);
+  background: #fff;
+  color: #111827;
+}
+
+/* Minor utility: rounded statistic number */
+.stat-number {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+/* If any listing cards need consistent spacing in this page */
+.overview-container .welcome-content { max-width: 100%; }
+
+/* Ensure the dashboard notifications container doesn't overlap layout in small screens */
+.dashboard-notifications { z-index: 110000; pointer-events: none; }

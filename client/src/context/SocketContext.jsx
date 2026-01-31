@@ -99,13 +99,8 @@ export const SocketProvider = ({ children }) => {
     fetchUserNotifications(currentUser.id);
   }, [currentUser, socket, isConnected]);
 
-  const registerUser = useCallback((userId) => {
+  async function fetchUserNotifications(userId) {
     if (!userId) return;
-    setCurrentUserId(userId);
-    // The actual emit happens in the useEffect above
-  }, []);
-
-  const fetchUserNotifications = async (userId) => {
     try {
       const res = await axios.get(
         `${API_BASE_URL}/notifications/user/${userId}`
@@ -117,14 +112,20 @@ export const SocketProvider = ({ children }) => {
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
     }
-  };
+  }
 
-  const markNotificationAsRead = async (notificationId) => {
+  const registerUser = useCallback((userId) => {
+    if (!userId) return;
+    // Update currentUser which triggers the registration useEffect
+    setCurrentUser(prev => prev?.id === userId ? prev : { id: userId, role: authUser?.role || 'user' });
+  }, [authUser?.role]);
+
+  async function markNotificationAsRead(notificationId) {
     if (!currentUser?.id) return;
     try {
       const res = await axios.patch(
         `${API_BASE_URL}/notifications/${notificationId}/read`,
-        { userId: currentUserId }
+        { userId: currentUser.id }
       );
       if (res.data.success) {
         setNotifications((prev) =>
@@ -139,13 +140,13 @@ export const SocketProvider = ({ children }) => {
     } catch (err) {
       console.error('Mark as read failed:', err);
     }
-  };
+  }
 
-  const markAllAsRead = async () => {
+  async function markAllAsRead() {
     if (!currentUser?.id) return;
     try {
       const res = await axios.patch(
-        `${API_BASE_URL}/notifications/user/${currentUserId}/read-all`
+        `${API_BASE_URL}/notifications/user/${currentUser.id}/read-all`
       );
       if (res.data.success) {
         setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
@@ -154,14 +155,14 @@ export const SocketProvider = ({ children }) => {
     } catch (err) {
       console.error('Mark all failed:', err);
     }
-  };
+  }
 
-  const deleteNotification = async (notificationId) => {
+  async function deleteNotification(notificationId) {
     if (!currentUser?.id) return;
     try {
       const res = await axios.delete(
         `${API_BASE_URL}/notifications/${notificationId}`,
-        { data: { userId: currentUserId } }
+        { data: { userId: currentUser.id } }
       );
       if (res.data.success) {
         setNotifications((prev) => {
@@ -175,7 +176,7 @@ export const SocketProvider = ({ children }) => {
     } catch (err) {
       console.error('Delete failed:', err);
     }
-  };
+  }
 
   const value = {
     socket,

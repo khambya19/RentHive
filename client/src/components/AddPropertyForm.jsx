@@ -229,8 +229,6 @@ const AddPropertyForm = ({ onSubmit, initialData = null, showError, showSuccess 
       title: 'Property Title',
       propertyType: 'Property Type',
       listingType: 'Listing Type',
-      [formData.listingType === 'For Rent' ? 'monthlyRent' : 'price']: formData.listingType === 'For Rent' ? 'Monthly Rent' : 'Price',
-      area: 'Area (sq ft)',
       propertyCondition: 'Property Condition',
       address: 'Address',
       city: 'City',
@@ -248,7 +246,10 @@ const AddPropertyForm = ({ onSubmit, initialData = null, showError, showSuccess 
 
     const missingFields = [];
     for (const [field, label] of Object.entries(requiredFieldsMap)) {
-      if (formData[field] === undefined || formData[field] === null || formData[field] === '' || formData[field] === 0) {
+      const val = formData[field];
+      // Treat empty strings, null or undefined as missing. Do NOT treat numeric 0 as missing (0 can be a valid selection for some fields).
+      const isEmptyString = (typeof val === 'string' && val.trim() === '');
+      if (val === undefined || val === null || isEmptyString) {
         missingFields.push(label);
       }
     }
@@ -735,6 +736,8 @@ const AddPropertyForm = ({ onSubmit, initialData = null, showError, showSuccess 
                     className={inputClass}
                   />
                 </div>
+
+                {/* Area input removed per request */}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">

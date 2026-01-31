@@ -1,5 +1,6 @@
 import noImage from '../../assets/no-image.png';
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
 // import './AllListings.css'; // Commented out to use Tailwind
 import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
@@ -23,6 +24,8 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
   const [editingType, setEditingType] = useState(null); // 'property' or 'automobile'
   const [editForm, setEditForm] = useState({});
   const [confirmModal, setConfirmModal] = useState({ show: false, type: 'property', id: null });
+  const [ownerApplications, setOwnerApplications] = useState([]);
+  const [rentedMap, setRentedMap] = useState({});
 
   const fetchProperties = useCallback(async () => {
     try {
@@ -62,15 +65,63 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
     }
   }, []);
 
+  const fetchOwnerApplications = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/bookings/owner/applications`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setOwnerApplications(Array.isArray(data) ? data.filter(Boolean) : []);
+        // compute rented counts: count applications with status approved or paid
+        const map = {};
+        (data || []).forEach(app => {
+          const status = (app.status || '').toString().toLowerCase();
+          if (['approved', 'paid'].includes(status)) {
+            // normalize server listingType: server may return 'bike' while UI uses 'automobile'
+            let typeKey = (app.type || app.listingType || '').toString().toLowerCase();
+            if (typeKey === 'bike') typeKey = 'automobile';
+            const listingId = app.listingId || (app.listing && app.listing.id);
+            const key = `${typeKey}-${listingId}`;
+            map[key] = (map[key] || 0) + 1;
+          }
+        });
+        setRentedMap(map);
+      } else {
+        setOwnerApplications([]);
+        setRentedMap({});
+      }
+    } catch (error) {
+      setOwnerApplications([]);
+      setRentedMap({});
+    }
+  }, []);
+
   const fetchAllListings = useCallback(async () => {
     setLoading(true);
-    await Promise.all([fetchProperties(), fetchBikes()]);
+    await Promise.all([fetchProperties(), fetchBikes(), fetchOwnerApplications()]);
     setLoading(false);
-  }, [fetchProperties, fetchBikes]);
+  }, [fetchProperties, fetchBikes, fetchOwnerApplications]);
 
   useEffect(() => {
     fetchAllListings();
   }, [fetchAllListings]);
+
+  // Real-time updates: refresh rented counts when server signals changes
+  const { socket } = useSocket();
+  useEffect(() => {
+    if (!socket) return;
+    const handler = () => {
+      // refresh applications and listings to update rented badges
+      fetchOwnerApplications();
+      fetchProperties();
+      fetchBikes();
+    };
+    socket.on('refresh_counts', handler);
+    return () => { socket.off('refresh_counts', handler); };
+  }, [socket, fetchOwnerApplications, fetchProperties, fetchBikes]);
 
   const handleDeleteProperty = (propertyId) => {
     setConfirmModal({ show: true, type: 'property', id: propertyId });
@@ -285,6 +336,12 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
           >
             <Trash2 size={18} className="group-hover/delete:scale-110 transition-transform" />
           </button>
+          {/* rented badge (no count) */}
+          { (rentedMap[`property-${property.id}`] || 0) > 0 && (
+            <div className="absolute top-4 right-4 bg-rose-50 text-rose-600 text-xs font-semibold px-2 py-1 rounded-full shadow-sm">
+              Rented
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -365,6 +422,12 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
           >
             <Trash2 size={18} className="group-hover/delete:scale-110 transition-transform" />
           </button>
+          {/* rented badge (no count) */}
+          { (rentedMap[`automobile-${bike.id}`] || 0) > 0 && (
+            <div className="absolute top-4 right-4 bg-rose-50 text-rose-600 text-xs font-semibold px-2 py-1 rounded-full shadow-sm">
+              Rented
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -380,6 +443,19 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
   }
 
   const filteredListings = getFilteredListings();
+
+  // Compute rented/available counts using both listing.status and owner application map (rentedMap)
+  const rentedPropertyCount = (properties || []).reduce((acc, p) => {
+    const key = `property-${p.id}`;
+    return acc + ((p && p.status === 'Rented') || (rentedMap[key] || 0) > 0 ? 1 : 0);
+  }, 0);
+  const availablePropertyCount = Math.max(0, (properties || []).length - rentedPropertyCount);
+
+  const rentedBikeCount = (bikes || []).reduce((acc, b) => {
+    const key = `automobile-${b.id}`;
+    return acc + ((b && b.status === 'Rented') || (rentedMap[key] || 0) > 0 ? 1 : 0);
+  }, 0);
+  const availableBikeCount = Math.max(0, (bikes || []).length - rentedBikeCount);
 
   return (
     <div className="w-full h-full">
@@ -425,12 +501,12 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
             <div className="flex items-center gap-2 text-[10px]">
               <div className="flex items-center gap-1 text-emerald-600">
                 <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-                <span className="font-semibold">{properties.filter(p => p.status === 'Available').length} Available</span>
+                <span className="font-semibold">{availablePropertyCount} Available</span>
               </div>
               <div className="text-slate-300">•</div>
               <div className="flex items-center gap-1 text-rose-600">
                 <div className="w-1.5 h-1.5 bg-rose-500 rounded-full"></div>
-                <span className="font-semibold">{properties.filter(p => p.status === 'Rented').length} Rented</span>
+                <span className="font-semibold">{rentedPropertyCount} Rented</span>
               </div>
             </div>
           </div>
@@ -452,12 +528,12 @@ const AllListings = ({ showSuccess, showError, onEdit }) => {
             <div className="flex items-center gap-2 text-[10px]">
               <div className="flex items-center gap-1 text-emerald-600">
                 <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-                <span className="font-semibold">{bikes.filter(b => b.status === 'Available').length} Available</span>
+                <span className="font-semibold">{availableBikeCount} Available</span>
               </div>
               <div className="text-slate-300">•</div>
               <div className="flex items-center gap-1 text-rose-600">
                 <div className="w-1.5 h-1.5 bg-rose-500 rounded-full"></div>
-                <span className="font-semibold">{bikes.filter(b => b.status === 'Rented').length} Rented</span>
+                <span className="font-semibold">{rentedBikeCount} Rented</span>
               </div>
             </div>
           </div>

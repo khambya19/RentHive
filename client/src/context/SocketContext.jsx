@@ -50,12 +50,12 @@ export const SocketProvider = ({ children }) => {
     if (socketRef.current) return; // Prevent duplicate connections
     
     const socketInstance = io(SERVER_BASE_URL, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'], // Polling first for stabler handshake
       upgrade: true,
       reconnection: true,
       reconnectionDelay: 1000,
-      reconnectionAttempts: 5,
-      timeout: 10000,
+      reconnectionAttempts: 10,
+      timeout: 20000,
       autoConnect: true,
     });
 

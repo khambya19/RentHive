@@ -281,8 +281,8 @@ const Browse = React.memo(({ onViewProperty, properties, bikes, loading, onRefre
                         <span className="text-[10px] font-black text-slate-800 uppercase">{property.bathrooms} Baths</span>
                       </div>
                       <div className="flex flex-col items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 group-hover:bg-white transition-colors">
-                        <Ruler size={20} className="text-violet-500" />
-                        <span className="text-[10px] font-black text-slate-800 uppercase">{property.area} sqft</span>
+                        <Home size={20} className="text-violet-500" />
+                        <span className="text-[10px] font-black text-slate-800 uppercase truncate max-w-full">{property.propertyType}</span>
                       </div>
                     </div>
                   </div>

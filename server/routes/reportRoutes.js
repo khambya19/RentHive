@@ -18,8 +18,11 @@ router.get('/vendor', reportController.getVendorReports);
 // Get all reports (admin/vendor)
 router.get('/all', reportController.getAllReports);
 
-// Update report status
+// Update report status (Admin)
 router.put('/:id', reportController.updateReportStatus);
-router.put('/:id/status', reportController.updateReportStatus); // Support both styles
+router.patch('/:id/status', reportController.updateReportStatus);
+
+// Cancel report (Reporter)
+router.delete('/:id', reportController.cancelReport);
 
 module.exports = router;

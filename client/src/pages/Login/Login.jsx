@@ -21,7 +21,7 @@ const loginSchema = z.object({
 
 const Login = () => {
   const navigate = useNavigate(); 
-  const { login } = useAuth();
+  const { login, user, loading } = useAuth(); // destructured loading
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -58,47 +58,47 @@ const Login = () => {
     if (!validateForm()) return;
 
     setIsLoading(true);
+
+    const getRedirectPath = (u) => {
+      const uType = u.type || u.role;
+      if (['lessor', 'owner', 'vendor'].includes(uType)) return '/owner/dashboard';
+      if (['admin', 'super_admin'].includes(uType)) return '/admin/dashboard';
+      return '/user/dashboard';
+    };
     
     // Hardcoded super admin login
     if (email === 'renthiveadmin@gmail.com' && password === 'Renthive@11') {
-      const user = {
+      const adminUser = {
         id: 0,
         name: 'Super Admin',
         email: 'renthiveadmin@gmail.com',
         role: 'super_admin',
+        type: 'super_admin',
         active: true
       };
       const token = 'superadmintoken';
-      login(user, token);
-      navigate('/admin/dashboard');
-      setIsLoading(false);
+      login(adminUser, token);
+      window.location.href = '/admin/dashboard';
       return;
     }
     
     try {
-      // console.log('Attempting login with:', { email, API_BASE_URL });
       const response = await axios.post(`${API_BASE_URL}/auth/login`, { 
         email: email.trim().toLowerCase(), 
         password 
       });
-      // console.log('Login response:', response.data);
-      const { token, user } = response.data;
-      login(user, token);
+
+      const { token, user: apiUser } = response.data;
+      login(apiUser, token);
       
-      // Route based on user type
-      // lessor, owner, vendor -> Owner Dashboard
-      // renter -> User Dashboard
-      if (user.type === 'lessor' || user.type === 'owner' || user.type === 'vendor') {
-        navigate('/owner/dashboard');
-      } else {
-        navigate('/user/dashboard');
-      }
+      // Force navigation via page reload
+      window.location.href = getRedirectPath(apiUser);
+      
     } catch (err) {
       console.error('Login error:', err);
-      console.error('Error response:', err.response);
+      // console.error('Error response:', err.response);
       setServerError(err.response?.data?.error || 'Login failed. Please check your credentials.');
-    } finally {
-      setIsLoading(false);
+      setIsLoading(false); 
     }
   };
   

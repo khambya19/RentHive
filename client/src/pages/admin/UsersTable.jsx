@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import UserProfileModal from './UserProfileModal';
 import API_BASE_URL from '../../config/api';
 import axios from 'axios';
-import { Lock, Unlock, Trash2, Key, Eye, FileCheck } from 'lucide-react';
+import { Lock, Unlock, Trash2, Eye, FileCheck } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
 
 const UsersTable = ({ initialKycFilter = 'all', initialRoleFilter = 'all' }) => {
@@ -23,7 +23,14 @@ const UsersTable = ({ initialKycFilter = 'all', initialRoleFilter = 'all' }) => 
       const params = new URLSearchParams();
       
       // Enforce filters based on the tab context (props)
-      if (initialRoleFilter !== 'all') params.append('role', initialRoleFilter);
+      if (initialRoleFilter === 'owners') {
+        params.append('role', 'owner,lessor,vendor');
+      } else if (initialRoleFilter === 'renters') {
+        params.append('role', 'renter,user');
+      } else if (initialRoleFilter !== 'all') {
+        params.append('role', initialRoleFilter);
+      }
+      
       if (initialKycFilter !== 'all') params.append('kycStatus', initialKycFilter); // This handles 'pending' for KYC tab
       
       const response = await axios.get(`${API_BASE_URL}/admin/users?${params.toString()}`, {
@@ -87,29 +94,20 @@ const UsersTable = ({ initialKycFilter = 'all', initialRoleFilter = 'all' }) => 
   };
 
   const handleDelete = async (userId) => {
-    if (!window.confirm('Are you sure you want to delete this user?')) return;
+    if (!window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) return;
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`${API_BASE_URL}/admin/users/${userId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      fetchUsers();
-    } catch (err) {
-      alert('Failed to delete user');
-    }
-  };
-
-  const handleResetPassword = async (userId) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.post(`${API_BASE_URL}/admin/users/${userId}/reset-password`, {}, {
+      const response = await axios.delete(`${API_BASE_URL}/admin/users/${userId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.data.success) {
-        alert(`Temporary password: ${response.data.tempPassword}\n\nPlease save this and share it with the user.`);
+        alert('User deleted successfully');
+        fetchUsers();
       }
     } catch (err) {
-      alert('Failed to reset password');
+      console.error('Delete user error:', err);
+      const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Failed to delete user. Please try again.';
+      alert(errorMsg);
     }
   };
 
@@ -125,8 +123,8 @@ const UsersTable = ({ initialKycFilter = 'all', initialRoleFilter = 'all' }) => 
           <thead className="bg-slate-50 text-slate-500 uppercase font-bold text-xs tracking-wider">
             <tr>
               <th className="px-6 py-4">User</th>
-              <th className="px-6 py-4">Role</th>
-              <th className="px-6 py-4">Status</th>
+              <th className="px-6 py-4 hide-mobile">Role</th>
+              <th className="px-6 py-4 hide-mobile">Status</th>
               <th className="px-6 py-4">KYC</th>
               <th className="px-6 py-4 text-right">Actions</th>
             </tr>
@@ -139,27 +137,34 @@ const UsersTable = ({ initialKycFilter = 'all', initialRoleFilter = 'all' }) => 
                 </td>
               </tr>
             ) : (
-              users.map(user => (
-                <tr key={user.id} className="hover:bg-slate-50/80 transition-colors group">
+              users
+                .filter(u => !['admin', 'superadmin', 'super_admin'].includes(u.role?.toLowerCase()))
+                .map(user => (
+                  <tr key={user.id} className="hover:bg-slate-50/80 transition-colors group">
                   <td className="px-6 py-4">
-                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-                           {user.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                           <p className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors cursor-pointer" onClick={() => { setSelectedUser(user); setShowProfile(true); }}>{user.name}</p>
-                           <p className="text-xs text-slate-500">{user.email}</p>
-                        </div>
-                     </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                        {user.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p
+                          className={`font-bold transition-colors cursor-pointer ${initialRoleFilter === 'owners' ? 'text-indigo-600' : 'text-slate-900 group-hover:text-indigo-600'}`}
+                          onClick={() => { setSelectedUser(user); setShowProfile(true); }}
+                        >
+                          {user.name}
+                        </p>
+                        <p className="text-xs text-slate-500 hide-mobile">{user.email}</p>
+                      </div>
+                    </div>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 hide-mobile">
                      <span className={`px-2 py-1 rounded text-xs font-bold uppercase tracking-wider ${
                         user.role === 'owner' ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700'
                      }`}>
                         {user.role}
                      </span>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 hide-mobile">
                      {user.active ? 
                         <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Active</span> : 
                         <span className="flex items-center gap-1.5 text-xs font-bold text-red-600"><span className="w-2 h-2 rounded-full bg-red-500"></span> Blocked</span>
@@ -176,7 +181,7 @@ const UsersTable = ({ initialKycFilter = 'all', initialRoleFilter = 'all' }) => 
                         </button>
                       )}
                       {user.kyc_status === 'rejected' && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-50 text-red-700 border border-red-100">Rejected</span>}
-                      {(!user.kyc_status || user.kyc_status === 'not_submitted') && <span className="text-xs text-slate-400 font-medium">Not Submitted</span>}
+                      {(!user.kyc_status || user.kyc_status === 'not_submitted') && <span className="text-xs text-slate-400 font-medium whitespace-nowrap">Not Submitted</span>}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2">
@@ -188,34 +193,23 @@ const UsersTable = ({ initialKycFilter = 'all', initialRoleFilter = 'all' }) => 
                         <Eye size={18} />
                       </button>
                       
-                      {/* Show actions only for non-KYC mode? Or always? User said "from there i can access and denied like blocked their login". This implies blocking capability needs to be here. */}
-                      {!isKycMode && (
-                        <>
-                           <div className="w-px h-6 bg-slate-200 mx-1 self-center"></div>
+                      <div className="w-px h-6 bg-slate-200 mx-1 self-center hide-mobile"></div>
 
-                           <button 
-                             className={`p-2 rounded-lg transition-colors ${user.active ? 'text-slate-400 hover:text-red-600 hover:bg-red-50' : 'text-slate-400 hover:text-green-600 hover:bg-green-50'}`} 
-                             onClick={() => handleBlockToggle(user.id)}
-                             title={user.active ? 'Block User' : 'Unblock User'}
-                           >
-                             {user.active ? <Lock size={18} /> : <Unlock size={18} />}
-                           </button>
-                           <button 
-                             className="p-2 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" 
-                             onClick={() => handleResetPassword(user.id)}
-                             title="Reset Password"
-                           >
-                             <Key size={18} />
-                           </button>
-                           <button 
-                             className="p-2 rounded-lg text-slate-400 hover:text-red-900 hover:bg-red-50 transition-colors" 
-                             onClick={() => handleDelete(user.id)}
-                             title="Delete User"
-                           >
-                             <Trash2 size={18} />
-                           </button>
-                        </>
-                      )}
+                       <button 
+                         className={`p-2 rounded-lg transition-colors ${user.active ? 'text-slate-400 hover:text-red-600 hover:bg-red-50' : 'text-slate-400 hover:text-green-600 hover:bg-green-50'}`} 
+                         onClick={() => handleBlockToggle(user.id)}
+                         title={user.active ? 'Block User' : 'Unblock User'}
+                       >
+                         {user.active ? <Lock size={18} /> : <Unlock size={18} />}
+                       </button>
+                       
+                       <button 
+                         className="p-2 rounded-lg text-slate-400 hover:text-red-900 hover:bg-red-50 transition-colors" 
+                         onClick={() => handleDelete(user.id)}
+                         title="Delete User"
+                       >
+                         <Trash2 size={18} />
+                       </button>
                     </div>
                   </td>
                 </tr>

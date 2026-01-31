@@ -42,8 +42,6 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
     color: '',
     registrationNumber: '',
     dailyRate: '',
-    weeklyRate: '',
-    monthlyRate: '',
     securityDeposit: '',
     location: '',
     description: '',
@@ -76,8 +74,6 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
           engineCapacity: editData.engineCapacity || '',
           fuelType: editData.fuelType || 'Petrol',
           dailyRate: editData.dailyRate || '',
-          weeklyRate: editData.weeklyRate || '',
-          monthlyRate: editData.monthlyRate || '',
           securityDeposit: editData.securityDeposit || '',
           location: editData.location || '',
           pickupLocation: editData.pickupLocation || '',
@@ -95,8 +91,8 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
         
         if (editData.latitude && editData.longitude) {
           setSelectedLocation({
-            lat: editData.latitude,
-            lng: editData.longitude,
+            lat: Number(editData.latitude),
+            lng: Number(editData.longitude),
             display_name: editData.location
           });
         }
@@ -451,7 +447,7 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
           <h2 className="text-2xl font-bold text-gray-900">List an Automobile</h2>
         </div>
 
-        <div className="w-full mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-8">
+        <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-8">
           {renderStepIndicator()}
           
           <form className="mt-8" onSubmit={(e) => e.preventDefault()}>
@@ -597,7 +593,7 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
                     <p className="text-gray-500">Set your rates and pickup location.</p>
                   </div>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className={labelClass}>Daily Rate (NPR) <span className="text-red-500">*</span></label>
                       <input
@@ -608,39 +604,12 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
                           const val = e.target.value;
                           setBikeForm(prev => ({ 
                             ...prev, 
-                            dailyRate: val,
-                            // Auto-set weekly/monthly if not set by user to help with dynamic pricing
-                            weeklyRate: !prev.weeklyRate ? (val * 7).toFixed(0) : prev.weeklyRate,
-                            monthlyRate: !prev.monthlyRate ? (val * 30).toFixed(0) : prev.monthlyRate
+                            dailyRate: val
                           }));
                         }}
                         placeholder="e.g., 500"
                         min="0"
                         required
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className={labelClass}>Weekly Rate (NPR)</label>
-                      <input
-                        type="number"
-                        className={inputClass}
-                        value={bikeForm.weeklyRate}
-                        onChange={(e) => setBikeForm({ ...bikeForm, weeklyRate: e.target.value })}
-                        placeholder="e.g., 3000"
-                        min="0"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className={labelClass}>Monthly Rate (NPR)</label>
-                      <input
-                        type="number"
-                        className={inputClass}
-                        value={bikeForm.monthlyRate}
-                        onChange={(e) => setBikeForm({ ...bikeForm, monthlyRate: e.target.value })}
-                        placeholder="e.g., 10000"
-                        min="0"
                       />
                     </div>
                   </div>
@@ -750,7 +719,7 @@ const UnifiedPostingForm = ({ showSuccess, showError, editData, editType, onEdit
                           rel="noopener noreferrer"
                           className="font-medium underline hover:text-green-900"
                         >
-                          Location selected ({selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)})
+                          Location selected ({Number(selectedLocation.lat).toFixed(6)}, {Number(selectedLocation.lng).toFixed(6)})
                         </a>
                         <button type="button" onClick={clearLocation} className="ml-auto text-sm underline hover:text-green-800 font-bold">Clear</button>
                       </div>

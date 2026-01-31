@@ -1,29 +1,39 @@
+const { Op } = require('sequelize');
 const BookingApplication = require('../models/BookingApplication');
 const Property = require('../models/Property');
 const Bike = require('../models/Bike');
 const User = require('../models/User');
-const { Op } = require('sequelize');
+const Notification = require('../models/Notification');
+const Booking = require('../models/Booking');
+const BikeBooking = require('../models/BikeBooking');
+const Payment = require('../models/Payment');
+const sendEmail = require('../utils/mailer');
 
 // Submit a booking application
 exports.applyForBooking = async (req, res) => {
   try {
     const userId = req.user.id;
     const { listingId, listingType, startDate, endDate, duration, totalAmount } = req.body;
+    console.log('Booking Application received:', { listingId, listingType, startDate, endDate, duration, totalAmount });
 
-    if (!listingId || !listingType || !startDate || !endDate || !duration || !totalAmount) {
-      return res.status(400).json({ message: 'All fields are required' });
+    if (!listingId) return res.status(400).json({ message: 'listingId is required' });
+    if (!listingType) return res.status(400).json({ message: 'listingType is required' });
+    if (!startDate) return res.status(400).json({ message: 'startDate is required' });
+    if (!endDate) return res.status(400).json({ message: 'endDate is required' });
+    if (!duration) return res.status(400).json({ message: 'duration is required' });
+    if (totalAmount === undefined || totalAmount === null || isNaN(totalAmount)) {
+      return res.status(400).json({ message: 'valid totalAmount is required' });
     }
 
     // Verify listing exists
     const Model = listingType === 'property' ? Property : Bike;
     const listing = await Model.findByPk(listingId);
     
-    if (!listing) {
-      return res.status(404).json({ message: 'Listing not found' });
-    }
-
-    if (listing.status !== 'Available') {
-      return res.status(400).json({ message: 'Listing is not available' });
+    if (!listing || (listing.status && listing.status.toLowerCase() !== 'available')) {
+      return res.status(400).json({ 
+        message: 'Listing is not available', 
+        details: `Current status: ${listing?.status || 'Unknown'}` 
+      });
     }
 
     // Check for overlapping applications
@@ -50,7 +60,10 @@ exports.applyForBooking = async (req, res) => {
     });
 
     if (overlapping) {
-      return res.status(400).json({ message: 'This listing already has a booking for the selected dates' });
+      const statusMsg = overlapping.status === 'paid' ? 'already booked and paid for' : 'already has a pending request for';
+      return res.status(400).json({ 
+        message: `This listing is ${statusMsg} the selected dates. Please try other dates.` 
+      });
     }
 
     // Create application
@@ -63,6 +76,17 @@ exports.applyForBooking = async (req, res) => {
       duration,
       totalAmount
     });
+
+    // Emit socket event for real-time count updates
+    const io = req.app.get('io');
+    if (io) {
+      // Refresh count for applicant
+      io.to(`user_${userId}`).emit('refresh_counts');
+      // Refresh count for owner
+      if (listing?.vendorId) {
+        io.to(`user_${listing.vendorId}`).emit('refresh_counts');
+      }
+    }
 
     res.status(201).json({
       message: 'Application submitted successfully',
@@ -93,8 +117,10 @@ exports.getMyApplications = async (req, res) => {
         });
 
         return {
-          applicationId: app.id, // Explicit ID for frontend
-          id: app.id, // Keeping this for backward compatibility if needed, though it might be overwritten
+          ...listing?.toJSON(), // Spread listing first so it doesn't overwrite app details
+          id: app.id, // Ensure ID is application ID
+          applicationId: app.id, // Explicit alias
+          bookingId: app.id, // Another alias
           status: app.status,
           startDate: app.startDate,
           endDate: app.endDate,
@@ -104,8 +130,12 @@ exports.getMyApplications = async (req, res) => {
           rejectionReason: app.rejectionReason,
           createdAt: app.createdAt,
           type: app.listingType,
-          ...listing?.toJSON(), // This spreads property ID over app ID
-          bookingId: app.id // Another alias just in case
+          // If we need listing ID specifically, it's now lost if simply spreading listing first without caution?
+          // Actually listing.id would overwrite nothing if we act carefully.
+          // But listing has 'id'.
+          // Let's explicitly preserve detailed listing info if needed.
+          listingId: app.listingId, 
+          listingDetails: listing?.toJSON() // Better practice: nest it to avoid collisions entirely
         };
       })
     );
@@ -123,6 +153,7 @@ exports.updateApplicationDetails = async (req, res) => {
     const userId = req.user.id;
     const { id } = req.params; // Application ID
     const { startDate, endDate, duration, totalAmount } = req.body;
+    console.log('Update Application request:', { id, startDate, endDate, duration, totalAmount });
 
     const application = await BookingApplication.findOne({
       where: { id, userId }
@@ -217,7 +248,7 @@ exports.getOwnerApplications = async (req, res) => {
         ]
       },
       include: [
-        { model: User, as: 'applicant', attributes: ['id', 'name', 'email', 'phoneNumber'] }
+        { model: User, as: 'applicant', attributes: ['id', 'name', 'email', 'phone'] }
       ],
       order: [['createdAt', 'DESC']]
     });
@@ -286,6 +317,54 @@ exports.updateApplicationStatus = async (req, res) => {
     }
     await application.save();
 
+    // --- NOTIFICATION & EMAIL LOGIC ---
+    try {
+      const io = req.app.get('io');
+      const listingTitle = listing.title || (listing.brand + ' ' + listing.model);
+      const notifTitle = `Application ${status === 'approved' ? 'Approved' : 'Rejected'}`;
+      const notifMessage = `Your application for "${listingTitle}" has been ${status}.${status === 'rejected' ? ` Reason: ${rejectionReason}` : ''}`;
+      
+      // 1. Create DB Notification
+      const notification = await Notification.create({
+        user_id: application.userId, // snake_case as per model
+        title: notifTitle,
+        message: notifMessage,
+        type: status === 'approved' ? 'success' : 'error',
+        is_read: false
+      });
+
+      // 2. Emit Socket Event
+      if (io) {
+         io.to(`user_${application.userId}`).emit('notification', notification);
+         io.to(`user_${application.userId}`).emit('refresh_counts');
+         io.to(`user_${vendorId}`).emit('refresh_counts');
+      }
+
+      // 3. Send Email
+      const applicant = await User.findByPk(application.userId);
+      if (applicant && applicant.email) {
+          await sendEmail({
+            to: applicant.email,
+            subject: `RentHive - ${notifTitle}`,
+            text: notifMessage,
+            html: `
+              <div style="font-family: Arial, sans-serif; color: #333;">
+                <h2>${notifTitle}</h2>
+                <p>Hello ${applicant.name},</p>
+                <p>${notifMessage}</p>
+                <p>Login to your <a href="http://localhost:5173/user/dashboard">dashboard</a> to view details.</p>
+                <br/>
+                <p>Best regards,<br/>RentHive Team</p>
+              </div>
+            `
+          }).catch(err => console.error('Failed to send email:', err.message));
+      }
+    } catch (notifErr) {
+       console.error('Notification failed:', notifErr);
+       // Don't block the response
+    }
+    // ----------------------------------
+
     res.json({ message: `Application ${status}`, application });
   } catch (error) {
     console.error('Update application error:', error);
@@ -315,10 +394,22 @@ exports.payForApplication = async (req, res) => {
     await application.save();
 
     let rental;
+    let paymentData = {
+      tenantId: userId,
+      amount: application.totalAmount,
+      dueDate: application.startDate,
+      paidDate: new Date(),
+      status: 'Paid',
+      paymentMethod: 'Khalti', // Defaulting to Khalti as per Modal
+      transactionId: `RH-PAY-${Date.now()}`,
+      notes: 'Initial payment for booking'
+    };
+
     if (application.listingType === 'property') {
       const property = await Property.findByPk(application.listingId);
       if (!property) return res.status(404).json({ message: 'Property not found' });
-      rental = await require('../models/Booking').create({
+      
+      rental = await Booking.create({
         propertyId: property.id,
         tenantId: userId,
         vendorId: property.vendorId,
@@ -328,10 +419,14 @@ exports.payForApplication = async (req, res) => {
         status: 'Active',
         message: 'Created from paid application'
       });
+      
+      paymentData.bookingId = rental.id;
+      paymentData.ownerId = property.vendorId;
     } else if (application.listingType === 'bike') {
       const bike = await Bike.findByPk(application.listingId);
       if (!bike) return res.status(404).json({ message: 'Bike not found' });
-      rental = await require('../models/BikeBooking').create({
+      
+      rental = await BikeBooking.create({
         lessorId: userId,
         vendorId: bike.vendorId,
         bikeId: bike.id,
@@ -340,11 +435,131 @@ exports.payForApplication = async (req, res) => {
         totalDays: application.duration,
         dailyRate: Number(application.totalAmount) / application.duration,
         totalAmount: application.totalAmount,
+        securityDeposit: bike.securityDeposit || 0,
         status: 'Active',
         message: 'Created from paid application'
       });
+      
+      paymentData.bikeBookingId = rental.id;
+      paymentData.ownerId = bike.vendorId;
+    } else {
+      return res.status(400).json({ message: 'Invalid listing type' });
     }
-    res.json({ message: 'Payment successful, rental created', rental });
+
+    // Create the Payment record
+    const payment = await Payment.create(paymentData);
+    
+    // Link payment to application
+    application.paymentId = payment.id;
+    await application.save();
+
+    // --- NOTIFICATION LOGIC (Payment Success) ---
+    try {
+      const io = req.app.get('io');
+      const vendorId = paymentData.ownerId;
+      
+      // Get listing details for email
+      const listingTitle = application.listingType === 'property' 
+        ? (await Property.findByPk(application.listingId))?.title 
+        : (await Bike.findByPk(application.listingId))?.name || `${(await Bike.findByPk(application.listingId))?.brand} ${(await Bike.findByPk(application.listingId))?.model}`;
+      
+      // Notify Owner
+      const ownerNotifTitle = 'New Payment Received';
+      const ownerNotifMessage = `You received Rs. ${application.totalAmount} from user #${userId}.`;
+      
+      const ownerNotif = await Notification.create({
+         user_id: vendorId,
+         title: ownerNotifTitle,
+         message: ownerNotifMessage,
+         type: 'success'
+      });
+      
+      if (io) {
+        io.to(`user_${vendorId}`).emit('notification', ownerNotif);
+        io.to(`user_${vendorId}`).emit('refresh_counts');
+      }
+
+      // Notify Tenant (User)
+      const userNotif = await Notification.create({
+         user_id: userId,
+         title: 'Payment Successful',
+         message: `Your payment of Rs. ${application.totalAmount} was successful. Rental is now active!`,
+         type: 'success'
+      });
+
+      if (io) {
+        io.to(`user_${userId}`).emit('notification', userNotif);
+        io.to(`user_${userId}`).emit('refresh_counts');
+      }
+
+      // Send Payment Confirmation Email to User
+      const user = await User.findByPk(userId);
+      if (user && user.email) {
+        await sendEmail({
+          to: user.email,
+          subject: 'RentHive - Payment Confirmation',
+          text: `Your payment of Rs. ${application.totalAmount} was successful. Your rental for "${listingTitle}" is now active!`,
+          html: `
+            <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
+              <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
+                <h1 style="color: white; margin: 0;">Payment Confirmed!</h1>
+              </div>
+              <div style="padding: 30px; background: #f9f9f9;">
+                <h2 style="color: #667eea;">Hello ${user.name},</h2>
+                <p style="font-size: 16px; line-height: 1.6;">Your payment has been successfully processed!</p>
+                
+                <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                  <h3 style="color: #333; margin-top: 0;">Payment Details</h3>
+                  <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                      <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Listing:</strong></td>
+                      <td style="padding: 8px; border-bottom: 1px solid #eee;">${listingTitle}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Amount:</strong></td>
+                      <td style="padding: 8px; border-bottom: 1px solid #eee;">Rs. ${application.totalAmount}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Transaction ID:</strong></td>
+                      <td style="padding: 8px; border-bottom: 1px solid #eee;">${paymentData.transactionId}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Start Date:</strong></td>
+                      <td style="padding: 8px; border-bottom: 1px solid #eee;">${new Date(application.startDate).toLocaleDateString()}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 8px;"><strong>End Date:</strong></td>
+                      <td style="padding: 8px;">${new Date(application.endDate).toLocaleDateString()}</td>
+                    </tr>
+                  </table>
+                </div>
+                
+                <p style="font-size: 16px; line-height: 1.6;">Your rental is now <strong>active</strong>! You can view all details in your dashboard.</p>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="http://localhost:5173/user/dashboard" style="background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">View Dashboard</a>
+                </div>
+                
+                <p style="font-size: 14px; color: #666; margin-top: 30px;">
+                  If you have any questions, please contact us at support@renthive.com
+                </p>
+                
+                <p style="font-size: 14px; color: #666;">
+                  Best regards,<br/>
+                  <strong>RentHive Team</strong>
+                </p>
+              </div>
+            </div>
+          `
+        }).catch(err => console.error('Failed to send payment confirmation email:', err.message));
+      }
+
+    } catch (notifErr) {
+      console.error('Payment notification error:', notifErr);
+    }
+    // --------------------------------------------
+
+    res.json({ message: 'Payment successful, rental and payment record created', rental, payment });
   } catch (error) {
     console.error('Pay for application error:', error);
     res.status(500).json({ message: 'Failed to process payment', error: error.message });

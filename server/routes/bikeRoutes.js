@@ -14,8 +14,18 @@ router.post('/book-direct', bikeController.bookBikeDirect); // Book a bike direc
 
 // Routes for vendors (bike rental shops)
 router.get('/vendor', bikeController.getVendorBikes); // Get vendor's bikes
-router.post('/vendor', bikeUpload.array('images', 10), bikeController.createBike); // Create new bike
-router.put('/vendor/:id', bikeUpload.array('images', 10), bikeController.updateBike); // Update bike
+router.post('/vendor', (req, res, next) => {
+  bikeUpload.array('images', 50)(req, res, (err) => {
+    if (err) return res.status(400).json({ success: false, error: err.message });
+    next();
+  });
+}, bikeController.createBike); // Create new bike
+router.put('/vendor/:id', (req, res, next) => {
+  bikeUpload.array('images', 50)(req, res, (err) => {
+    if (err) return res.status(400).json({ success: false, error: err.message });
+    next();
+  });
+}, bikeController.updateBike); // Update bike
 router.delete('/vendor/:id', bikeController.deleteBike); // Delete bike
 
 router.get('/vendor/bookings', bikeController.getVendorBookings); // Get vendor's bookings
@@ -31,7 +41,15 @@ router.get('/stats', bikeController.getVendorStats); // Get vendor stats for das
 router.get('/customers', bikeController.getVendorCustomers); // Get vendor customers
 
 // Upload bike images
-router.post('/upload-images', bikeUpload.array('images', 10), bikeController.uploadBikeImages);
+router.post('/upload-images', (req, res, next) => {
+  bikeUpload.array('images', 50)(req, res, (err) => {
+    if (err) {
+      console.error('Multer Error during bike image upload:', err);
+      return res.status(400).json({ success: false, error: err.message });
+    }
+    next();
+  });
+}, bikeController.uploadBikeImages);
 
 // Get single bike by ID - MUST BE LAST to avoid shadowing other routes
 router.get('/:id', bikeController.getBikeById);

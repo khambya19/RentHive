@@ -1,7 +1,7 @@
 
 // Middleware: Only allow super_admin
 exports.superAdminOnly = (req, res, next) => {
-  if (!req.user || req.user.role !== 'super_admin') {
+  if (!req.user || (req.user.role !== 'super_admin' && req.user.type !== 'super_admin')) {
     return res.status(403).json({ error: 'Forbidden: Super admin only' });
   }
   next();
@@ -19,7 +19,7 @@ exports.protect = (req, res, next) => {
   // Allow hardcoded super admin token
   if (token === 'superadmintoken') {
     req.user = { 
-      id: 0, 
+      id: 6, 
       role: 'super_admin', 
       email: 'renthiveadmin@gmail.com',
       name: 'Super Admin'

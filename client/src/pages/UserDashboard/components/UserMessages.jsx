@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Send, User, Search, ChevronLeft } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
+import { useSocket } from '../../../context/SocketContext';
 import API_BASE_URL from '../../../config/api';
 
-const UserMessages = () => {
+const UserMessages = ({ onRead }) => {
+  const { user } = useAuth();
+  const { socket } = useSocket();
   const [conversations, setConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -12,40 +16,71 @@ const UserMessages = () => {
   const [sending, setSending] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const messagesEndRef = useRef(null);
-  const { user } = useAuth();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const location = useLocation();
+
   useEffect(() => {
     fetchConversations();
   }, []);
+
+  // Handle navigation from other pages (Rentals, Listings)
+  useEffect(() => {
+    if (location.state && location.state.selectedUser) {
+        const { selectedUser, context } = location.state;
+        
+        // Check if conversation already exists
+        const existingConv = conversations.find(c => c.otherUser.id === selectedUser.id);
+        
+        if (existingConv) {
+            setSelectedConversation(existingConv);
+        } else {
+            // Create temporary conversation object
+            setSelectedConversation({
+                conversationId: 'temp_' + Date.now(),
+                otherUser: selectedUser,
+                lastMessage: { createdAt: new Date().toISOString(), message: '' },
+                property: context?.propertyId ? { id: context.propertyId, title: context.title || 'Inquiry' } : null,
+                bike: context?.bikeId ? { id: context.bikeId, name: context.title || 'Inquiry' } : null,
+                bikeId: context?.bikeId,
+                propertyId: context?.propertyId,
+                unreadCount: 0
+            });
+        }
+    }
+  }, [location.state, conversations]);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
   useEffect(() => {
-    const socket = window.socket;
     if (!socket) return;
 
     const handleNewMessage = (message) => {
       if (selectedConversation && 
           (message.senderId === selectedConversation.otherUser.id || 
            message.receiverId === selectedConversation.otherUser.id)) {
-        setMessages(prev => [...prev, message]);
+        setMessages(prev => {
+            if (prev.find(m => m.id === message.id)) return prev;
+            return [...prev, message];
+        });
         markAsRead(selectedConversation.otherUser.id);
       }
       fetchConversations();
     };
 
+    socket.on('receive_message', handleNewMessage);
     socket.on('new_message', handleNewMessage);
 
     return () => {
+      socket.off('receive_message', handleNewMessage);
       socket.off('new_message', handleNewMessage);
     };
-  }, [selectedConversation]);
+  }, [selectedConversation, socket]);
 
   const fetchConversations = async () => {
     try {
@@ -108,7 +143,10 @@ const UserMessages = () => {
 
       if (response.ok) {
         const sentMessage = await response.json();
-        setMessages(prev => [...prev, sentMessage]);
+        setMessages(prev => {
+          if (prev.find(m => m.id === sentMessage.id)) return prev;
+          return [...prev, sentMessage];
+        });
         setNewMessage('');
         fetchConversations();
       }
@@ -128,6 +166,7 @@ const UserMessages = () => {
           'Authorization': `Bearer ${token}`
         }
       });
+      if (onRead) onRead();
     } catch (error) {
       console.error('Error marking as read:', error);
     }
@@ -325,11 +364,11 @@ const UserMessages = () => {
             )}
 
             <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
-              {messages.map((msg) => {
+              {messages.map((msg, index) => {
                 const isSent = msg.senderId === user.id;
                 return (
                   <div
-                    key={msg.id}
+                    key={`${msg.id}-${index}`}
                     className={`mb-4 flex ${isSent ? 'justify-end' : 'justify-start'}`}
                   >
                     <div className={`max-w-[70%] ${isSent ? 'order-2' : 'order-1'}`}>
@@ -337,10 +376,10 @@ const UserMessages = () => {
                         className={`p-3 rounded-lg ${
                           isSent
                             ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white'
-                            : 'bg-white border shadow-sm'
+                            : 'bg-white border shadow-sm text-gray-800'
                         }`}
                       >
-                        <p className="text-sm break-words">{msg.message}</p>
+                        <p className="text-sm break-words">{msg.message || msg.content || ''}</p>
                       </div>
                       <p className={`text-xs text-gray-500 mt-1 ${isSent ? 'text-right' : 'text-left'}`}>
                         {formatTime(msg.createdAt)}

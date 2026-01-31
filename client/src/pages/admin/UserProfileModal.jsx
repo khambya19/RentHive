@@ -86,14 +86,30 @@ const UserProfileModal = ({ user, onClose, onUpdate }) => {
                   
                   <div className="mb-4">
                     <span className="text-xs text-slate-500 font-bold uppercase">Current Status:</span>
-                    <span className={`ml-2 font-bold uppercase ${
-                      user.kyc_status === 'approved' ? 'text-green-600' :
-                      user.kyc_status === 'pending' ? 'text-amber-600' :
-                      user.kyc_status === 'rejected' ? 'text-red-600' : 'text-slate-400'
+                    <span className={`ml-2 font-bold uppercase text-sm px-2 py-1 rounded ${
+                      user.kyc_status === 'approved' ? 'bg-green-100 text-green-700' :
+                      user.kyc_status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                      user.kyc_status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-500'
                     }`}>
                       {user.kyc_status || 'Not Submitted'}
                     </span>
                   </div>
+
+                  {/* Document Type */}
+                  {user.kyc_document_type && (
+                    <div className="mb-4">
+                      <span className="text-xs text-slate-500 font-bold uppercase block mb-1">Document Type:</span>
+                      <p className="text-sm font-semibold text-slate-800 capitalize">{user.kyc_document_type}</p>
+                    </div>
+                  )}
+
+                  {/* Submission Date */}
+                  {user.created_at && (
+                    <div className="mb-4">
+                      <span className="text-xs text-slate-500 font-bold uppercase block mb-1">Submitted On:</span>
+                      <p className="text-sm font-medium text-slate-700">{new Date(user.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                    </div>
+                  )}
 
                   {user.kyc_doc ? (
                     <div className="mb-4">

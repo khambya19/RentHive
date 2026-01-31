@@ -20,7 +20,7 @@ const Property = sequelize.define('Property', {
     allowNull: false
   },
   propertyType: {
-    type: DataTypes.ENUM('Apartment', 'Room', 'House', 'Villa', 'Studio'),
+    type: DataTypes.STRING,
     allowNull: false
   },
   address: {
@@ -40,10 +40,6 @@ const Property = sequelize.define('Property', {
     type: DataTypes.INTEGER,
     allowNull: false,
     defaultValue: 1
-  },
-  area: {
-    type: DataTypes.STRING,
-    allowNull: false
   },
   rentPrice: {
     type: DataTypes.DECIMAL(10, 2),
@@ -101,23 +97,91 @@ const Property = sequelize.define('Property', {
     type: DataTypes.INTEGER,
     allowNull: true
   },
-  lotSize: {
-    type: DataTypes.STRING, /* Keeping as string to avoid precision issues if mixed input */
-    allowNull: true
-  },
-  lotSizeUnit: {
-    type: DataTypes.STRING,
-    allowNull: true
-  },
   garageSpaces: {
     type: DataTypes.INTEGER,
     defaultValue: 0
+  },
+  halfBathrooms: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  parkingType: {
+    type: DataTypes.JSON,
+    defaultValue: []
+  },
+  flooring: {
+    type: DataTypes.JSON,
+    defaultValue: []
+  },
+  heatingSystem: {
+    type: DataTypes.JSON,
+    defaultValue: []
+  },
+  coolingSystem: {
+    type: DataTypes.JSON,
+    defaultValue: []
+  },
+  appliancesIncluded: {
+    type: DataTypes.JSON,
+    defaultValue: []
+  },
+  basementType: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  basementArea: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  fireplaceCount: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  fireplaceType: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  exteriorMaterial: {
+    type: DataTypes.JSON,
+    defaultValue: []
+  },
+  roofType: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  roofAge: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  poolSpa: {
+    type: DataTypes.JSON,
+    defaultValue: []
+  },
+  fenceType: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  view: {
+    type: DataTypes.JSON,
+    defaultValue: []
+  },
+  propertyTaxes: {
+    type: DataTypes.STRING,
+    allowNull: true
   },
   hoaFees: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: true
   },
   hoaFeesFrequency: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  hoaName: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  maintenanceFees: {
     type: DataTypes.STRING,
     allowNull: true
   },
@@ -133,15 +197,31 @@ const Property = sequelize.define('Property', {
     type: DataTypes.TEXT,
     allowNull: true
   },
-  leaseTerms: {
+  solarPanels: {
+    type: DataTypes.STRING,
+    defaultValue: 'No'
+  },
+  energyEfficient: {
+    type: DataTypes.STRING,
+    defaultValue: 'No'
+  },
+  greenCertification: {
     type: DataTypes.STRING,
     allowNull: true
   },
-  virtualTourLink: {
+  zoningType: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  area: {
     type: DataTypes.STRING,
     allowNull: true
   },
   floorPlan: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  virtualTourLink: {
     type: DataTypes.STRING,
     allowNull: true
   }

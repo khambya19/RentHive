@@ -27,14 +27,25 @@ const ProtectedRoute = ({ children, allowedTypes }) => {
     const userType = user.type || user.role;
     if (allowedTypes && !allowedTypes.includes(userType)) {
         // Redirect based on user type
-        if (userType === 'renter') {
+        if (userType === 'renter' || userType === 'user') {
             return <Navigate to="/user/dashboard" replace />;
         } else if (['owner', 'vendor', 'lessor'].includes(userType)) {
             return <Navigate to="/owner/dashboard" replace />;
         } else if (['admin', 'super_admin'].includes(userType)) {
             return <Navigate to="/admin/dashboard" replace />;
         } else {
-            return <Navigate to="/login" replace />;
+            // DEBUGGING: Show why access is denied
+            return (
+                <div style={{ padding: 20, textAlign: 'center', marginTop: 50 }}>
+                    <h2>Access Denied</h2>
+                    <p>Current User Type: <strong>{userType || 'undefined'}</strong></p>
+                    <p>Allowed Types: <strong>{allowedTypes ? allowedTypes.join(', ') : 'None'}</strong></p>
+                    <p>User ID: {user.id}</p>
+                    <button onClick={() => window.location.href = '/'}>Go Home</button>
+                    &nbsp;
+                    <button onClick={() => window.location.href = '/login'}>Login</button>
+                </div>
+            );
         }
     }
     return children;
@@ -70,7 +81,7 @@ function AppContent() {
                 <Route path="/register-user" element={<RegisterUser />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/user/dashboard" element={
-                    <ProtectedRoute allowedTypes={['renter']}>
+                    <ProtectedRoute allowedTypes={['renter', 'user']}>
                         <UserDashboard />
                     </ProtectedRoute>
                 } />
@@ -86,7 +97,7 @@ function AppContent() {
                     </ProtectedRoute>
                 } />
                 <Route path="/user/ratings" element={
-                    <ProtectedRoute allowedTypes={['renter']}>
+                    <ProtectedRoute allowedTypes={['renter', 'user']}>
                         <RatingPage />
                     </ProtectedRoute>
                 } />

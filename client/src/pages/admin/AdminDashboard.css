@@ -345,34 +345,128 @@
   font-size: 18px;
 }
 
+/* Responsive Utility Classes */
+.desktop-only {
+  display: flex !important;
+}
+
+.mobile-only {
+  display: none !important;
+}
+
+.mobile-menu-toggle {
+  display: none;
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 4px;
+}
+
+.mobile-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 999;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* Responsive Design */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .dashboard-sidebar {
-    width: 70px;
+    transform: translateX(-100%);
+    width: 280px !important; /* Force full width when open on mobile */
   }
 
-  .dashboard-sidebar .logo span,
-  .dashboard-sidebar .nav-item span {
-    display: none;
+  .dashboard-sidebar.mobile-open {
+    transform: translateX(0);
   }
 
   .dashboard-main {
-    margin-left: 70px;
+    margin-left: 0 !important;
   }
 
-  .stats-grid {
-    grid-template-columns: 1fr;
+  .desktop-only {
+    display: none !important;
   }
 
-  .page-title {
-    font-size: 20px;
+  .mobile-only {
+    display: flex !important;
+  }
+
+  .mobile-menu-toggle {
+    display: block;
   }
 
   .dashboard-topbar {
     padding: 15px 20px;
   }
 
+  .page-title {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
   .dashboard-content {
-    padding: 20px;
+    padding: 12px;
+  }
+
+  .bg-white.rounded-xl.shadow-sm.border.border-slate-100.p-6 {
+    padding: 15px !important; /* Reduce padding on table containers */
+  }
+
+  .stat-card {
+    padding: 16px;
+  }
+
+  .stat-value {
+    font-size: 24px;
+  }
+
+  .topbar-actions {
+    gap: 10px;
+  }
+
+  .user-info.desktop-only {
+    display: none !important;
+  }
+
+  /* Table Adjustments */
+  th, td {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  /* Optional: Hide less important columns on mobile if they have a specific class */
+  .hide-mobile {
+    display: none !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .page-title {
+    display: none; /* Hide title on very small screens to save space for actions */
+  }
+  
+  .topbar-left {
+    gap: 5px;
   }
 }

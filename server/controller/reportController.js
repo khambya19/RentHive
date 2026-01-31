@@ -66,6 +66,17 @@ exports.submitReport = async (req, res) => {
       status: 'pending'
     });
 
+    // Emit socket event for real-time count updates
+    const io = req.app.get('io');
+    if (io) {
+      // Refresh count for the reporter (user)
+      io.to(`user_${reporterId}`).emit('refresh_counts');
+      // Refresh count for the owner (vendor) if they exist
+      if (ownerId) io.to(`user_${ownerId}`).emit('refresh_counts');
+      // Refresh count for admins
+      io.to('admins').emit('refresh_counts');
+    }
+
     return res.status(201).json({
       message: 'Report submitted successfully. We will review it shortly.',
       report
@@ -86,10 +97,24 @@ exports.getUserReports = async (req, res) => {
 
     const reports = await Report.findAll({
       where: { reporterId },
-      order: [['createdAt', 'DESC']]
+      order: [['created_at', 'DESC']]
     });
 
-    return res.json(reports);
+      const enrichedReports = await Promise.all(reports.map(async (report) => {
+        const reportData = report.toJSON();
+        if (reportData.listingType === 'property') {
+          const property = await Property.findByPk(reportData.listingId, { attributes: ['title'] });
+          reportData.entityName = property?.title || 'Unknown Property';
+        } else if (reportData.listingType === 'bike') {
+          const bike = await Bike.findByPk(reportData.listingId, { attributes: ['name', 'brand', 'model'] });
+          reportData.entityName = bike?.name || (bike ? `${bike.brand} ${bike.model}` : 'Unknown Vehicle');
+        } else {
+          reportData.entityName = 'Unknown Listing';
+        }
+        return reportData;
+      }));
+
+    return res.json(enrichedReports);
   } catch (error) {
     console.error('Error fetching user reports:', error);
     return res.status(500).json({ error: 'Failed to fetch reports' });
@@ -103,7 +128,7 @@ exports.getVendorReports = async (req, res) => {
 
     const reports = await Report.findAll({
       where: { ownerId: vendorId },
-      order: [['createdAt', 'DESC']]
+      order: [['created_at', 'DESC']]
     });
 
     // Enrich with entity details
@@ -144,49 +169,123 @@ exports.getAllReports = async (req, res) => {
         {
           model: User,
           as: 'reporter',
-          attributes: ['id', 'fullName', 'email']
+          attributes: ['id', ['name', 'fullName'], 'email']
         }
       ],
-      order: [['createdAt', 'DESC']]
+      order: [['created_at', 'DESC']]
     });
+    const enrichedReports = await Promise.all(reports.map(async (report) => {
+      const reportData = report.toJSON();
+      // Get reported entity name
+      if (reportData.listingType === 'property') {
+        const property = await Property.findByPk(reportData.listingId, { attributes: ['title'] });
+        reportData.entityName = property?.title || 'Unknown Property';
+      } else if (reportData.listingType === 'bike') {
+        const bike = await Bike.findByPk(reportData.listingId, { 
+          attributes: ['name', 'brand', 'model', 'vendorId'], 
+          include: [{ model: User, as: 'vendor', attributes: ['id', ['name', 'fullName'], 'email', 'phone'] }] 
+        });
+        reportData.entityName = bike?.name || (bike ? `${bike.brand} ${bike.model}` : 'Unknown Vehicle');
+        reportData.owner = bike?.vendor || null;
+      } else {
+        reportData.entityName = 'Unknown Listing';
+      }
 
-    return res.json(reports);
+      if (!reportData.owner && reportData.ownerId) {
+        const owner = await User.findByPk(reportData.ownerId, { attributes: ['id', ['name', 'fullName'], 'email', 'phone'] });
+        reportData.owner = owner;
+      }
+
+      return reportData;
+    }));
+
+    return res.json(enrichedReports);
   } catch (error) {
     console.error('Error fetching all reports:', error);
     return res.status(500).json({ error: 'Failed to fetch reports' });
   }
 };
 
-// Update report status
+// Update report status (Admin only)
 exports.updateReportStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status, adminNotes } = req.body;
-    const userId = req.user.id;
-    const userRole = req.user.role;
+    const userRole = req.user.role || req.user.type;
+
+    // Only Admin can take action on reports
+    if (userRole !== 'admin' && userRole !== 'super_admin') {
+      return res.status(403).json({ error: 'Only admins can take action on reports' });
+    }
 
     const report = await Report.findByPk(id);
     if (!report) {
       return res.status(404).json({ error: 'Report not found' });
     }
 
-    // Permission check: admin can update any, vendor can only update reports on their listings
-    if (userRole !== 'admin' && report.ownerId !== userId) {
-      return res.status(403).json({ error: 'Unauthorized to update this report' });
-    }
-
-    const updateData = { status };
+    const updateData = {};
+    if (status) updateData.status = status;
     if (adminNotes) updateData.adminNotes = adminNotes;
 
     await report.update(updateData);
 
+    // Emit socket event for real-time count updates
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user_${report.reporterId}`).emit('refresh_counts');
+      io.to(`user_${report.ownerId}`).emit('refresh_counts');
+      io.to('admins').emit('refresh_counts');
+    }
+
     return res.json({
-      message: 'Report status updated successfully',
+      success: true,
+      message: 'Report updated successfully',
       report
     });
   } catch (error) {
     console.error('Error updating report status:', error);
     return res.status(500).json({ error: 'Failed to update report status' });
+  }
+};
+
+// Cancel report (Reporter only)
+exports.cancelReport = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    const report = await Report.findByPk(id);
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    // Check if the user is the one who reported it
+    if (report.reporterId !== userId) {
+      return res.status(403).json({ error: 'Unauthorized to cancel this report' });
+    }
+
+    // Only allow canceling if it's still pending
+    if (report.status !== 'pending') {
+      return res.status(400).json({ error: 'Only pending reports can be canceled' });
+    }
+
+    await report.destroy();
+
+    // Emit socket event
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user_${report.reporterId}`).emit('refresh_counts');
+      if (report.ownerId) io.to(`user_${report.ownerId}`).emit('refresh_counts');
+      io.to('admins').emit('refresh_counts');
+    }
+
+    return res.json({
+      success: true,
+      message: 'Report canceled successfully'
+    });
+  } catch (error) {
+    console.error('Error canceling report:', error);
+    return res.status(500).json({ error: 'Failed to cancel report' });
   }
 };
 

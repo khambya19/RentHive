@@ -31,16 +31,21 @@ const PropertiesTable = () => {
   }, [fetchProperties]);
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this property details? This cannot be undone.')) return;
+    if (!window.confirm('Are you sure you want to delete this property? This action cannot be undone.')) return;
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`${API_BASE_URL}/admin/properties/${id}`, {
+      const response = await axios.delete(`${API_BASE_URL}/admin/properties/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setProperties(prev => prev.filter(p => p.id !== id));
-      if (selectedProperty && selectedProperty.id === id) setSelectedProperty(null);
+      if (response.data.success) {
+        alert('Property deleted successfully');
+        setProperties(prev => prev.filter(p => p.id !== id));
+        if (selectedProperty && selectedProperty.id === id) setSelectedProperty(null);
+      }
     } catch (err) {
-      alert('Failed to delete property');
+      console.error('Delete property error:', err);
+      const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Failed to delete property';
+      alert(errorMsg);
     }
   };
 
@@ -60,7 +65,7 @@ const PropertiesTable = () => {
           <thead className="bg-slate-50 text-slate-500 uppercase font-bold text-xs tracking-wider">
             <tr>
               <th className="px-6 py-4">Property</th>
-              <th className="px-6 py-4">Owner</th>
+              <th className="px-6 py-4 hide-mobile">Owner</th>
               <th className="px-6 py-4">Location</th>
               <th className="px-6 py-4">Price</th>
               {/* Removed Status Column */}
@@ -82,7 +87,7 @@ const PropertiesTable = () => {
                      </p>
                      <p className="text-xs text-slate-500 uppercase tracking-wide">{property.propertyType}</p>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 hide-mobile">
                      <p className="font-bold text-slate-800">{property.vendor?.name || 'Unknown'}</p>
                      <p className="text-xs text-slate-500">{property.vendor?.email}</p>
                   </td>

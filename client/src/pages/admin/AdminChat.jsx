@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { io } from 'socket.io-client';
 import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
 import { Send, User as UserIcon, MessageSquare, Search } from 'lucide-react';
-
-const socket = io(SERVER_BASE_URL);
 
 const AdminChat = () => {
     const { user } = useAuth();
+    const { socket } = useSocket();
     const [conversations, setConversations] = useState([]);
     const [activeChat, setActiveChat] = useState(null);
     const [messages, setMessages] = useState([]);
@@ -19,23 +18,29 @@ const AdminChat = () => {
     useEffect(() => {
         // Fetch list of conversations
         fetchConversations();
+    }, []);
 
-        socket.emit('join_chat', 'admin_support'); // Maybe specific room
-        socket.emit('register', user.id);
+    useEffect(() => {
+        if (!socket) return;
 
-        socket.on('receive_message', (data) => {
+        const handleReceiveMessage = (data) => {
              // If active chat is open with this user, append message
-             if (activeChat && (data.senderId === activeChat.partner.id || data.receiverId === activeChat.partner.id)) {
-                 setMessages(prev => [...prev, data]);
+             if (activeChat && (data.senderId === activeChat.partner.id || (data.senderId === user.id && data.receiverId === activeChat.partner.id))) {
+                 setMessages(prev => {
+                     if (prev.find(m => m.id === data.id)) return prev;
+                     return [...prev, data];
+                 });
              }
              // Refresh list to update "last message"
              fetchConversations();
-        });
+        };
+
+        socket.on('receive_message', handleReceiveMessage);
 
         return () => {
-            socket.off('receive_message');
+            socket.off('receive_message', handleReceiveMessage);
         };
-    }, [activeChat, user]);
+    }, [activeChat, user, socket]);
 
     const fetchConversations = async () => {
         try {
@@ -43,7 +48,7 @@ const AdminChat = () => {
             const res = await axios.get(`${API_BASE_URL}/chat/conversations/list`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            if (res.data.success) {
+            if (res.data.success && res.data.conversations) {
                 setConversations(res.data.conversations);
             }
         } catch (err) {
@@ -58,7 +63,7 @@ const AdminChat = () => {
             const res = await axios.get(`${API_BASE_URL}/chat/${convo.partner.id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setMessages(res.data.messages);
+            setMessages(res.data.messages || []);
         } catch (err) {
             console.error(err);
         }
@@ -68,22 +73,25 @@ const AdminChat = () => {
         e.preventDefault();
         if (!newMessage.trim() || !activeChat) return;
 
-        const msgData = {
-            receiverId: activeChat.partner.id,
-            content: newMessage,
-            senderId: user.id
-        };
-
         try {
             const token = localStorage.getItem('token');
-            const res = await axios.post(`${API_BASE_URL}/chat/send`, msgData, {
-                headers: { Authorization: `Bearer ${token}` }
+            const res = await axios.post(`${API_BASE_URL}/chat/send`, {
+                receiverId: activeChat.partner.id,
+                message: newMessage
+            }, {
+                headers: { 
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
             });
 
             if (res.data.success) {
-                setMessages(prev => [...prev, res.data.message]);
+                const sentMessage = res.data.message;
+                setMessages(prev => {
+                    if (prev.find(m => m.id === sentMessage.id)) return prev;
+                    return [...prev, sentMessage];
+                });
                 setNewMessage('');
-                socket.emit('send_message', res.data.message);
                 fetchConversations(); // Update list order
             }
         } catch (err) {
@@ -120,7 +128,15 @@ const AdminChat = () => {
                  
                  <div className="flex-1 overflow-y-auto">
                      {filteredConvos.length === 0 ? (
-                         <div className="p-8 text-center text-slate-400 text-sm">No conversations found.</div>
+                         <div className="p-8 text-center">
+                             <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                 <MessageSquare size={28} className="text-slate-400" />
+                             </div>
+                             <p className="text-slate-600 font-semibold mb-2">No Messages Yet</p>
+                             <p className="text-sm text-slate-400 px-4">
+                                 Users can reach out to you from the Settings → Support Chat section. All conversations will appear here and be saved in the database.
+                             </p>
+                         </div>
                      ) : (
                          filteredConvos.map((convo, idx) => (
                              <div 
@@ -138,13 +154,13 @@ const AdminChat = () => {
                                              </div>
                                          )}
                                      </div>
-                                     <div className="flex-1 min-w-0">
-                                         <div className="flex justify-between items-baseline mb-1">
-                                             <h4 className="font-bold text-slate-900 truncate text-sm">{convo.partner.name}</h4>
-                                             <span className="text-[10px] text-slate-400">{new Date(convo.lastMessage.createdAt).toLocaleDateString()}</span>
-                                         </div>
-                                         <p className="text-xs text-slate-500 truncate">{convo.lastMessage.content}</p>
-                                     </div>
+                                      <div className="flex-1 min-w-0">
+                                          <div className="flex justify-between items-baseline mb-1">
+                                              <h4 className="font-bold text-slate-900 truncate text-sm">{convo.partner?.name || 'Unknown'}</h4>
+                                              <span className="text-[10px] text-slate-400">{convo.lastMessage ? new Date(convo.lastMessage.createdAt).toLocaleDateString() : ''}</span>
+                                          </div>
+                                          <p className="text-xs text-slate-500 truncate">{convo.lastMessage?.message || convo.lastMessage?.content || 'No message content'}</p>
+                                      </div>
                                  </div>
                              </div>
                          ))
@@ -180,7 +196,7 @@ const AdminChat = () => {
                                 return (
                                     <div key={idx} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                                         <div className={`max-w-[70%] rounded-2xl px-5 py-3 text-sm shadow-sm ${isMe ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white text-slate-800 border border-slate-200 rounded-tl-none'}`}>
-                                            <p>{msg.content}</p>
+                                            <p>{msg.message || msg.content}</p>
                                             <p className={`text-[10px] mt-1 text-right ${isMe ? 'text-indigo-200' : 'text-slate-400'}`}>
                                                 {new Date(msg.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                             </p>

@@ -18,8 +18,6 @@ exports.getAvailableProperties = async (req, res) => {
       type, 
       bedrooms, 
       bathrooms, 
-      minArea, 
-      maxArea, 
       amenities,
       sortBy = 'createdAt',
       sortOrder = 'DESC'
@@ -54,13 +52,6 @@ exports.getAvailableProperties = async (req, res) => {
       whereClause.bathrooms = parseInt(bathrooms);
     }
 
-    // Area range filter
-    if (minArea || maxArea) {
-      whereClause.area = {};
-      if (minArea) whereClause.area[Op.gte] = parseFloat(minArea);
-      if (maxArea) whereClause.area[Op.lte] = parseFloat(maxArea);
-    }
-
     // Amenities filter (check if property has all selected amenities)
     if (amenities) {
       const amenitiesList = amenities.split(',').map(a => a.trim());
@@ -81,7 +72,7 @@ exports.getAvailableProperties = async (req, res) => {
 
     // Determine sort order
     let orderClause = [];
-    const validSortFields = ['createdAt', 'rentPrice', 'area', 'bedrooms', 'bathrooms', 'title'];
+    const validSortFields = ['createdAt', 'rentPrice', 'bedrooms', 'bathrooms', 'title'];
     const validSortOrders = ['ASC', 'DESC'];
     
     if (validSortFields.includes(sortBy) && validSortOrders.includes(sortOrder.toUpperCase())) {
@@ -136,7 +127,6 @@ exports.getVendorProperties = async (req, res) => {
       city: p.city,
       bedrooms: p.bedrooms,
       bathrooms: p.bathrooms,
-      area: p.area,
       rentPrice: p.rentPrice,
       securityDeposit: p.securityDeposit,
       amenities: p.amenities,
@@ -152,14 +142,11 @@ exports.getVendorProperties = async (req, res) => {
       listingType: p.listingType,
       propertyCondition: p.propertyCondition,
       yearBuilt: p.yearBuilt,
-      lotSize: p.lotSize,
       garageSpaces: p.garageSpaces,
       hoaFees: p.hoaFees,
       furnished: p.furnished,
       petPolicy: p.petPolicy,
-      leaseTerms: p.leaseTerms,
-      virtualTourLink: p.virtualTourLink,
-      floorPlan: p.floorPlan
+      virtualTourLink: p.virtualTourLink
     })));
   } catch (error) {
     console.error('Error fetching vendor properties:', error);
@@ -246,74 +233,112 @@ exports.createProperty = async (req, res) => {
     }
 
     const {
-      title,
-      propertyType,
-      listingType,
-      address,
-      city,
-      bedrooms,
-      bathrooms,
-      area,
-      rentPrice,
-      securityDeposit,
-      amenities,
-      description,
-      latitude,
-      longitude,
-      propertyCondition,
-      yearBuilt,
-      lotSize,
-      lotSizeUnit,
-      garageSpaces,
-      hoaFees,
-      hoaFeesFrequency,
-      furnished,
-      petPolicy,
-      petDetails,
-      leaseTerms,
-      virtualTourLink,
-      floorPlan
+      title, propertyType, listingType, address, city, bedrooms, bathrooms, rentPrice,
+      securityDeposit, amenities, description, latitude, longitude, propertyCondition,
+      yearBuilt, garageSpaces, halfBathrooms, parkingType, flooring, heatingSystem,
+      coolingSystem, appliancesIncluded, basementType, basementArea, fireplaceCount,
+      fireplaceType, exteriorMaterial, roofType, roofAge, poolSpa, fenceType, view,
+      propertyTaxes, hoaFees, hoaFeesFrequency, hoaName, maintenanceFees, furnished,
+      petPolicy, petDetails, solarPanels, energyEfficient, greenCertification,
+      zoningType, area, floorPlan, virtualTourLink, images
     } = req.body;
 
-    // Process uploaded image files
-    const imagePaths = req.files ? req.files.map(file => file.filename) : [];
+    // Process uploaded image files or use provided image list
+    const imagePaths = req.files && req.files.length > 0 
+      ? req.files.map(file => file.filename) 
+      : (images || []);
 
-    // Parse amenities if it's a JSON string
-    const parsedAmenities = typeof amenities === 'string' ? JSON.parse(amenities) : (amenities || []);
+    // Parse JSON fields
+    const parseJSON = (val) => {
+      if (!val) return [];
+      if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch (e) { return val.split(',').map(s => s.trim()); }
+      }
+      return val;
+    };
 
     const property = await Property.create({
-      vendorId,
-      title,
-      propertyType,
+      vendorId, title, propertyType, address, city, description, virtualTourLink,
       listingType: listingType || 'For Rent',
-      address,
-      city,
-      bedrooms: parseInt(bedrooms),
-      bathrooms: parseInt(bathrooms),
-      area,
-      rentPrice: parseFloat(rentPrice),
+      bedrooms: parseInt(bedrooms) || 0,
+      bathrooms: parseInt(bathrooms) || 0,
+      rentPrice: parseFloat(rentPrice) || 0,
       securityDeposit: securityDeposit ? parseFloat(securityDeposit) : null,
-      amenities: parsedAmenities,
-      description,
+      amenities: parseJSON(amenities),
       images: imagePaths,
       status: 'Available',
       latitude: latitude ? parseFloat(latitude) : null,
       longitude: longitude ? parseFloat(longitude) : null,
       propertyCondition,
       yearBuilt: yearBuilt ? parseInt(yearBuilt) : null,
-      lotSize: lotSize ? String(lotSize) : null,
-      lotSizeUnit,
-      garageSpaces: garageSpaces ? parseInt(garageSpaces) : 0,
+      garageSpaces: parseInt(garageSpaces) || 0,
+      halfBathrooms: parseInt(halfBathrooms) || 0,
+      parkingType: parseJSON(parkingType),
+      flooring: parseJSON(flooring),
+      heatingSystem: parseJSON(heatingSystem),
+      coolingSystem: parseJSON(coolingSystem),
+      appliancesIncluded: parseJSON(appliancesIncluded),
+      basementType, basementArea,
+      fireplaceCount: parseInt(fireplaceCount) || 0,
+      fireplaceType,
+      exteriorMaterial: parseJSON(exteriorMaterial),
+      roofType, roofAge,
+      poolSpa: parseJSON(poolSpa),
+      fenceType,
+      view: parseJSON(view),
+      propertyTaxes,
       hoaFees: hoaFees ? parseFloat(hoaFees) : null,
-      hoaFeesFrequency,
+      hoaFeesFrequency, hoaName, maintenanceFees,
       furnished: furnished || 'No',
       petPolicy: petPolicy || 'No',
-      petDetails,
-      leaseTerms,
-      virtualTourLink,
-      floorPlan,
-      isApproved: true
+      petDetails, solarPanels, energyEfficient, greenCertification,
+      zoningType, area, floorPlan, isApproved: true
     });
+
+    // Notify ALL users about the new property listing
+    try {
+      const Notification = require('../models/Notification');
+      const allUsers = await User.findAll({ 
+        where: { 
+          userType: 'renter',
+          isVerified: true 
+        },
+        attributes: ['id']
+      });
+
+      const io = req.app.get('io');
+      
+      // Create notifications for all verified renters
+      const notifications = await Promise.all(
+        allUsers.map(async (renterUser) => {
+          const notification = await Notification.create({
+            userId: renterUser.id,
+            type: 'listing',
+            title: 'New Property Available! 🏠',
+            message: `${title} in ${city} is now available for rent at NPR ${rentPrice}/month`,
+            isRead: false,
+            metadata: {
+              propertyId: property.id,
+              propertyType,
+              city,
+              rentPrice
+            }
+          });
+
+          // Send real-time notification
+          if (io) {
+            io.to(`user_${renterUser.id}`).emit('new-notification', notification);
+          }
+
+          return notification;
+        })
+      );
+
+      console.log(`✅ Notified ${notifications.length} users about new property: ${title}`);
+    } catch (notifError) {
+      console.error('❌ Error sending notifications:', notifError);
+      // Don't fail the request if notifications fail
+    }
 
     return res.json({
       ...property.get({ plain: true })
@@ -336,75 +361,85 @@ exports.updateProperty = async (req, res) => {
     }
 
     const {
-      title,
-      propertyType,
-      listingType,
-      address,
-      city,
-      bedrooms,
-      bathrooms,
-      area,
-      rentPrice,
-      securityDeposit,
-      amenities,
-      description,
-      status,
-      latitude,
-      longitude,
-      propertyCondition,
-      yearBuilt,
-      lotSize,
-      lotSizeUnit,
-      garageSpaces,
-      hoaFees,
-      hoaFeesFrequency,
-      furnished,
-      petPolicy,
-      petDetails,
-      leaseTerms,
-      virtualTourLink,
-      floorPlan
+      title, propertyType, listingType, address, city, bedrooms, bathrooms, rentPrice,
+      securityDeposit, amenities, description, status, latitude, longitude, propertyCondition,
+      yearBuilt, garageSpaces, halfBathrooms, parkingType, flooring, heatingSystem,
+      coolingSystem, appliancesIncluded, basementType, basementArea, fireplaceCount,
+      fireplaceType, exteriorMaterial, roofType, roofAge, poolSpa, fenceType, view,
+      propertyTaxes, hoaFees, hoaFeesFrequency, hoaName, maintenanceFees, furnished,
+      petPolicy, petDetails, solarPanels, energyEfficient, greenCertification,
+      zoningType, area, floorPlan, virtualTourLink, images
     } = req.body;
 
-    // Process uploaded image files if any
+    // Process uploaded image files if any, otherwise check for images in body (for JSON updates)
     let imagePaths = property.images;
     if (req.files && req.files.length > 0) {
       imagePaths = req.files.map(file => file.filename);
+    } else if (images) {
+      // If images provided in JSON body, use those (allows reordering or removing images)
+      imagePaths = images;
     }
 
-    // Parse amenities if it's a JSON string
-    const parsedAmenities = amenities && typeof amenities === 'string' ? JSON.parse(amenities) : (amenities || property.amenities);
+    // Helper for JSON fields
+    const parseUpdateJSON = (val, current) => {
+      if (val === undefined) return current;
+      if (!val) return [];
+      if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch (e) { return val.split(',').map(s => s.trim()); }
+      }
+      return val;
+    };
 
     await property.update({
-      title: title || property.title,
-      propertyType: propertyType || property.propertyType,
-      listingType: listingType || property.listingType,
+      title: title !== undefined ? title : property.title,
+      propertyType: propertyType !== undefined ? propertyType : property.propertyType,
+      listingType: listingType !== undefined ? listingType : property.listingType,
       address: address !== undefined ? address : property.address,
       city: city !== undefined ? city : property.city,
-      bedrooms: bedrooms ? parseInt(bedrooms) : property.bedrooms,
-      bathrooms: bathrooms ? parseInt(bathrooms) : property.bathrooms,
-      area: area || property.area,
-      rentPrice: rentPrice ? parseFloat(rentPrice) : property.rentPrice,
-      securityDeposit: securityDeposit ? parseFloat(securityDeposit) : property.securityDeposit,
-      amenities: parsedAmenities,
+      bedrooms: bedrooms !== undefined ? parseInt(bedrooms) : property.bedrooms,
+      bathrooms: bathrooms !== undefined ? parseInt(bathrooms) : property.bathrooms,
+      rentPrice: rentPrice !== undefined ? parseFloat(rentPrice) : property.rentPrice,
+      securityDeposit: securityDeposit !== undefined ? (securityDeposit ? parseFloat(securityDeposit) : null) : property.securityDeposit,
+      amenities: parseUpdateJSON(amenities, property.amenities),
       description: description !== undefined ? description : property.description,
       images: imagePaths,
-      status: status || property.status,
+      status: status !== undefined ? status : property.status,
       latitude: latitude !== undefined ? (latitude ? parseFloat(latitude) : null) : property.latitude,
       longitude: longitude !== undefined ? (longitude ? parseFloat(longitude) : null) : property.longitude,
-      propertyCondition: propertyCondition || property.propertyCondition,
-      yearBuilt: yearBuilt ? parseInt(yearBuilt) : property.yearBuilt,
-      lotSize: lotSize ? String(lotSize) : property.lotSize,
-      lotSizeUnit: lotSizeUnit || property.lotSizeUnit,
+      propertyCondition: propertyCondition !== undefined ? propertyCondition : property.propertyCondition,
+      yearBuilt: yearBuilt !== undefined ? (yearBuilt ? parseInt(yearBuilt) : null) : property.yearBuilt,
       garageSpaces: garageSpaces !== undefined ? parseInt(garageSpaces) : property.garageSpaces,
-      hoaFees: hoaFees ? parseFloat(hoaFees) : property.hoaFees,
-      hoaFeesFrequency: hoaFeesFrequency || property.hoaFeesFrequency,
-      furnished: furnished || property.furnished,
-      petPolicy: petPolicy || property.petPolicy,
+      halfBathrooms: halfBathrooms !== undefined ? parseInt(halfBathrooms) : property.halfBathrooms,
+      parkingType: parseUpdateJSON(parkingType, property.parkingType),
+      flooring: parseUpdateJSON(flooring, property.flooring),
+      heatingSystem: parseUpdateJSON(heatingSystem, property.heatingSystem),
+      coolingSystem: parseUpdateJSON(coolingSystem, property.coolingSystem),
+      appliancesIncluded: parseUpdateJSON(appliancesIncluded, property.appliancesIncluded),
+      basementType: basementType !== undefined ? basementType : property.basementType,
+      basementArea: basementArea !== undefined ? basementArea : property.basementArea,
+      fireplaceCount: fireplaceCount !== undefined ? parseInt(fireplaceCount) : property.fireplaceCount,
+      fireplaceType: fireplaceType !== undefined ? fireplaceType : property.fireplaceType,
+      exteriorMaterial: parseUpdateJSON(exteriorMaterial, property.exteriorMaterial),
+      roofType: roofType !== undefined ? roofType : property.roofType,
+      roofAge: roofAge !== undefined ? roofAge : property.roofAge,
+      poolSpa: parseUpdateJSON(poolSpa, property.poolSpa),
+      fenceType: fenceType !== undefined ? fenceType : property.fenceType,
+      view: parseUpdateJSON(view, property.view),
+      propertyTaxes: propertyTaxes !== undefined ? propertyTaxes : property.propertyTaxes,
+      hoaFees: hoaFees !== undefined ? (hoaFees ? parseFloat(hoaFees) : null) : property.hoaFees,
+      hoaFeesFrequency: hoaFeesFrequency !== undefined ? hoaFeesFrequency : property.hoaFeesFrequency,
+      hoaName: hoaName !== undefined ? hoaName : property.hoaName,
+      maintenanceFees: maintenanceFees !== undefined ? maintenanceFees : property.maintenanceFees,
+      furnished: furnished !== undefined ? furnished : property.furnished,
+      petPolicy: petPolicy !== undefined ? petPolicy : property.petPolicy,
       petDetails: petDetails !== undefined ? petDetails : property.petDetails,
-      leaseTerms: leaseTerms || property.leaseTerms,
-      virtualTourLink: virtualTourLink !== undefined ? virtualTourLink : property.virtualTourLink,
-      floorPlan: floorPlan !== undefined ? floorPlan : property.floorPlan
+      solarPanels: solarPanels !== undefined ? solarPanels : property.solarPanels,
+      energyEfficient: energyEfficient !== undefined ? energyEfficient : property.energyEfficient,
+      greenCertification: greenCertification !== undefined ? greenCertification : property.greenCertification,
+      zoningType: zoningType !== undefined ? zoningType : property.zoningType,
+      area: area !== undefined ? area : property.area,
+      floorPlan: floorPlan !== undefined ? floorPlan : property.floorPlan,
+      virtualTourLink: virtualTourLink !== undefined ? virtualTourLink : property.virtualTourLink
     });
 
     return res.json({
@@ -625,7 +660,11 @@ exports.uploadPropertyImages = async (req, res) => {
     });
   } catch (error) {
     console.error('Error uploading images:', error);
-    return res.status(500).json({ success: false, error: 'Failed to upload images' });
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Failed to upload images',
+      details: error.message 
+    });
   }
 };
 

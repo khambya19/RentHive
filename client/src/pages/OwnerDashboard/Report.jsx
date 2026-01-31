@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import API_BASE_URL from '../../config/api';
-import { AlertTriangle, CheckCircle, Clock, XCircle, Eye, MessageSquare, Flag, Home, Bike } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, XCircle, Eye, MessageSquare, Flag, Home, Bike, Shield } from 'lucide-react';
 
 const Report = () => {
   const [reports, setReports] = useState([]);
@@ -37,26 +37,7 @@ const Report = () => {
     fetchReports();
   }, []);
 
-  const handleStatusUpdate = async (reportId, newStatus) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/reports/${reportId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ status: newStatus })
-      });
 
-      if (response.ok) {
-        // Refresh reports
-        fetchReports();
-      }
-    } catch (err) {
-      console.error('Error updating report:', err);
-    }
-  };
 
   const getStatusBadge = (status) => {
     const badges = {
@@ -165,8 +146,8 @@ const Report = () => {
               <div className="p-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-4">
                   <div className="flex items-start gap-4 flex-1">
-                    <div className={`p-3 rounded-xl ${report.reportedType === 'property' ? 'bg-indigo-50 text-indigo-600' : 'bg-blue-50 text-blue-600'}`}>
-                      {report.reportedType === 'property' ? <Home size={24} /> : <Bike size={24} />}
+                    <div className={`p-3 rounded-xl ${report.listingType === 'property' ? 'bg-indigo-50 text-indigo-600' : 'bg-blue-50 text-blue-600'}`}>
+                      {report.listingType === 'property' ? <Home size={24} /> : <Bike size={24} />}
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
@@ -196,29 +177,23 @@ const Report = () => {
                   </div>
                 )}
 
+                {report.adminNotes && (
+                  <div className="bg-indigo-50/50 rounded-xl p-4 mb-4 border border-indigo-100">
+                    <div className="flex items-start gap-2 text-indigo-700">
+                      <Shield size={16} className="mt-1 text-indigo-400 flex-shrink-0" />
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-1">Admin Response</p>
+                        <p className="text-sm leading-relaxed font-medium">{report.adminNotes}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {report.status === 'pending' && (
-                  <div className="flex flex-wrap gap-2 pt-4 border-t border-slate-100">
-                    <button
-                      onClick={() => handleStatusUpdate(report.id, 'reviewed')}
-                      className="px-4 py-2 bg-blue-50 text-blue-600 rounded-lg text-sm font-semibold hover:bg-blue-100 transition-all flex items-center gap-2"
-                    >
-                      <Eye size={16} />
-                      Mark as Reviewed
-                    </button>
-                    <button
-                      onClick={() => handleStatusUpdate(report.id, 'resolved')}
-                      className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-lg text-sm font-semibold hover:bg-emerald-100 transition-all flex items-center gap-2"
-                    >
-                      <CheckCircle size={16} />
-                      Mark as Resolved
-                    </button>
-                    <button
-                      onClick={() => handleStatusUpdate(report.id, 'dismissed')}
-                      className="px-4 py-2 bg-slate-50 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-100 transition-all flex items-center gap-2"
-                    >
-                      <XCircle size={16} />
-                      Dismiss
-                    </button>
+                  <div className="pt-4 border-t border-slate-100">
+                     <p className="text-xs text-slate-400 italic font-medium text-center">
+                        This report is under review by RentHive Admins.
+                     </p>
                   </div>
                 )}
               </div>

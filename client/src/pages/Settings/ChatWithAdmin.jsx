@@ -1,23 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-// Only import socket.io-client if SERVER_BASE_URL is defined
-let io;
-if (typeof window !== 'undefined') {
-    try {
-        io = require('socket.io-client').io;
-    } catch (e) {
-        io = null;
-    }
-}
 import { Send, User, MessageSquare, Loader2 } from 'lucide-react';
 import API_BASE_URL, { SERVER_BASE_URL } from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
-
-// Only connect if SERVER_BASE_URL is defined and not empty
-const socket = (io && SERVER_BASE_URL) ? io(SERVER_BASE_URL, { autoConnect: true, reconnectionAttempts: 3 }) : null;
+import { useSocket } from '../../context/SocketContext';
 
 const ChatWithAdmin = () => {
   const { user } = useAuth();
+  const { socket } = useSocket();
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [adminId, setAdminId] = useState(null); // We need to find an admin to chat with
@@ -81,20 +71,26 @@ const ChatWithAdmin = () => {
 
       fetchMessages();
 
-            // Socket setup (guarded)
-            if (socket) {
-                socket.emit('register', user.id);
-                socket.on('receive_message', (data) => {
-                    if (data.senderId === adminId || data.receiverId === user.id) {
-                        setMessages((prev) => [...prev, data]);
-                    }
-                });
-                return () => {
-                    socket.off('receive_message');
-                };
-            }
-            return undefined;
-  }, [adminId, user]);
+      // Socket listener for real-time messages
+      if (socket) {
+          const handleReceiveMessage = (data) => {
+              // Only add if message belongs to this conversation
+              if (data.senderId === adminId || (data.senderId === user.id && data.receiverId === adminId)) {
+                  // Prevent duplicate messages (since we add optimistically)
+                  setMessages((prev) => {
+                      if (prev.find(m => m.id === data.id)) return prev;
+                      return [...prev, data];
+                  });
+              }
+          };
+
+          socket.on('receive_message', handleReceiveMessage);
+          
+          return () => {
+              socket.off('receive_message', handleReceiveMessage);
+          };
+      }
+  }, [adminId, user, socket]);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -110,9 +106,6 @@ const ChatWithAdmin = () => {
         senderId: user.id
     };
     
-    // Optimistic UI
-    // setMessages(prev => [...prev, msgData]); // Wait for server to confirm ID etc
-    
     try {
         const token = localStorage.getItem('token');
         const res = await axios.post(`${API_BASE_URL}/chat/send`, msgData, {
@@ -120,9 +113,13 @@ const ChatWithAdmin = () => {
         });
         
         if (res.data.success) {
-            setMessages(prev => [...prev, res.data.message]);
+            // Message state will be updated via socket listener or we can add it here
+            // To ensure immediate feedback and handle single updates:
+            setMessages(prev => {
+                if (prev.find(m => m.id === res.data.message.id)) return prev;
+                return [...prev, res.data.message];
+            });
             setNewMessage('');
-            if (socket) socket.emit('send_message', res.data.message);
         }
     } catch (err) {
         console.error("Send failed", err);
@@ -152,7 +149,7 @@ const ChatWithAdmin = () => {
                     return (
                         <div key={idx} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                             <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${isMe ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white text-slate-800 border border-slate-200 rounded-tl-none shadow-sm'}`}>
-                                <p>{msg.content}</p>
+                                <p>{msg.message || msg.content}</p>
                                 <p className={`text-[10px] mt-1 text-right ${isMe ? 'text-indigo-200' : 'text-slate-400'}`}>
                                     {new Date(msg.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                 </p>

@@ -9,7 +9,11 @@ const { protect } = require('../middleware/auth');
 router.get('/support-agent', protect, async (req, res) => {
   try {
      // Find the first super_admin
-     const admin = await User.findOne({ where: { type: 'super_admin' } });
+     const admin = await User.findOne({ 
+        where: { 
+           type: { [Op.or]: ['super_admin', 'admin', 'Super Admin'] }
+        } 
+     });
      if (!admin) {
         // Fallback or multiple admins logic could go here
         // If no super_admin in DB, maybe return a default ID or error
@@ -120,6 +124,14 @@ router.post('/send', protect, async (req, res) => {
             { model: User, as: 'receiver', attributes: ['id', 'name', 'profileImage'] }
         ]
     });
+
+    // Emit real-time event
+    const io = req.app.get('io');
+    if (io) {
+        // Emit to both sender (confirmation) and receiver
+        io.to(`user_${receiverId}`).emit('receive_message', fullMessage);
+        io.to(`user_${senderId}`).emit('receive_message', fullMessage);
+    }
 
     res.json({ success: true, message: fullMessage });
   } catch (err) {

@@ -1,5 +1,56 @@
+import ReviewModal from './ReviewModal';
+  // Submit review to backend
+  const handleSubmitReview = async ({ rating, comment, rental, existingReviewId }) => {
+    try {
+      const user = JSON.parse(localStorage.getItem('user'));
+      const isBike = rental.type === 'bike' || !!rental.dailyRate;
+      
+      // Get the correct property/bike ID - DO NOT use rental.id as fallback
+      const actualPropertyId = !isBike ? rental.propertyId : null;
+      const actualBikeId = isBike ? (rental.bikeId || rental.bikeBooking?.bikeId) : null;
+      
+      if (!actualPropertyId && !actualBikeId) {
+        if (showToast) showToast('Cannot submit review: This rental is not linked to a valid property or bike.', 'error');
+        throw new Error('Missing valid propertyId or bikeId in rental data');
+      }
+      
+      // If updating existing review
+      if (existingReviewId) {
+        const updateBody = { rating, comment };
+        await axios.put(`${API_BASE_URL}/reviews/${existingReviewId}`, updateBody);
+        if (showToast) showToast('✅ Review updated successfully!', 'success');
+      } else {
+        // Creating new review
+        const reviewBody = {
+          userId: user?.id,
+          reviewerName: user?.name || 'Anonymous',
+          rating,
+          comment,
+          ...(actualPropertyId && { propertyId: actualPropertyId }),
+          ...(actualBikeId && { bikeId: actualBikeId })
+        };
+        
+        console.log('Submitting review:', reviewBody, 'Rental data:', { id: rental.id, propertyId: rental.propertyId, bikeId: rental.bikeId, type: rental.type });
+        
+        await axios.post(`${API_BASE_URL}/reviews/add`, reviewBody);
+        if (showToast) showToast('✅ Review submitted successfully! Other users can now see your review.', 'success');
+      }
+    } catch (error) {
+      console.error('Review submission error:', error);
+      if (error.response?.data?.error) {
+        if (showToast) showToast(error.response.data.error, 'error');
+      } else {
+        if (showToast) showToast('Failed to submit review. Please try again.', 'error');
+      }
+      throw error;
+    }
+  };
 import React, { useState, useEffect } from 'react';
+import ListingDetail from './ListingDetail';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { 
   Key, 
   MapPin, 
@@ -15,8 +66,12 @@ import {
 } from 'lucide-react';
 import API_BASE_URL, { SERVER_BASE_URL } from '../../../config/api';
 
-const Rentals = ({ rentals, loading, onRefresh }) => {
+const Rentals = ({ rentals, loading, onRefresh, setActiveTab, showToast }) => {
+  const navigate = useNavigate();
   const [filter, setFilter] = useState('all'); // 'all', 'property', 'bike'
+  // Remove selectedRental and details panel logic
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [reviewRental, setReviewRental] = useState(null);
 
   const filteredRentals = rentals.filter(r => filter === 'all' || r.type === filter);
 
@@ -38,6 +93,131 @@ const Rentals = ({ rentals, loading, onRefresh }) => {
       </div>
     );
   }
+
+  const handleDownloadReceipt = (rental) => {
+    const doc = new jsPDF();
+
+    // Header
+    doc.setFillColor(79, 70, 229); // Indigo 600
+    doc.rect(0, 0, 210, 40, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.setFont('helvetica', 'bold');
+    doc.text('RENT RECEIPT', 105, 25, { align: 'center' });
+
+    // Company Info
+    doc.setTextColor(100, 116, 139); // Slate 500
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('RentHive Inc.', 14, 50);
+    doc.text('Kathmandu, Nepal', 14, 55);
+    doc.text('support@renthive.com', 14, 60);
+
+    // Receipt Metadata
+    doc.text(`Receipt #: REC-${rental.id.toString().padStart(6, '0')}`, 196, 50, { align: 'right' });
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, 196, 55, { align: 'right' });
+    
+    // Status Badge
+    doc.setTextColor(22, 163, 74); // Green 600
+    doc.setFont('helvetica', 'bold');
+    doc.text('PAID', 196, 65, { align: 'right' });
+
+    // Rental Details Line
+    doc.setDrawColor(226, 232, 240); // Slate 200
+    doc.line(14, 70, 196, 70);
+
+    // Bill To
+    doc.setTextColor(15, 23, 42); // Slate 900
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Billed To:', 14, 80);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
+    doc.text(rental.type === 'property' ? 'Tenant' : 'Renter', 14, 87);
+
+    // Table
+    const tableColumn = ["Description", "Dates", "Duration", "Amount"];
+    const tableRows = [[
+      rental.title,
+      `${new Date(rental.startDate).toLocaleDateString()} - ${new Date(rental.endDate).toLocaleDateString()}`,
+      `${Math.ceil((new Date(rental.endDate) - new Date(rental.startDate)) / (1000 * 60 * 60 * 24))} Days`,
+      `Rs. ${Number(rental.cost).toLocaleString()}`
+    ]];
+
+    autoTable(doc, {
+      startY: 95,
+      head: [tableColumn],
+      body: tableRows,
+      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold' },
+      styles: { fontSize: 10, cellPadding: 5 },
+      theme: 'grid'
+    });
+
+    // Total
+    const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 10 : 150;
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Total Amount: Rs. ${Number(rental.cost).toLocaleString()}`, 196, finalY, { align: 'right' });
+
+    // Footer
+    doc.setFontSize(9);
+    doc.setTextColor(148, 163, 184); // Slate 400
+    doc.setFont('helvetica', 'italic');
+    doc.text('Thank you for choosing RentHive!', 105, 280, { align: 'center' });
+
+    doc.save(`Receipt_RentHive_${rental.id}.pdf`);
+  };
+
+  const handleContact = (rental) => {
+      const chatState = { 
+        selectedUser: {
+           id: rental.vendorId || rental.vendor?.id,
+           name: rental.vendor?.name || 'Owner',
+           email: rental.vendor?.email,
+           profileImage: rental.vendor?.profileImage
+        },
+        context: {
+           propertyId: rental.propertyId,
+           bikeId: rental.bikeBooking?.bikeId,
+           rentalId: rental.id,
+           title: rental.title
+        }
+      };
+
+      if (setActiveTab) {
+        // Pass state via location so UserMessages picks it up
+        navigate('/user/dashboard', { state: chatState, replace: true });
+        setActiveTab('messages');
+      } else {
+        // Fallback or external navigation
+        navigate('/user/dashboard', { state: chatState });
+      }
+  };
+
+
+  // Handler to open review modal
+  const handleOpenReview = async (rental) => {
+    setReviewRental(rental);
+    
+    // Check if user already has a review for this property/bike
+    try {
+      const user = JSON.parse(localStorage.getItem('user'));
+      const isBike = rental.type === 'bike' || !!rental.dailyRate;
+      const queryParam = isBike ? `bikeId=${rental.bikeId}` : `propertyId=${rental.propertyId}`;
+      
+      const response = await axios.get(`${API_BASE_URL}/reviews?${queryParam}`);
+      const existingReview = response.data.find(r => r.userId === user?.id);
+      
+      if (existingReview) {
+        // Pre-fill with existing review
+        setReviewRental({ ...rental, existingReview });
+      }
+    } catch (error) {
+      console.error('Error checking existing review:', error);
+    }
+    
+    setReviewModalOpen(true);
+  };
 
   return (
     <div className="w-full max-w-5xl mx-auto space-y-8 pb-12">
@@ -82,110 +262,53 @@ const Rentals = ({ rentals, loading, onRefresh }) => {
         </div>
       ) : (
         <div className="space-y-4">
-           {filteredRentals.map((rental) => (
+            {filteredRentals.map((rental) => (
              <div key={`${rental.type}-${rental.id}`} className="group bg-white rounded-2xl p-4 border border-slate-100 hover:border-orange-200 transition-all shadow-sm hover:shadow-md flex flex-col md:flex-row gap-6">
-                
-                {/* Image */}
-                <div className="w-full md:w-64 h-48 md:h-auto rounded-xl overflow-hidden relative flex-shrink-0 bg-slate-100">
-                   {rental.image ? (
-                     <img 
-                       src={`${SERVER_BASE_URL}/uploads/${rental.type === 'property' ? 'properties' : 'bikes'}/${rental.image}`} 
-                       alt={rental.title}
-                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                     />
-                   ) : (
-                     <div className="w-full h-full flex items-center justify-center text-slate-400">
-                        {rental.type === 'property' ? <Home size={32} /> : <Bike size={32} />}
-                     </div>
-                   )}
-                   <div className="absolute top-3 left-3">
-                      <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border ${getStatusColor(rental.status)}`}>
-                         {rental.status}
-                      </span>
+               {/* ...existing code for image and content... */}
+               <div className="flex-1 flex flex-col justify-between py-2">
+                {/* ...existing code for content... */}
+                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                   <div className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white shadow-sm overflow-hidden">
+                    <div className="w-full h-full bg-orange-200 flex items-center justify-center text-[10px] font-bold text-orange-700">
+                      {(rental.vendor?.name?.[0] || 'V').toUpperCase()}
+                    </div>
                    </div>
+                   <p className="text-xs font-bold text-slate-600">Hosted by <span className="text-slate-900">{rental.vendor?.name || 'Partner'}</span></p>
+                  </div>
+                  <div className="flex gap-2">
+                   <button 
+                    onClick={() => handleDownloadReceipt(rental)}
+                    className="px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-bold uppercase rounded-lg transition-colors border border-slate-200"
+                   >
+                    Download Receipt
+                   </button>
+                   <button 
+                    onClick={() => handleContact(rental)}
+                    className="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold uppercase rounded-lg transition-colors flex items-center gap-2 shadow-lg hover:shadow-xl"
+                   >
+                    <MessageCircle size={14} /> Contact
+                   </button>
+                   <button
+                    onClick={() => handleOpenReview(rental)}
+                    className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-bold uppercase rounded-lg transition-colors flex items-center gap-2 shadow-lg hover:shadow-xl"
+                   >
+                    Review
+                   </button>
+                  </div>
                 </div>
-
-                {/* Content */}
-                <div className="flex-1 flex flex-col justify-between py-2">
-                   <div>
-                      <div className="flex justify-between items-start">
-                         <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
-                               {rental.type === 'property' ? 'Residential Lease' : 'Vehicle Rental'}
-                            </p>
-                            <h3 className="text-xl font-black text-slate-900 leading-tight mb-2">{rental.title}</h3>
-                         </div>
-                         <div className="text-right hidden md:block">
-                            <p className="text-2xl font-black text-slate-900 tracking-tight">NPR {Number(rental.cost).toLocaleString()}</p>
-                            <p className="text-xs text-slate-400 font-bold uppercase">Total Paid</p>
-                         </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4 mt-4">
-                         <div className="flex items-center gap-3 text-sm text-slate-600 font-medium">
-                            <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400">
-                               <MapPin size={16} />
-                            </div>
-                            <span className="truncate max-w-[150px]">{rental.location}</span>
-                         </div>
-                         <div className="flex items-center gap-3 text-sm text-slate-600 font-medium">
-                            <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400">
-                               <Calendar size={16} />
-                            </div>
-                            <span>{new Date(rental.startDate).toLocaleDateString()} - {rental.endDate ? new Date(rental.endDate).toLocaleDateString() : 'Ongoing'}</span>
-                         </div>
-                         <div className="flex items-center gap-3 text-sm text-slate-600 font-medium">
-                           <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400">
-                               <Clock size={16} />
-                            </div> 
-                            <span>
-                               {Math.ceil((new Date(rental.endDate || new Date()) - new Date(rental.startDate)) / (1000 * 60 * 60 * 24))} Days
-                            </span>
-                         </div>
-                         <div className="flex items-center gap-3 text-sm text-emerald-600 font-bold">
-                            <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-500">
-                               <CreditCard size={16} />
-                            </div>
-                            <span>Payment Verified</span>
-                         </div>
-                      </div>
-                   </div>
-                   
-                   {/* Mobile Price */}
-                   <div className="mt-4 flex justify-between items-end md:hidden">
-                      <div>
-                        <p className="text-xs text-slate-400 font-bold uppercase">Total Paid</p>
-                        <p className="text-xl font-black text-slate-900 tracking-tight">NPR {Number(rental.cost).toLocaleString()}</p>
-                      </div>
-                   </div>
-
-                   {/* Actions Foot */}
-                   <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                         <div className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white shadow-sm overflow-hidden">
-                            {/* Vendor Avatar placeholder */}
-                            <div className="w-full h-full bg-orange-200 flex items-center justify-center text-[10px] font-bold text-orange-700">
-                               {(rental.vendor?.name?.[0] || 'V').toUpperCase()}
-                            </div>
-                         </div>
-                         <p className="text-xs font-bold text-slate-600">Hosted by <span className="text-slate-900">{rental.vendor?.name || 'Partner'}</span></p>
-                      </div>
-                      
-                      <div className="flex gap-2">
-                         <button className="px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-bold uppercase rounded-lg transition-colors border border-slate-200">
-                            Download Receipt
-                         </button>
-                         <button className="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold uppercase rounded-lg transition-colors flex items-center gap-2 shadow-lg hover:shadow-xl">
-                            <MessageCircle size={14} /> Contact
-                         </button>
-                      </div>
-                   </div>
-                </div>
-
-             </div>
-           ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
+
+      <ReviewModal
+        isOpen={reviewModalOpen}
+        onClose={() => setReviewModalOpen(false)}
+        onSubmit={handleSubmitReview}
+        rental={reviewRental}
+      />
     </div>
   );
 };

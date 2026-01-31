@@ -52,7 +52,16 @@ exports.getAllUsers = async (req, res) => {
       ];
     }
     
-    if (role && role !== 'all') where.type = role;
+    if (role && role !== 'all') {
+      if (role.includes(',')) {
+        where.type = { [Op.in]: role.split(',') };
+      } else {
+        where.type = role;
+      }
+    } else {
+      // Exclude admins from general lists
+      where.type = { [Op.notIn]: ['admin', 'super_admin'] };
+    }
     
     if (status === 'active') where.isVerified = true;
     else if (status === 'blocked') where.isVerified = false;
@@ -65,7 +74,7 @@ exports.getAllUsers = async (req, res) => {
       order: [['createdAt', 'DESC']]
     });
     
-    const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+    const baseUrl = process.env.BASE_URL || 'http://localhost:5050';
 
     res.json({
       success: true,
@@ -76,14 +85,15 @@ exports.getAllUsers = async (req, res) => {
         phone: user.phone,
         role: user.type,
         active: user.isVerified,
-        kyc_status: user.kycStatus, 
+        kyc_status: user.kycStatus,
+        kyc_document_type: user.kycDocumentType,
         kyc_doc: user.kycDocumentImage ? `${baseUrl}/uploads/profiles/${user.kycDocumentImage}` : null,
         created_at: user.createdAt
       }))
     });
   } catch (err) {
     console.error('Get all users error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to fetch users' });
   }
 };
 
@@ -113,7 +123,7 @@ exports.updateKycStatus = async (req, res) => {
 
     // Notify User in Real-time
     try {
-      const { io } = require('../server');
+      const io = req.app.get('io');
       if (io) {
         const title = status === 'approved' ? '✅ KYC Approved!' : '❌ KYC Rejected';
         const message = status === 'approved'
@@ -162,10 +172,12 @@ exports.updateKycStatus = async (req, res) => {
 // Get user by ID
 exports.getUserById = async (req, res) => {
   try {
-    const user = await User.findByPk(req.params.id);
+    const { id } = req.params;
+    const user = await User.findByPk(id);
     if (!user) return res.status(404).json({ error: 'User not found' });
     
-    const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+    // Use a simpler approach for base URL
+    const baseUrl = process.env.SERVER_BASE_URL || 'http://localhost:5050';
     
     res.json({
       success: true,
@@ -177,12 +189,14 @@ exports.getUserById = async (req, res) => {
         role: user.type,
         active: user.isVerified,
         kyc_status: user.kycStatus,
+        kyc_document_type: user.kycDocumentType,
         kyc_doc: user.kycDocumentImage ? `${baseUrl}/uploads/profiles/${user.kycDocumentImage}` : null,
         created_at: user.createdAt
       }
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(`Error in getUserById for ID ${req.params.id}:`, err);
+    res.status(500).json({ error: 'Internal server error fetching user details' });
   }
 };
 
@@ -199,32 +213,74 @@ exports.toggleBlockUser = async (req, res) => {
   }
 };
 
-// Soft delete user
+// Delete user with all related records
 exports.softDeleteUser = async (req, res) => {
+  const sequelize = require('../config/db');
+  const transaction = await sequelize.transaction();
+  
   try {
-    const user = await User.findByPk(req.params.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    await user.destroy();
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
+    const userId = req.params.id;
+    const user = await User.findByPk(userId);
+    if (!user) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'User not found' });
+    }
 
-// Reset password
-exports.resetUserPassword = async (req, res) => {
-  try {
-    const user = await User.findByPk(req.params.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    const crypto = require('crypto');
-    const bcrypt = require('bcrypt');
-    const tempPassword = crypto.randomBytes(4).toString('hex');
-    const hashed = await bcrypt.hash(tempPassword, 10);
-    user.password = hashed;
-    await user.save();
-    res.json({ success: true, tempPassword });
+    // Delete related records in order (respecting foreign key constraints)
+    const Message = require('../models/Message');
+    const Notification = require('../models/Notification');
+    const Review = require('../models/Review');
+    const Payment = require('../models/Payment');
+    const Booking = require('../models/Booking');
+    const BikeBooking = require('../models/BikeBooking');
+    const BookingApplication = require('../models/BookingApplication');
+    const Property = require('../models/Property');
+    const Bike = require('../models/Bike');
+    const Report = require('../models/Report');
+
+    // Delete messages (both sent and received)
+    await Message.destroy({ where: { senderId: userId }, transaction });
+    await Message.destroy({ where: { receiverId: userId }, transaction });
+
+    // Delete notifications
+    await Notification.destroy({ where: { user_id: userId }, transaction });
+
+    // Delete reviews
+    await Review.destroy({ where: { userId: userId }, transaction });
+
+    // Delete reports (both created and about user's listings)
+    await Report.destroy({ where: { reporterId: userId }, transaction });
+
+    // Delete payments
+    await Payment.destroy({ where: { tenantId: userId }, transaction });
+    await Payment.destroy({ where: { ownerId: userId }, transaction });
+
+    // Delete booking applications
+    await BookingApplication.destroy({ where: { userId: userId }, transaction });
+
+    // Delete bookings (as tenant or vendor)
+    await Booking.destroy({ where: { tenantId: userId }, transaction });
+    await Booking.destroy({ where: { vendorId: userId }, transaction });
+
+    // Delete bike bookings
+    await BikeBooking.destroy({ where: { lessorId: userId }, transaction });
+    await BikeBooking.destroy({ where: { vendorId: userId }, transaction });
+
+    // Delete properties owned by user
+    await Property.destroy({ where: { vendorId: userId }, transaction });
+
+    // Delete bikes owned by user
+    await Bike.destroy({ where: { vendorId: userId }, transaction });
+
+    // Finally delete the user
+    await user.destroy({ transaction });
+
+    await transaction.commit();
+    res.json({ success: true, message: 'User and all related records deleted successfully' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    await transaction.rollback();
+    console.error('Delete user error:', err);
+    res.status(500).json({ error: 'Failed to delete user', message: err.message });
   }
 };
 
@@ -232,7 +288,7 @@ exports.resetUserPassword = async (req, res) => {
 exports.getAllProperties = async (req, res) => {
   try {
     const properties = await Property.findAll({
-      include: [{ model: User, as: 'vendor', attributes: ['id', 'name', 'email'] }],
+      include: [{ model: User, as: 'vendor', attributes: ['id', ['name', 'fullName'], 'email'] }],
       order: [['createdAt', 'DESC']]
     });
     res.json({ success: true, properties });
@@ -279,7 +335,7 @@ exports.deleteProperty = async (req, res) => {
 exports.getAllBikes = async (req, res) => {
   try {
     const bikes = await Bike.findAll({
-      include: [{ model: User, as: 'vendor', attributes: ['id', 'name', 'email'] }],
+      include: [{ model: User, as: 'vendor', attributes: ['id', ['name', 'fullName'], 'email'] }],
       order: [['createdAt', 'DESC']]
     });
     res.json({ success: true, bikes });
@@ -323,8 +379,8 @@ exports.deleteBike = async (req, res) => {
 exports.getAllReports = async (req, res) => {
   try {
     const reports = await Report.findAll({
-      include: [{ model: User, as: 'reporter', attributes: ['id', 'name', 'email', 'type'] }],
-      order: [['createdAt', 'DESC']]
+      include: [{ model: User, as: 'reporter', attributes: ['id', ['name', 'fullName'], 'email', 'type'] }],
+      order: [['created_at', 'DESC']]
     });
     res.json({ success: true, reports });
   } catch (err) {

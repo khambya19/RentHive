@@ -70,7 +70,7 @@ exports.getAvailableBikes = async (req, res) => {
 
     // Determine sort order
     let orderClause = [];
-    const validSortFields = ['createdAt', 'dailyRate', 'weeklyRate', 'monthlyRate', 'year', 'engineCapacity', 'rating', 'name'];
+    const validSortFields = ['createdAt', 'dailyRate', 'year', 'engineCapacity', 'rating', 'name'];
     const validSortOrders = ['ASC', 'DESC'];
     
     if (validSortFields.includes(sortBy) && validSortOrders.includes(sortOrder.toUpperCase())) {
@@ -101,8 +101,6 @@ exports.getAvailableBikes = async (req, res) => {
       engineCapacity: bike.engineCapacity,
       fuelType: bike.fuelType,
       dailyRate: bike.dailyRate,
-      weeklyRate: bike.weeklyRate,
-      monthlyRate: bike.monthlyRate,
       securityDeposit: bike.securityDeposit,
       features: bike.features,
       description: bike.description,
@@ -208,20 +206,9 @@ exports.bookBike = async (req, res) => {
     let totalAmount;
     
     // Use pro-rated logic for fair dynamic pricing
+    // Use daily rate only
     const dailyRate = parseFloat(bike.dailyRate);
-    const weeklyRate = parseFloat(bike.weeklyRate || 0);
-    const monthlyRate = parseFloat(bike.monthlyRate || 0);
-
-    if (totalDays >= 30 && monthlyRate > 0) {
-      // Pro-rated Monthly Rate
-      totalAmount = (monthlyRate / 30) * totalDays;
-    } else if (totalDays >= 7 && weeklyRate > 0) {
-      // Pro-rated Weekly Rate
-      totalAmount = (weeklyRate / 7) * totalDays;
-    } else {
-      // Daily Rate
-      totalAmount = dailyRate * totalDays;
-    }
+    totalAmount = dailyRate * totalDays;
     
     // Ensure 2 decimal precision
     totalAmount = parseFloat(totalAmount.toFixed(2));
@@ -278,6 +265,8 @@ exports.bookBike = async (req, res) => {
           metadata: notification.metadata
         });
         console.log(`✅ Real-time notification sent to vendor ${vendorId}`);
+        io.to(`user_${vendorId}`).emit('refresh_counts');
+        io.to(`user_${lessorId}`).emit('refresh_counts');
       } else {
         console.log('⚠️ Socket.IO not available, notification saved to database only');
       }
@@ -375,16 +364,8 @@ exports.bookBikeDirect = async (req, res) => {
     const totalDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
     let totalAmount;
     
-    if (totalDays >= 30 && bike.monthlyRate) {
-      // Monthly rate if available
-      totalAmount = parseFloat(bike.monthlyRate) * Math.ceil(totalDays / 30);
-    } else if (totalDays >= 7 && bike.weeklyRate) {
-      // Weekly rate (fallback to daily rate if weeklyRate not set)
-      totalAmount = parseFloat(bike.weeklyRate) * Math.ceil(totalDays / 7);
-    } else {
-      // Daily rate
-      totalAmount = parseFloat(bike.dailyRate) * totalDays;
-    }
+    // Daily rate only
+    totalAmount = parseFloat(bike.dailyRate) * totalDays;
 
     // Create booking with 'Approved' status (auto-approved)
     const booking = await BikeBooking.create({
@@ -439,6 +420,9 @@ exports.bookBikeDirect = async (req, res) => {
             is_broadcast: false
           });
         }
+        // Also emit refresh_counts to both
+        io.to(`user_${vendorId}`).emit('refresh_counts');
+        io.to(`user_${lessorId}`).emit('refresh_counts');
       }
     } catch (notificationError) {
       console.error('Error sending notification:', notificationError);
@@ -509,7 +493,7 @@ exports.createBike = async (req, res) => {
 
     const {
       name, brand, model, type, year, engineCapacity, fuelType,
-      dailyRate, weeklyRate, monthlyRate, securityDeposit,
+      dailyRate, securityDeposit,
       features, description, location, pickupLocation,
 
       licenseRequired, minimumAge, status, color, registrationNumber,
@@ -584,34 +568,51 @@ exports.createBike = async (req, res) => {
       registrationNumber
     });
 
-
-    // Get vendor info for notification
-    const vendor = await User.findByPk(vendorId, {
-      attributes: ['businessName', 'name']
-    });
-
-    // Send broadcast notification to all lessors about the new bike
+    // Notify ALL users about the new bike listing
     try {
-      const { createBroadcast } = require('./notificationController');
-      
-      const notificationTitle = `🏍️ New Bike Available for Rent!`;
-      const notificationMessage = `${vendor?.businessName || vendor?.name || 'A vendor'} just added a ${brand} ${model} (${type}) available for rent at NPR ${parseInt(dailyRate).toLocaleString()}/day in ${location}. Book it now!`;
-      
-      await createBroadcast({
-        body: {
-          title: notificationTitle,
-          message: notificationMessage,
-          type: 'bike_available',
-          link: `/lessor/bikes/${bike.id}`
-        }
-      }, {
-        status: (code) => ({
-          json: (data) => console.log('Bike availability notification broadcast:', data)
-        })
+      const Notification = require('../models/Notification');
+      const User = require('../models/User');
+      const allUsers = await User.findAll({ 
+        where: { 
+          userType: 'renter',
+          isVerified: true 
+        },
+        attributes: ['id']
       });
-    } catch (notificationError) {
-      console.error('Error sending bike availability notification:', notificationError);
-      // Don't fail the bike creation if notification fails
+
+      const io = req.app.get('io');
+      const bikeName = name || `${brand} ${model}`;
+      
+      // Create notifications for all verified renters
+      const notifications = await Promise.all(
+        allUsers.map(async (renterUser) => {
+          const notification = await Notification.create({
+            userId: renterUser.id,
+            type: 'listing',
+            title: 'New Bike Available! 🏍️',
+            message: `${bikeName} is now available for rent at NPR ${dailyRate}/day in ${location}`,
+            isRead: false,
+            metadata: {
+              bikeId: bike.id,
+              bikeType: type,
+              location,
+              dailyRate
+            }
+          });
+
+          // Send real-time notification
+          if (io) {
+            io.to(`user_${renterUser.id}`).emit('new-notification', notification);
+          }
+
+          return notification;
+        })
+      );
+
+      console.log(`✅ Notified ${notifications.length} users about new bike: ${bikeName}`);
+    } catch (notifError) {
+      console.error('❌ Error sending notifications:', notifError);
+      // Don't fail the request if notifications fail
     }
 
     return res.json(bike);

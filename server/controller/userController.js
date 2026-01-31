@@ -4,6 +4,7 @@ const { Op } = require('sequelize');
 const sequelize = require('../config/db');
 const Property = require('../models/Property');
 const Bike = require('../models/Bike');
+const Payment = require('../models/Payment');
 
 // --- User Profile Management ---
 
@@ -183,31 +184,74 @@ exports.toggleBlockUser = async (req, res) => {
   }
 };
 
-// Soft delete user
+// Delete user with all related records
 exports.softDeleteUser = async (req, res) => {
+  const sequelize = require('../config/db');
+  const transaction = await sequelize.transaction();
+  
   try {
-    const user = await User.findByPk(req.params.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    await user.destroy();
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
+    const userId = req.params.id;
+    const user = await User.findByPk(userId);
+    if (!user) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'User not found' });
+    }
 
-// Reset password (generate temp password)
-exports.resetUserPassword = async (req, res) => {
-  try {
-    const user = await User.findByPk(req.params.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    const bcrypt = require('bcrypt');
-    const tempPassword = crypto.randomBytes(4).toString('hex');
-    const hashed = await bcrypt.hash(tempPassword, 10);
-    user.password = hashed;
-    await user.save();
-    res.json({ success: true, tempPassword });
+    // Delete related records in order (respecting foreign key constraints)
+    const Message = require('../models/Message');
+    const Notification = require('../models/Notification');
+    const Review = require('../models/Review');
+    const Payment = require('../models/Payment');
+    const Booking = require('../models/Booking');
+    const BikeBooking = require('../models/BikeBooking');
+    const BookingApplication = require('../models/BookingApplication');
+    const Property = require('../models/Property');
+    const Bike = require('../models/Bike');
+    const Report = require('../models/Report');
+
+    // Delete messages (both sent and received)
+    await Message.destroy({ where: { senderId: userId }, transaction });
+    await Message.destroy({ where: { receiverId: userId }, transaction });
+
+    // Delete notifications
+    await Notification.destroy({ where: { user_id: userId }, transaction });
+
+    // Delete reviews
+    await Review.destroy({ where: { userId: userId }, transaction });
+
+    // Delete reports (both created and about user's listings)
+    await Report.destroy({ where: { reporterId: userId }, transaction });
+
+    // Delete payments
+    await Payment.destroy({ where: { tenantId: userId }, transaction });
+    await Payment.destroy({ where: { ownerId: userId }, transaction });
+
+    // Delete booking applications
+    await BookingApplication.destroy({ where: { userId: userId }, transaction });
+
+    // Delete bookings (as tenant or vendor)
+    await Booking.destroy({ where: { tenantId: userId }, transaction });
+    await Booking.destroy({ where: { vendorId: userId }, transaction });
+
+    // Delete bike bookings
+    await BikeBooking.destroy({ where: { lessorId: userId }, transaction });
+    await BikeBooking.destroy({ where: { vendorId: userId }, transaction });
+
+    // Delete properties owned by user
+    await Property.destroy({ where: { vendorId: userId }, transaction });
+
+    // Delete bikes owned by user
+    await Bike.destroy({ where: { vendorId: userId }, transaction });
+
+    // Finally delete the user
+    await user.destroy({ transaction });
+
+    await transaction.commit();
+    res.json({ success: true, message: 'User and all related records deleted successfully' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    await transaction.rollback();
+    console.error('Delete user error:', err);
+    res.status(500).json({ error: 'Failed to delete user', message: err.message });
   }
 };
 
@@ -363,6 +407,7 @@ exports.getMyRentals = async (req, res) => {
       ...propertyRentals.map(r => ({
         id: r.id,
         type: 'property',
+        propertyId: r.propertyId, // IMPORTANT: Include for reviews
         title: r.property?.title,
         image: r.property?.images?.[0],
         location: r.property ? `${r.property.city}, ${r.property.address}` : '',
@@ -370,11 +415,13 @@ exports.getMyRentals = async (req, res) => {
         endDate: r.moveOutDate,
         cost: r.monthlyRent,
         status: r.status,
-        vendor: r.vendor
+        vendor: r.vendor,
+        vendorId: r.vendorId
       })),
       ...bikeRentals.map(r => ({
         id: r.id,
         type: 'bike',
+        bikeId: r.bikeId, // IMPORTANT: Include for reviews
         title: r.bike?.brand ? `${r.bike.brand} ${r.bike.model}` : r.bike?.name,
         image: r.bike?.images?.[0],
         location: r.bike?.location,
@@ -382,10 +429,19 @@ exports.getMyRentals = async (req, res) => {
         endDate: r.endDate,
         cost: r.totalAmount,
         status: r.status,
-        vendor: r.vendor
+        vendor: r.vendor,
+        vendorId: r.vendorId
       }))
     ];
-    res.json({ success: true, rentals });
+    // Calculate total paid from Payment model
+    const totalPaid = await Payment.sum('amount', {
+      where: {
+        tenantId: userId,
+        status: 'Paid'
+      }
+    }) || 0;
+
+    res.json({ success: true, rentals, totalPaid });
   } catch (error) {
     console.error('Get my rentals error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch rentals', error: error.message });
@@ -414,6 +470,12 @@ exports.saveListing = async (req, res) => {
       user.savedListings = newSaved;
       user.changed('savedListings', true);
       await user.save();
+
+      // Emit socket event
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user_${userId}`).emit('refresh_counts');
+      }
     }
     res.json({ message: 'Successfully saved', saved: user.savedListings });
   } catch (error) {
@@ -439,6 +501,13 @@ exports.unsaveListing = async (req, res) => {
     user.savedListings = filtered;
     user.changed('savedListings', true);
     await user.save();
+
+    // Emit socket event
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user_${userId}`).emit('refresh_counts');
+    }
+
     res.json({ message: 'Successfully unsaved', saved: user.savedListings });
   } catch (error) {
     res.status(500).json({ message: 'Failed to unsave listing', error: error.message });

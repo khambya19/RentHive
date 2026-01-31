@@ -9,10 +9,19 @@ const Payment = sequelize.define('Payment', {
   },
   bookingId: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,
     field: 'booking_id',
     references: {
       model: 'bookings',
+      key: 'id'
+    }
+  },
+  bikeBookingId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    field: 'bike_booking_id',
+    references: {
+      model: 'bike_bookings',
       key: 'id'
     }
   },

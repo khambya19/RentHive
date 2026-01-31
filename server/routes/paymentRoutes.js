@@ -14,7 +14,8 @@ router.get('/owner', paymentController.getOwnerPayments);
 router.get('/owner/stats', paymentController.getPaymentStats);
 router.post('/', paymentController.createPayment);
 
-// Shared routes
+router.get('/history', paymentController.getPaymentHistory);
+router.get('/admin/all', paymentController.getAllPaymentsForAdmin);
 router.patch('/:paymentId/mark-paid', paymentController.markPaymentAsPaid);
 
 module.exports = router;

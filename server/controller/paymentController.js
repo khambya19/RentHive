@@ -2,6 +2,8 @@ const Payment = require('../models/Payment');
 const Booking = require('../models/Booking');
 const User = require('../models/User');
 const Property = require('../models/Property');
+const Bike = require('../models/Bike');
+const BikeBooking = require('../models/BikeBooking');
 const Notification = require('../models/Notification');
 const { Op } = require('sequelize');
 
@@ -31,7 +33,12 @@ exports.getTenantPayments = async (req, res) => {
           model: Booking,
           include: [{ model: Property, as: 'property' }]
         },
-        { model: User, as: 'owner', attributes: ['id', 'fullName', 'email', 'phone'] }
+        {
+          model: BikeBooking,
+          as: 'bikeBooking',
+          include: [{ model: Bike, as: 'bike' }]
+        },
+        { model: User, as: 'owner', attributes: ['id', ['name', 'fullName'], 'email', 'phone'] }
       ],
       order: [['dueDate', 'DESC']]
     });
@@ -69,7 +76,12 @@ exports.getOwnerPayments = async (req, res) => {
           model: Booking,
           include: [{ model: Property, as: 'property' }]
         },
-        { model: User, as: 'tenant', attributes: ['id', 'fullName', 'email', 'phone'] }
+        {
+          model: BikeBooking,
+          as: 'bikeBooking',
+          include: [{ model: Bike, as: 'bike' }]
+        },
+        { model: User, as: 'tenant', attributes: ['id', ['name', 'fullName'], 'email', 'phone'] }
       ],
       order: [['dueDate', 'DESC']]
     });
@@ -114,12 +126,32 @@ exports.markPaymentAsPaid = async (req, res) => {
     const notifyType = userId === payment.tenantId ? 'Payment received' : 'Payment confirmed';
     
     await Notification.create({
-      userId: notifyUserId,
+      user_id: notifyUserId,
       type: 'payment_update',
       title: notifyType,
       message: `Payment of Rs. ${payment.amount} has been marked as paid for due date ${payment.dueDate}`,
-      read: false
+      is_read: false
     });
+
+    // Real-time Update via Socket.IO
+    const io = req.app.get('io');
+    if (io) {
+      const payload = { 
+        type: 'update', 
+        payment,
+        message: 'Payment status updated'
+      };
+      
+      // Emit to involved parties
+      io.to(`user_${payment.tenantId}`).emit('payment_update', payload);
+      io.to(`user_${payment.tenantId}`).emit('refresh_counts');
+      io.to(`user_${payment.ownerId}`).emit('payment_update', payload);
+      io.to(`user_${payment.ownerId}`).emit('refresh_counts');
+      
+      // Emit to admins
+      io.to('admins').emit('payment_update', payload);
+      io.to('admins').emit('refresh_counts');
+    }
     
     res.json({ message: 'Payment marked as paid', payment });
   } catch (error) {
@@ -144,10 +176,7 @@ exports.getPaymentStats = async (req, res) => {
     const totalCollected = await Payment.sum('amount', {
       where: { 
         ownerId: userId, 
-        status: 'Paid',
-        paidDate: {
-          [Op.gte]: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-        }
+        status: 'Paid'
       }
     }) || 0;
     
@@ -195,17 +224,123 @@ exports.createPayment = async (req, res) => {
     
     // Notify tenant
     await Notification.create({
-      userId: booking.tenantId,
+      user_id: booking.tenantId,
       type: 'payment_created',
       title: 'New Payment Due',
       message: `A new payment of Rs. ${amount} is due on ${dueDate}`,
-      read: false
+      is_read: false
     });
+
+    // Real-time Update via Socket.IO
+    const io = req.app.get('io');
+    if (io) {
+      const payload = { 
+        type: 'new', 
+        payment,
+        message: 'New payment due'
+      };
+      
+      // Emit to involved parties
+      io.to(`user_${booking.tenantId}`).emit('payment_update', payload);
+      io.to(`user_${userId}`).emit('payment_update', payload);
+      
+      // Emit to admins
+      io.to('admins').emit('payment_update', payload);
+    }
     
     res.status(201).json({ message: 'Payment created', payment });
   } catch (error) {
     console.error('Error creating payment:', error);
     res.status(500).json({ error: 'Failed to create payment' });
+  }
+};
+
+exports.getPaymentHistory = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { type, startDate, endDate, limit = 50 } = req.query;
+    
+    let whereClause = {};
+    
+    if (type === 'tenant') {
+      whereClause.tenantId = userId;
+    } else if (type === 'owner') {
+      whereClause.ownerId = userId;
+    } else {
+      whereClause[Op.or] = [
+        { tenantId: userId },
+        { ownerId: userId }
+      ];
+    }
+    
+    if (startDate || endDate) {
+      whereClause.createdAt = {};
+      if (startDate) whereClause.createdAt[Op.gte] = startDate;
+      if (endDate) whereClause.createdAt[Op.lte] = endDate;
+    }
+    
+    const payments = await Payment.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: Booking,
+          include: [{ model: Property, as: 'property' }]
+        },
+        { model: User, as: 'tenant', attributes: ['id', ['name', 'fullName'], 'email', 'phone'] },
+        { model: User, as: 'owner', attributes: ['id', ['name', 'fullName'], 'email', 'phone'] }
+      ],
+      order: [['created_at', 'DESC']],
+      limit: parseInt(limit)
+    });
+    
+    const stats = {
+      total: payments.length,
+      totalAmount: payments.reduce((sum, p) => sum + parseFloat(p.amount), 0),
+      paid: payments.filter(p => p.status === 'Paid').length,
+      pending: payments.filter(p => p.status === 'Pending').length,
+      overdue: payments.filter(p => p.status === 'Overdue').length
+    };
+    
+    res.json({ payments, stats });
+  } catch (error) {
+    console.error('Error fetching payment history:', error);
+    res.status(500).json({ error: 'Failed to fetch payment history' });
+  }
+};
+
+// Get all payments (Admin dashboard)
+exports.getAllPaymentsForAdmin = async (req, res) => {
+  try {
+    const { status, limit = 100 } = req.query;
+    
+    let whereClause = {};
+    if (status && status !== 'all') {
+      whereClause.status = status.charAt(0).toUpperCase() + status.slice(1);
+    }
+    
+    const payments = await Payment.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: Booking,
+          include: [{ model: Property, as: 'property' }]
+        },
+        {
+          model: BikeBooking,
+          as: 'bikeBooking',
+          include: [{ model: Bike, as: 'bike' }]
+        },
+        { model: User, as: 'tenant', attributes: ['id', ['name', 'fullName'], 'email', 'phone'] },
+        { model: User, as: 'owner', attributes: ['id', ['name', 'fullName'], 'email', 'phone'] }
+      ],
+      order: [['created_at', 'DESC']],
+      limit: parseInt(limit)
+    });
+    
+    res.json(payments);
+  } catch (error) {
+    console.error('Error fetching admin payments:', error);
+    res.status(500).json({ error: 'Failed to fetch admin payments' });
   }
 };
 

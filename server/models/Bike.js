@@ -46,17 +46,17 @@ const Bike = sequelize.define('Bike', {
     allowNull: false,
     defaultValue: 'Petrol'
   },
+  color: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  registrationNumber: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
   dailyRate: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: false
-  },
-  weeklyRate: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false
-  },
-  monthlyRate: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: true
   },
   securityDeposit: {
     type: DataTypes.DECIMAL(10, 2),
@@ -75,8 +75,12 @@ const Bike = sequelize.define('Bike', {
     defaultValue: []
   },
   status: {
-    type: DataTypes.ENUM('Available', 'Rented', 'Maintenance', 'Inactive'),
+    type: DataTypes.STRING,
     defaultValue: 'Available'
+  },
+  isApproved: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
   },
   location: {
     type: DataTypes.STRING,

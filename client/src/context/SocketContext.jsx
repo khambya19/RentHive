@@ -1,6 +1,15 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+} from 'react';
 import { io } from 'socket.io-client';
 import axios from 'axios';
+import API_BASE_URL, { SERVER_BASE_URL } from '../config/api';
+import { useAuth } from './AuthContext';
 
 const SocketContext = createContext(null);
 
@@ -13,230 +22,156 @@ export const useSocket = () => {
 };
 
 export const SocketProvider = ({ children }) => {
+  const { user: authUser } = useAuth();
+  const socketRef = useRef(null);
   const [socket, setSocket] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
 
-  // Initialize socket connection
+  // Sync currentUser with authUser - STABILIZED to prevent loops
   useEffect(() => {
-    // Skip socket initialization if server doesn't support it
-    let socketInstance = null;
-
-    try {
-      socketInstance = io('http://localhost:3001', {
-        // Prefer polling first to avoid 'WebSocket is closed before the connection is established'
-        // in dev/proxy/CORS scenarios; socket.io will upgrade to websocket when available.
-        transports: ['polling', 'websocket'],
-        upgrade: true,
-        reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionAttempts: 3,
-        timeout: 5000
-      });
-
-      socketInstance.on('connect', () => {
-        console.log('✅ Socket connected:', socketInstance.id);
-        setIsConnected(true);
-
-        // Re-register user if they were registered before
-        if (currentUserId) {
-          socketInstance.emit('register', currentUserId);
+    if (authUser?.id) {
+      // Only update if the ID or Role has actually changed to prevent provider loops
+      setCurrentUser(prev => {
+        if (prev?.id === authUser.id && prev?.role === (authUser.role || authUser.type)) {
+          return prev;
         }
+        return { id: authUser.id, role: authUser.role || authUser.type };
       });
-
-      socketInstance.on('disconnect', () => {
-        console.log('❌ Socket disconnected');
-        setIsConnected(false);
-      });
-
-      socketInstance.on('connect_error', (error) => {
-        console.warn('⚠️ Socket connection failed (this is optional):', error.message);
-        setIsConnected(false);
-        // Don't throw error, just continue without socket
-      });
-
-      // Listen for new notifications
-      socketInstance.on('new-notification', (notification) => {
-        console.log('🔔 New notification received:', notification);
-
-        // Add notification to state
-        setNotifications((prev) => [notification, ...prev]);
-        setUnreadCount((prev) => prev + 1);
-
-        // Browser notifications are optional; guard for unsupported environments
-        if (typeof window !== 'undefined' && 'Notification' in window) {
-          if (Notification.permission === 'granted') {
-            showBrowserNotification(notification);
-          } else if (Notification.permission !== 'denied') {
-            Notification.requestPermission().then((permission) => {
-              if (permission === 'granted') {
-                showBrowserNotification(notification);
-              }
-            });
-          }
-        }
-      });
-
-      setSocket(socketInstance);
-    } catch (error) {
-      console.warn('⚠️ Socket initialization failed (continuing without real-time features):', error);
-      setSocket(null);
-      setIsConnected(false);
+    } else {
+      setCurrentUser(null);
     }
+  }, [authUser?.id, authUser?.role, authUser?.type]);
 
-    // Cleanup on unmount
-    return () => {
-      if (socketInstance) {
-        socketInstance.disconnect();
+  // Initialize socket once
+  useEffect(() => {
+    if (socketRef.current) return; // Prevent duplicate connections
+    
+    const socketInstance = io(SERVER_BASE_URL, {
+      transports: ['polling', 'websocket'], // Polling first for stabler handshake
+      upgrade: true,
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 10,
+      timeout: 20000,
+      autoConnect: true,
+    });
+
+    socketRef.current = socketInstance;
+    setSocket(socketInstance);
+
+    socketInstance.on('connect', () => {
+      setIsConnected(true);
+    });
+
+    socketInstance.on('disconnect', () => {
+      setIsConnected(false);
+    });
+
+    socketInstance.on('connect_error', () => {
+      setIsConnected(false);
+    });
+
+    // Real-time new notification
+    socketInstance.on('new-notification', (notification) => {
+      setNotifications((prev) => [notification, ...prev]);
+      setUnreadCount((prev) => prev + 1);
+
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(notification.title, {
+          body: notification.message,
+          icon: '/favicon.ico',
+        });
       }
+    });
+
+    return () => {
+      // Don't disconnect in development StrictMode
+      // Socket will persist across component remounts
     };
   }, []);
 
-  // Re-register user when currentUserId changes
   useEffect(() => {
-    if (socket && isConnected && currentUserId) {
-      socket.emit('register', currentUserId);
-    }
-  }, [socket, isConnected, currentUserId]);
+    if (!currentUser?.id || !socket || !isConnected) return;
+    socket.emit('register', { userId: currentUser.id, role: currentUser.role });
+    fetchUserNotifications(currentUser.id);
+  }, [currentUser, socket, isConnected]);
 
-  // Show browser notification
-  const showBrowserNotification = (notification) => {
-    try {
-      const { title, message, type } = notification;
-      const icon = getNotificationIcon(type);
+  const registerUser = useCallback((userData) => {
+    if (!userData) return;
+    
+    const newId = typeof userData === 'object' ? userData.userId || userData.id : userData;
+    const newRole = typeof userData === 'object' ? userData.role : null;
 
-      new Notification(title, {
-        body: message,
-        icon: '/favicon.ico', // You can customize this
-        badge: '/favicon.ico',
-        tag: `notification-${notification.id}`,
-        requireInteraction: false,
-        silent: false
-      });
-    } catch (error) {
-      console.error('❌ Error showing browser notification:', error);
-    }
-  };
-
-  // Get icon for notification type
-  const getNotificationIcon = (type) => {
-    const icons = {
-      success: '✅',
-      warning: '⚠️',
-      error: '❌',
-      info: 'ℹ️'
-    };
-    return icons[type] || icons.info;
-  };
-
-  // Register user with socket
-  const registerUser = useCallback((userId) => {
-    console.log('👤 Registering user:', userId);
-    setCurrentUserId(userId);
-
-    if (socket && isConnected) {
-      socket.emit('register', userId);
-    }
-
-    // Fetch existing notifications
-    fetchUserNotifications(userId);
-
-    // Request notification permission (optional)
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        Notification.requestPermission().then((permission) => {
-          console.log('🔔 Notification permission:', permission);
-        });
+    setCurrentUser(prev => {
+      if (prev?.id === newId && prev?.role === newRole) {
+        return prev;
       }
-    }
-  }, [socket, isConnected]);
+      return { id: newId, role: newRole };
+    });
+  }, []);
 
-  // Fetch user notifications from API
   const fetchUserNotifications = async (userId) => {
     try {
-      const response = await axios.get(`http://localhost:3001/api/notifications/user/${userId}`);
-      if (response.data.success) {
-        setNotifications(response.data.data.notifications);
-        setUnreadCount(response.data.data.unreadCount);
-        console.log('📥 Loaded notifications:', response.data.data.notifications.length);
+      const res = await axios.get(`${API_BASE_URL}/notifications/user/${userId}`);
+      if (res.data.success) {
+        setNotifications(res.data.data.notifications || []);
+        setUnreadCount(res.data.data.unreadCount || 0);
       }
-    } catch (error) {
-      console.error('❌ Error fetching notifications:', error);
+    } catch (err) {
+      console.error('Failed to fetch notifications:', err);
     }
   };
 
-  // Mark notification as read
   const markNotificationAsRead = async (notificationId) => {
-    if (!currentUserId) return;
-
+    if (!currentUser?.id) return;
     try {
-      const response = await axios.patch(
-        `http://localhost:3001/api/notifications/${notificationId}/read`,
-        { userId: currentUserId }
-      );
-
-      if (response.data.success) {
-        // Update local state
+      const res = await axios.patch(`${API_BASE_URL}/notifications/${notificationId}/read`, { userId: currentUser.id });
+      if (res.data.success) {
         setNotifications((prev) =>
-          prev.map((notif) =>
-            notif.id === notificationId ? { ...notif, is_read: true } : notif
+          prev.map((n) =>
+            n.id === notificationId
+              ? { ...n, is_read: true }
+              : n
           )
         );
         setUnreadCount((prev) => Math.max(0, prev - 1));
-        console.log('✅ Notification marked as read:', notificationId);
       }
-    } catch (error) {
-      console.error('❌ Error marking notification as read:', error);
+    } catch (err) {
+      console.error('Mark as read failed:', err);
     }
   };
 
-  // Mark all notifications as read
   const markAllAsRead = async () => {
-    if (!currentUserId) return;
-
+    if (!currentUser?.id) return;
     try {
-      const response = await axios.patch(
-        `http://localhost:3001/api/notifications/user/${currentUserId}/read-all`
-      );
-
-      if (response.data.success) {
-        // Update local state
-        setNotifications((prev) =>
-          prev.map((notif) => ({ ...notif, is_read: true }))
-        );
+      const res = await axios.patch(`${API_BASE_URL}/notifications/user/${currentUser.id}/read-all`);
+      if (res.data.success) {
+        setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
         setUnreadCount(0);
-        console.log('✅ All notifications marked as read');
       }
-    } catch (error) {
-      console.error('❌ Error marking all notifications as read:', error);
+    } catch (err) {
+      console.error('Mark all failed:', err);
     }
   };
 
-  // Delete notification
   const deleteNotification = async (notificationId) => {
-    if (!currentUserId) return;
-
+    if (!currentUser?.id) return;
     try {
-      const response = await axios.delete(
-        `http://localhost:3001/api/notifications/${notificationId}`,
-        { data: { userId: currentUserId } }
-      );
-
-      if (response.data.success) {
-        // Update local state
+      const res = await axios.delete(`${API_BASE_URL}/notifications/${notificationId}`, { data: { userId: currentUser.id } });
+      if (res.data.success) {
         setNotifications((prev) => {
-          const notification = prev.find((n) => n.id === notificationId);
-          if (notification && !notification.is_read) {
-            setUnreadCount((count) => Math.max(0, count - 1));
+          const removed = prev.find((n) => n.id === notificationId);
+          if (removed && !removed.is_read) {
+            setUnreadCount((c) => Math.max(0, c - 1));
           }
-          return prev.filter((notif) => notif.id !== notificationId);
+          return prev.filter((n) => n.id !== notificationId);
         });
-        console.log('✅ Notification deleted:', notificationId);
       }
-    } catch (error) {
-      console.error('❌ Error deleting notification:', error);
+    } catch (err) {
+      console.error('Delete failed:', err);
     }
   };
 
@@ -249,7 +184,8 @@ export const SocketProvider = ({ children }) => {
     markNotificationAsRead,
     markAllAsRead,
     deleteNotification,
-    currentUserId
+    currentUserId: currentUser?.id,
+    currentUser,
   };
 
   return (

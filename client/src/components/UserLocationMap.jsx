@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { Search, MapPin, Phone, Bike, Lightbulb } from 'lucide-react';
 
 // Fix for default markers in React Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -12,14 +14,16 @@ L.Icon.Default.mergeOptions({
 });
 
 // Custom bike shop icon
-const bikeShopIcon = new L.Icon({
-  iconUrl: 'data:image/svg+xml;base64,' + btoa(`
-    <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="16" cy="16" r="15" fill="#667eea" stroke="#fff" stroke-width="2"/>
-      <path d="M10 20c-2.2 0-4-1.8-4-4s1.8-4 4-4 4 1.8 4 4-1.8 4-4 4zM22 20c-2.2 0-4-1.8-4-4s1.8-4 4-4 4 1.8 4 4-1.8 4-4 4zM16 8l-2 6h4l-2-6z" fill="#fff"/>
-      <path d="M10 8h12v2H10zM14 14h4v2h-4z" fill="#fff"/>
-    </svg>
-  `),
+// Custom bike shop icon
+const bikeShopIconMarkup = renderToStaticMarkup(
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%', background: '#667eea', border: '2px solid white' }}>
+    <Bike size={20} color="white" />
+  </div>
+);
+
+const bikeShopIcon = new L.DivIcon({
+  html: bikeShopIconMarkup,
+  className: 'custom-leaflet-icon',
   iconSize: [32, 32],
   iconAnchor: [16, 32],
   popupAnchor: [0, -32],
@@ -68,7 +72,7 @@ const UserLocationMap = ({
       const data = await response.json();
       setSearchResults(data);
     } catch (error) {
-      console.error('Error searching location:', error);
+      // console.error('Error searching location:', error);
       setSearchResults([]);
     } finally {
       setIsSearching(false);
@@ -105,10 +109,7 @@ const UserLocationMap = ({
       {/* Search Box */}
       <div className="map-search-container">
         <div className="map-search-box">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="8"/>
-            <path d="m21 21-4.35-4.35"/>
-          </svg>
+          <Search size={20} />
           <input
             type="text"
             placeholder="Search for locations in Nepal..."
@@ -162,8 +163,8 @@ const UserLocationMap = ({
               <Popup>
                 <div className="map-popup">
                   <h4>Selected Location</h4>
-                  <p>Lat: {selectedLocation.lat.toFixed(6)}</p>
-                  <p>Lng: {selectedLocation.lng.toFixed(6)}</p>
+                  <p>Lat: {Number(selectedLocation.lat).toFixed(6)}</p>
+                  <p>Lng: {Number(selectedLocation.lng).toFixed(6)}</p>
                 </div>
               </Popup>
             </Marker>
@@ -185,25 +186,16 @@ const UserLocationMap = ({
                     </div>
                     <div className="popup-content">
                       <div className="popup-detail">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                          <circle cx="12" cy="10" r="3"/>
-                        </svg>
+                        <MapPin size={16} />
                         <span>{vendor.address}</span>
                       </div>
                       <div className="popup-detail">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-                        </svg>
+                        <Phone size={16} />
                         <span>{vendor.phone}</span>
                       </div>
                       {vendor.totalBikes && (
                         <div className="popup-detail">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M5 12V7a1 1 0 0 1 1-1h4l2-3h4a1 1 0 0 1 1 1v7.5"/>
-                            <circle cx="8" cy="16" r="3"/>
-                            <circle cx="16" cy="16" r="3"/>
-                          </svg>
+                          <Bike size={16} />
                           <span>{vendor.totalBikes} bikes available</span>
                         </div>
                       )}
@@ -236,7 +228,9 @@ const UserLocationMap = ({
             <Marker position={currentLocation}>
               <Popup>
                 <div className="current-location-popup">
-                  <h4>📍 Your Location</h4>
+                  <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <MapPin size={16} className="text-blue-500" /> Your Location
+                  </h4>
                   <p>You are here</p>
                 </div>
               </Popup>
@@ -247,7 +241,7 @@ const UserLocationMap = ({
       
       {showLocationPicker && (
         <div className="map-instructions">
-          <p>💡 Click anywhere on the map to select a location for your bike shop</p>
+          <p><Lightbulb size={16} className="inline-icon" /> Click anywhere on the map to select a location for your bike shop</p>
         </div>
       )}
     </div>

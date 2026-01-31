@@ -1,8 +1,12 @@
+/* UnifiedPostingForm.css - Deprecated. Replaced by Tailwind in UnifiedPostingForm.jsx */
+/*
 .unified-posting-form {
   padding: 2rem;
   max-width: 1400px;
   margin: 0 auto;
 }
+...
+*/
 
 .posting-type-selector {
   text-align: center;

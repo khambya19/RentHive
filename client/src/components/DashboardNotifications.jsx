@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import { Check, AlertCircle, Info, Home, X } from 'lucide-react';
 import './DashboardNotifications.css';
+import API_BASE_URL from '../config/api';
 
 const DashboardNotifications = ({ notifications, onRemove }) => {
   const [processingBooking, setProcessingBooking] = useState(null);
@@ -9,7 +11,7 @@ const DashboardNotifications = ({ notifications, onRemove }) => {
     
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/notifications/booking-response', {
+      const response = await fetch(`${API_BASE_URL}/notifications/booking-response`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -37,7 +39,7 @@ const DashboardNotifications = ({ notifications, onRemove }) => {
         alert(data.message || 'Failed to process booking response');
       }
     } catch (error) {
-      console.error('Error handling booking response:', error);
+      // console.error('Error handling booking response:', error);
       alert('Failed to process booking response');
     } finally {
       setProcessingBooking(null);
@@ -54,7 +56,7 @@ const DashboardNotifications = ({ notifications, onRemove }) => {
         try {
           metadata = notification.metadata ? JSON.parse(notification.metadata) : null;
         } catch (e) {
-          console.error('Error parsing notification metadata:', e);
+          // console.error('Error parsing notification metadata:', e);
         }
 
         const isBookingRequest = notification.type === 'booking' && metadata?.requiresAction;
@@ -66,28 +68,16 @@ const DashboardNotifications = ({ notifications, onRemove }) => {
           >
             <div className="notification-icon">
               {notification.type === 'success' && (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
+                <Check size={24} />
               )}
               {notification.type === 'error' && (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="15" y1="9" x2="9" y2="15"/>
-                  <line x1="9" y1="9" x2="15" y2="15"/>
-                </svg>
+                <AlertCircle size={24} />
               )}
               {notification.type === 'booking' && (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                  <polyline points="9 22 9 12 15 12 15 22"/>
-                </svg>
+                <Home size={24} />
               )}
               {notification.type === 'info' && (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <path d="m9 12 2 2 4-4"/>
-                </svg>
+                <Info size={24} />
               )}
             </div>
             <div className="notification-content">
@@ -126,9 +116,7 @@ const DashboardNotifications = ({ notifications, onRemove }) => {
                     onClick={() => handleBookingResponse(notification.id, metadata.bookingId, 'accept')}
                     disabled={processingBooking === metadata.bookingId}
                   >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
+                    <Check size={18} />
                     {processingBooking === metadata.bookingId ? 'Processing...' : 'Accept'}
                   </button>
                   <button
@@ -136,10 +124,7 @@ const DashboardNotifications = ({ notifications, onRemove }) => {
                     onClick={() => handleBookingResponse(notification.id, metadata.bookingId, 'decline')}
                     disabled={processingBooking === metadata.bookingId}
                   >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="18" y1="6" x2="6" y2="18"/>
-                      <line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
+                    <X size={18} />
                     {processingBooking === metadata.bookingId ? 'Processing...' : 'Decline'}
                   </button>
                 </div>
@@ -149,10 +134,7 @@ const DashboardNotifications = ({ notifications, onRemove }) => {
               className="notification-close"
               onClick={() => onRemove(notification.id)}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
+              <X size={18} />
             </button>
           </div>
         );

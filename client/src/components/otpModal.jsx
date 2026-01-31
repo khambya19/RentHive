@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
+import { Mail, X, Clock } from 'lucide-react';
 import "./OtpModal.css";
 import API_BASE_URL from '../config/api';
 
@@ -84,7 +85,7 @@ const OtpModal = ({ email, onClose, onVerify }) => {
         setError(res.data.error || "Invalid OTP");
       }
     } catch (err) {
-      console.error('Verify OTP error:', err);
+      // console.error('Verify OTP error:', err);
       setError(err.response?.data?.error || err.response?.data?.message || "Something went wrong");
     } finally {
       setLoading(false);
@@ -111,13 +112,11 @@ const OtpModal = ({ email, onClose, onVerify }) => {
     <div className="otp-modal-backdrop">
       <div className="otp-modal">
         <button className="otp-close-btn" onClick={onClose}>
-          &times;
+          <X size={20} />
         </button>
         
         <div className="otp-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-          </svg>
+          <Mail size={48} />
         </div>
         
         <h2>Verify Your Email</h2>
@@ -129,7 +128,7 @@ const OtpModal = ({ email, onClose, onVerify }) => {
         <div className="otp-timer" style={{ color: timeLeft <= 60 ? '#e74c3c' : '#7966f3' }}>
           {timeLeft > 0 ? (
             <>
-              <span className="timer-icon">⏱</span>
+              <Clock size={16} className="timer-icon" />
               Code expires in <strong>{formatTime(timeLeft)}</strong>
             </>
           ) : (
